@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>无限升级 Level Up — DEMO</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 100%; height: 100%;
+        background: radial-gradient(1200px 700px at 50% 30%, #18222e 0%, #0b0f14 60%, #070a0d 100%);
+        font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+        color: #c8d0e0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 10px;
+        overflow: hidden;
+      }
+      header { text-align: center; user-select: none; }
+      header h1 {
+        font-size: 20px; letter-spacing: 6px; color: #ffd93d;
+        text-shadow: 0 0 18px rgba(255, 217, 61, 0.35);
+      }
+      header p { font-size: 11px; color: #5a6472; margin-top: 4px; letter-spacing: 1px; }
+      #shell {
+        position: relative;
+        border-radius: 10px;
+        box-shadow: 0 0 0 1px #2a3644, 0 0 40px rgba(0, 0, 0, 0.6), 0 0 90px rgba(56, 208, 90, 0.06);
+        overflow: hidden;
+      }
+      #app { width: 960px; height: 600px; max-width: 96vw; max-height: 78vh; }
+      footer { font-size: 11px; color: #4a5568; user-select: none; letter-spacing: 1px; }
+      footer b { color: #7ee787; font-weight: normal; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>无限升级 · LEVEL UP</h1>
+      <p>打怪 → 掉落 → 升级加点 → 无限变强（怪物也在无限变强）</p>
+    </header>
+    <div id="shell"><div id="app"></div></div>
+    <footer>
+      <b>WASD</b> 移动 · <b>左键</b> 普攻 · <b>Q/右键</b> 火球 · <b>E</b> 狂暴 · <b>Tab</b> 加点面板 · <b>F</b> 一键穿装 · <b>1-9</b> 快捷加点
+    </footer>
+    <script type="module" src="/src/game/main.ts"></script>
+  </body>
+</html>
