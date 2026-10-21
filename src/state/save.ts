@@ -1,0 +1,257 @@
+import { EQUIP_SLOTS, type EquipSlot, type EquipmentItem } from '../core/equipment';
+import { BASE_ATTRS, type AttrSet } from '../core/types';
+import { SKILLS, type SkillId } from '../data/skills';
+import { createInitialState, type GameState } from './gameState';
+
+export const SAVE_VERSION = 1;
+export const SAVE_KEY = 'level-up/save/v1';
+export const BACKUP_KEY = 'level-up/backup/v1';
+export const PREFS_KEY = 'level-up/prefs/v1';
+
+export interface Prefs {
+  music: boolean;
+  sfx: boolean;
+  /** 0~1 */
+  volume: number;
+}
+
+export const DEFAULT_PREFS: Prefs = { music: true, sfx: true, volume: 0.6 };
+
+export function loadPrefs(): Prefs {
+  const raw = store().getItem(PREFS_KEY);
+  if (!raw) return { ...DEFAULT_PREFS };
+  try {
+    const p = JSON.parse(raw) as Partial<Prefs>;
+    return {
+      music: typeof p.music === 'boolean' ? p.music : DEFAULT_PREFS.music,
+      sfx: typeof p.sfx === 'boolean' ? p.sfx : DEFAULT_PREFS.sfx,
+      volume:
+        typeof p.volume === 'number' && Number.isFinite(p.volume)
+          ? Math.min(1, Math.max(0, p.volume))
+          : DEFAULT_PREFS.volume,
+    };
+  } catch {
+    return { ...DEFAULT_PREFS };
+  }
+}
+
+export function savePrefs(p: Prefs): void {
+  try {
+    store().setItem(PREFS_KEY, JSON.stringify(p));
+  } catch {
+    /* 存不了就算了，不影响游戏 */
+  }
+}
+
+export interface SaveEnvelope {
+  v: number;
+  /** 保存时间戳（ms） */
+  at: number;
+  state: GameState;
+}
+
+export interface Store {
+  getItem(k: string): string | null;
+  setItem(k: string, v: string): void;
+  removeItem(k: string): void;
+}
+
+/** node / 隐私模式下没有 localStorage，退化为内存存储，保证逻辑可跑可测 */
+function memoryStore(): Store {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k) => (m.has(k) ? (m.get(k) as string) : null),
+    setItem: (k, v) => void m.set(k, v),
+    removeItem: (k) => void m.delete(k),
+  };
+}
+
+const mem = memoryStore();
+
+export function store(): Store {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const probe = '__lv_probe__';
+      localStorage.setItem(probe, '1');
+      localStorage.removeItem(probe);
+      return localStorage;
+    }
+  } catch {
+    /* 被禁用时落到内存 */
+  }
+  return mem;
+}
+
+/** 测试用：强制使用内存存储，避免污染真实 localStorage */
+export function useMemoryStore(): void {
+  try {
+    localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem(BACKUP_KEY);
+  } catch {
+    /* 无所谓 */
+  }
+}
+
+function num(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
+function stats(raw: unknown): AttrSet {
+  const out: AttrSet = {};
+  if (!raw || typeof raw !== 'object') return out;
+  const src = raw as Record<string, unknown>;
+  for (const k of BASE_ATTRS) {
+    const v = src[k];
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = Math.floor(v);
+  }
+  return out;
+}
+
+function item(raw: unknown): EquipmentItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const slot = r.slot;
+  if (typeof slot !== 'string' || !EQUIP_SLOTS.includes(slot as EquipSlot)) return null;
+  if (typeof r.id !== 'string') return null;
+  return {
+    id: r.id,
+    slot: slot as EquipSlot,
+    name: typeof r.name === 'string' ? r.name : '未知装备',
+    stats: stats(r.stats),
+    freeAllocated: stats(r.freeAllocated),
+    rarity: typeof r.rarity === 'string' ? (r.rarity as EquipmentItem['rarity']) : 'common',
+    sourceLevel: num(r.sourceLevel, 1),
+  };
+}
+
+/**
+ * 把任意来源的对象规整成合法 GameState：
+ * 缺字段补默认值，非法字段丢弃，避免旧存档/手改存档把游戏搞崩。
+ */
+export function normalizeState(raw: unknown): GameState {
+  const base = createInitialState();
+  if (!raw || typeof raw !== 'object') return base;
+  const r = raw as Record<string, unknown>;
+
+  const s: GameState = {
+    ...base,
+    level: Math.max(1, Math.floor(num(r.level, 1))),
+    exp: Math.max(0, num(r.exp, 0)),
+    attrPoints: Math.max(0, Math.floor(num(r.attrPoints, 0))),
+    equipPoints: Math.max(0, Math.floor(num(r.equipPoints, 0))),
+    skillPoints: Math.max(0, Math.floor(num(r.skillPoints, 0))),
+    gold: Math.max(0, Math.floor(num(r.gold, 0))),
+    kills: Math.max(0, Math.floor(num(r.kills, 0))),
+    bossKills: Math.max(0, Math.floor(num(r.bossKills, 0))),
+    highestMonsterLevel: Math.max(1, Math.floor(num(r.highestMonsterLevel, 1))),
+    baseStats: stats(r.baseStats),
+    inventory: [],
+    equipped: {},
+    skillBooks: [],
+    skills: {},
+  };
+
+  if (Array.isArray(r.inventory)) {
+    for (const it of r.inventory) {
+      const v = item(it);
+      if (v) s.inventory.push(v);
+    }
+  }
+  if (r.equipped && typeof r.equipped === 'object') {
+    for (const slot of EQUIP_SLOTS) {
+      const v = item((r.equipped as Record<string, unknown>)[slot]);
+      if (v && v.slot === slot) s.equipped[slot] = v;
+    }
+  }
+  if (Array.isArray(r.skillBooks)) {
+    for (const b of r.skillBooks) {
+      if (!b || typeof b !== 'object') continue;
+      const bb = b as Record<string, unknown>;
+      if (typeof bb.id !== 'string' || typeof bb.skillId !== 'string') continue;
+      s.skillBooks.push({
+        id: bb.id,
+        skillId: bb.skillId as SkillId,
+        points: Math.max(1, Math.floor(num(bb.points, 1))),
+      });
+    }
+  }
+  if (r.skills && typeof r.skills === 'object') {
+    for (const d of SKILLS) {
+      const lv = (r.skills as Record<string, unknown>)[d.id];
+      if (typeof lv === 'number' && Number.isFinite(lv) && lv > 0) {
+        s.skills[d.id] = Math.floor(lv);
+      }
+    }
+  }
+  if (!s.skills.attack) s.skills.attack = 1;
+  return s;
+}
+
+function read(key: string): SaveEnvelope | null {
+  const raw = store().getItem(key);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as SaveEnvelope;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (parsed.v !== SAVE_VERSION) return null;
+    if (!parsed.state || typeof parsed.state !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function write(key: string, s: GameState): number {
+  const env: SaveEnvelope = { v: SAVE_VERSION, at: Date.now(), state: s };
+  try {
+    store().setItem(key, JSON.stringify(env));
+  } catch {
+    return 0;
+  }
+  return env.at;
+}
+
+/** 写入主存档，返回保存时间戳 */
+export function saveState(s: GameState): number {
+  return write(SAVE_KEY, s);
+}
+
+/** 读取存档；没有或损坏则返回 null */
+export function loadState(): GameState | null {
+  const env = read(SAVE_KEY);
+  return env ? normalizeState(env.state) : null;
+}
+
+export function savedAt(): number | null {
+  return read(SAVE_KEY)?.at ?? null;
+}
+
+export function hasSave(): boolean {
+  return read(SAVE_KEY) !== null;
+}
+
+/** 备份：把当前进度另存一份（会顺带刷新主存档），返回备份时间戳 */
+export function backupState(s: GameState): number {
+  saveState(s);
+  return write(BACKUP_KEY, s);
+}
+
+export function backupAt(): number | null {
+  return read(BACKUP_KEY)?.at ?? null;
+}
+
+/** 从备份恢复；没有备份返回 null */
+export function restoreBackup(): GameState | null {
+  const env = read(BACKUP_KEY);
+  if (!env) return null;
+  const s = normalizeState(env.state);
+  saveState(s);
+  return s;
+}
+
+/** 清空全部存档（主档 + 备份） */
+export function clearSave(): void {
+  const st = store();
+  st.removeItem(SAVE_KEY);
+  st.removeItem(BACKUP_KEY);
+}

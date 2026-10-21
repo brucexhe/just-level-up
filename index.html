@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>无限升级 Level Up — DEMO</title>
+    <title>无限升级 Level Up</title>
     <style>
       :root { color-scheme: dark; }
       * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -14,34 +14,63 @@
         color: #c8d0e0;
         display: flex; flex-direction: column;
         align-items: center; justify-content: center;
-        gap: 10px;
+        gap: 8px;
         overflow: hidden;
       }
       header { text-align: center; user-select: none; }
       header h1 {
-        font-size: 20px; letter-spacing: 6px; color: #ffd93d;
+        font-size: 19px; letter-spacing: 6px; color: #ffd93d;
         text-shadow: 0 0 18px rgba(255, 217, 61, 0.35);
       }
-      header p { font-size: 11px; color: #5a6472; margin-top: 4px; letter-spacing: 1px; }
+      header p { font-size: 11px; color: #5a6472; margin-top: 3px; letter-spacing: 1px; }
       #shell {
         position: relative;
-        border-radius: 10px;
+        border-radius: 12px;
         box-shadow: 0 0 0 1px #2a3644, 0 0 40px rgba(0, 0, 0, 0.6), 0 0 90px rgba(56, 208, 90, 0.06);
         overflow: hidden;
+        line-height: 0;
       }
-      #app { width: 960px; height: 600px; max-width: 96vw; max-height: 78vh; }
-      footer { font-size: 11px; color: #4a5568; user-select: none; letter-spacing: 1px; }
-      footer b { color: #7ee787; font-weight: normal; }
+      #app {
+        width: min(1200px, 96vw, 130vh);
+        aspect-ratio: 1200 / 720;
+      }
+      footer {
+        display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+        justify-content: center; max-width: 96vw;
+        padding: 5px 14px; border-radius: 999px;
+        font-size: 11px; color: #8d99ad; letter-spacing: 1px;
+        background: rgba(12, 17, 25, 0.72);
+        border: 1px solid #24303f;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+        user-select: none;
+      }
+      footer kbd {
+        font: inherit; padding: 1px 6px; margin: 0 1px;
+        border-radius: 5px; font-weight: 600;
+        color: #ffe08a; background: rgba(255, 217, 61, 0.1);
+        border: 1px solid rgba(255, 217, 61, 0.28);
+      }
+      footer .sep { color: #3d4757; margin: 0 2px; }
     </style>
   </head>
   <body>
     <header>
       <h1>无限升级 · LEVEL UP</h1>
-      <p>打怪 → 掉落 → 升级加点 → 无限变强（怪物也在无限变强）</p>
+      <p>打怪 → 掉落 → 加点 → 无限变强（怪物也在无限变强）</p>
     </header>
-    <div id="shell"><div id="app"></div></div>
+    <div id="shell">
+      <div id="app"></div>
+      <div id="ui-root"></div>
+    </div>
     <footer>
-      <b>右键</b> 点击移动 · <b>左键点怪</b> 攻击 · <b>Q</b> 火球 · <b>Tab</b> 加点面板 · <b>F</b> 一键穿装 · <b>1-9</b> 快捷加点
+      <kbd>右键</kbd> 移动 <span class="sep">·</span>
+      <kbd>左键</kbd> 点怪攻击 <span class="sep">·</span>
+      <kbd>空格</kbd> 普攻 <span class="sep">·</span>
+      <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> 技能 <span class="sep">·</span>
+      <kbd>C</kbd><kbd>B</kbd><kbd>K</kbd><kbd>I</kbd><kbd>P</kbd> 人物·装备·技能·背包·药店
+      <span class="sep">·</span>
+      <kbd>F</kbd> 一键穿装 <span class="sep">·</span>
+      <kbd>Esc</kbd> 关面板
     </footer>
     <script type="module" src="/src/game/main.ts"></script>
   </body>

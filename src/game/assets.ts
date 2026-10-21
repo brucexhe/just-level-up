@@ -58,27 +58,40 @@ export function bakeSimple(scene: Phaser.Scene): void {
   }
 }
 
-/** 草地 64x64：底色 + 噪点 + 小花 */
+/**
+ * 草地 64x64：底色 + 噪点 + 小花。
+ * 底色刻意调浅（黄绿草原），让深色的树/石头/怪物在其上足够醒目。
+ */
 export function bakeGrass(scene: Phaser.Scene): void {
   if (scene.textures.exists('grass')) return;
   const g = scene.make.graphics({ x: 0, y: 0 });
-  g.fillStyle(0x2e6b3e, 1).fillRect(0, 0, 64, 64);
+  g.fillStyle(GRASS_BASE, 1).fillRect(0, 0, 64, 64);
   const rnd = new Phaser.Math.RandomDataGenerator(['grass']);
-  for (let i = 0; i < 260; i++) {
+  // 浅色噪点：密度足够才有草地颗粒感，否则整屏像一块纯色
+  for (let i = 0; i < 380; i++) {
     const x = rnd.between(0, 63);
     const y = rnd.between(0, 63);
-    const c = rnd.pick([0x285d36, 0x357a46, 0x3b8a4f]);
+    const c = rnd.pick([0x4d8f4a, 0x5da257, 0x66ac60]);
     g.fillStyle(c, 1).fillRect(x, y, 1, 1);
   }
-  for (let i = 0; i < 5; i++) {
+  // 短草叶（1x2），提供方向感与层次
+  for (let i = 0; i < 64; i++) {
+    const x = rnd.between(0, 63);
+    const y = rnd.between(0, 62);
+    g.fillStyle(rnd.pick([0x43813f, 0x498a45]), 1).fillRect(x, y, 1, 2);
+  }
+  for (let i = 0; i < 6; i++) {
     const x = rnd.between(3, 60);
     const y = rnd.between(3, 60);
-    g.fillStyle(0x6fae5c, 1).fillRect(x, y, 2, 1);
-    g.fillStyle(rnd.pick([0xe8d05a, 0xd06a8a]), 1).fillRect(x + 1, y - 1, 1, 1);
+    g.fillStyle(0x6cbb65, 1).fillRect(x, y, 2, 1);
+    g.fillStyle(rnd.pick([0xf0dc60, 0xe07a96]), 1).fillRect(x + 1, y - 1, 1, 1);
   }
   g.generateTexture('grass', 64, 64);
   g.destroy();
 }
+
+/** 草地底色，小地图等处复用，保证美术一致 */
+export const GRASS_BASE = 0x559851;
 
 const PLAYER_PALETTE: Palette = {
   H: 0xc8d0e0,
@@ -123,6 +136,17 @@ export function bakePlayer(scene: Phaser.Scene): void {
   ], PLAYER_PALETTE);
 }
 
+/**
+ * 史莱姆用青绿色：草地在改浅后是黄绿，同色系的绿史莱姆会糊在背景里，
+ * 换成青绿色相即可一眼分辨。
+ */
+const SLIME_PALETTE: Palette = {
+  G: 0x2cbaa0,
+  D: 0x147a62,
+  W: 0xffffff,
+  B: 0x14202c,
+};
+
 export type MonsterSkin = 'slime' | 'goblin' | 'ogre';
 
 /** 按怪等级段选皮：1-9 史莱姆 / 10-19 哥布林 / 20+ 食人魔 */
@@ -146,7 +170,7 @@ export function bakeMonsters(scene: Phaser.Scene): void {
     '..GGGGGGGG..',
     '...DDDDDD...',
     '............',
-  ], { G: 0x58c05a, D: 0x2f7a38, W: 0xffffff, B: 0x14202c });
+  ], SLIME_PALETTE);
 
   bakeGrid(scene, 'slime-b', [
     '............',
@@ -161,7 +185,7 @@ export function bakeMonsters(scene: Phaser.Scene): void {
     '.GGGGGGGGGG.',
     '..DDDDDDDD..',
     '............',
-  ], { G: 0x58c05a, D: 0x2f7a38, W: 0xffffff, B: 0x14202c });
+  ], SLIME_PALETTE);
 
   bakeGrid(scene, 'goblin-a', [
     '..............',
@@ -178,7 +202,7 @@ export function bakeMonsters(scene: Phaser.Scene): void {
     '....LL..LL....',
     '...LLL..LLL...',
     '..............',
-  ], { G: 0x7a9a3a, D: 0x4a6428, W: 0xffffff, B: 0x14202c, A: 0x8a5a3a, C: 0x6a4a2a, L: 0x3a3a3a });
+  ], { G: 0x5e8f2c, D: 0x35531c, W: 0xffffff, B: 0x14202c, A: 0x8a5a3a, C: 0x6a4a2a, L: 0x3a3a3a });
 
   bakeGrid(scene, 'goblin-b', [
     '..............',
@@ -195,7 +219,7 @@ export function bakeMonsters(scene: Phaser.Scene): void {
     '.....L..L.....',
     '....LL..LL....',
     '..............',
-  ], { G: 0x7a9a3a, D: 0x4a6428, W: 0xffffff, B: 0x14202c, A: 0x8a5a3a, C: 0x6a4a2a, L: 0x3a3a3a });
+  ], { G: 0x5e8f2c, D: 0x35531c, W: 0xffffff, B: 0x14202c, A: 0x8a5a3a, C: 0x6a4a2a, L: 0x3a3a3a });
 
   bakeGrid(scene, 'ogre-a', [
     '................',
@@ -237,40 +261,55 @@ export function bakeMonsters(scene: Phaser.Scene): void {
 }
 
 export function bakeProps(scene: Phaser.Scene): void {
+  // 石头：亮面/暗面拉开，浅草地上轮廓清晰
   bakeGrid(scene, 'rock', [
     '..........',
     '...SSSS...',
-    '..SSSSSS..',
-    '.SSSWSSSS.',
-    '.SSSSSSDS.',
+    '..SWSSSS..',
+    '.SSSWSSSSD',
+    '.SSSSSSSDS',
     'SSSSSSSSDS',
-    'SSDSSSSSDD',
-    '.DDD..DDD.',
-  ], { S: 0x8a8f98, D: 0x5a5f68, W: 0xb8bcc4 });
+    'SSDSSSSDDD',
+    '.DDDDDDDD.',
+  ], { S: 0x9aa2ac, D: 0x4c525c, W: 0xd6dce4 });
 
   bakeGrid(scene, 'bush', [
     '..........',
     '..GG.GG...',
     '.GGGGGGG..',
     'GGGWGGGGG.',
-    'GGGGGGGGG.',
-    '.GGDGGGD..',
-    '..GGGGG...',
+    'GGGGGGGGD.',
+    '.GGDGGGDD.',
+    '..DDDDDD..',
     '..........',
-  ], { G: 0x2f8a4f, D: 0x1f6a3a, W: 0x9fd08a });
+  ], { G: 0x237a42, D: 0x13512a, W: 0x54ad66 });
 
   bakeGrid(scene, 'tree', [
     '.....GG.....',
     '...GGGGGG...',
     '..GGGGGGGG..',
-    '.GGGWGGGGGG.',
-    '.GGGGGGGDGG.',
-    '..GGGGGGGG..',
-    '...GGGGGG...',
+    '.GGGWGGGGDD.',
+    '.GGGGGGGDDD.',
+    '..GGGGGDDDD.',
+    '...GGDDDDD..',
     '.....TT.....',
     '.....TT.....',
     '....TTTT....',
-  ], { G: 0x27703a, D: 0x1a5230, W: 0x7ab86a, T: 0x6a4a2a });
+  ], { G: 0x1e6433, D: 0x0e3d1e, W: 0x3f9a52, T: 0x4e3620 });
+
+  // 挥砍时绕角色旋转的刀（水平朝向，靠 rotation 对准目标）
+  bakeGrid(
+    scene,
+    'blade',
+    [
+      '..............',
+      '..GGGGGGGGGG..',
+      '.WWWWWWWWWWWD.',
+      '..GGGGGGGGGG..',
+      '..............',
+    ],
+    { W: 0xf2f6ff, G: 0x9aa6b8, D: 0x5a6472 },
+  );
 
   bakeGrid(scene, 'coin', [
     '..GGGG..',

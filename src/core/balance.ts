@@ -18,4 +18,10 @@ export const BALANCE = {
   DAMAGE_FLOAT_MAX: 1.05,
   BREAKTHROUGH_LO_SLOPE: 1,
   BREAKTHROUGH_HI_SLOPE: 2,
+  /** 普通怪掉装备的概率（每只怪最多 1 件） */
+  DROP_EQUIP_CHANCE: 0.08,
+  /** 普通怪掉技能书的概率（每只怪最多 1 本） */
+  DROP_BOOK_CHANCE: 0.06,
+  /** BOSS 保底掉几件装备（BOSS 每 10 级才一只，作为里程碑奖励） */
+  BOSS_EQUIP_GUARANTEE: 1,
 } as const;

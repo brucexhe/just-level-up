@@ -24,14 +24,35 @@ export const EQUIP_SLOTS: EquipSlot[] = [
   'ring2',
 ];
 
+export type RarityKey =
+  | 'common'
+  | 'fine'
+  | 'rare'
+  | 'epic'
+  | 'legend'
+  | 'myth';
+
 export interface EquipmentItem {
   id: string;
   slot: EquipSlot;
   name: string;
+  rarity: RarityKey;
+  /** 掉落时的怪物等级，用于展示与稀有度判定 */
+  sourceLevel: number;
   /** 掉落时的基础属性点，总和 ≤ 怪物等级 */
   stats: AttrSet;
   /** 玩家用自由装备点追加的点数（绑定该物品） */
   freeAllocated: AttrSet;
+}
+
+/** 稀有度由「点数 / 怪物等级」的比例决定（点数预算用得越满越稀有） */
+export function rarityForRatio(ratio: number): RarityKey {
+  if (ratio >= 0.95) return 'myth';
+  if (ratio >= 0.75) return 'legend';
+  if (ratio >= 0.55) return 'epic';
+  if (ratio >= 0.35) return 'rare';
+  if (ratio >= 0.18) return 'fine';
+  return 'common';
 }
 
 const SLOT_BASE: Record<EquipSlot, string> = {
@@ -90,9 +111,11 @@ export function dropEquipment(
   const slot = EQUIP_SLOTS[Math.floor(rng() * EQUIP_SLOTS.length)];
   itemSeq += 1;
   return {
-    id: `it-${Date.now()}-${itemSeq}`,
+    id: `it-${Date.now().toString(36)}-${itemSeq}`,
     slot,
     name: `${monsterLevel}级${SLOT_BASE[slot]}`,
+    rarity: rarityForRatio(monsterLevel > 0 ? budget / monsterLevel : 0),
+    sourceLevel: monsterLevel,
     stats,
     freeAllocated: emptyStats(),
   };
