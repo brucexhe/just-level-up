@@ -115,10 +115,10 @@ describe('BGM 序列（纯函数）', () => {
     expect(kinds).toContain('kick');
   });
 
-  it('底鼓落在每小节的 0 与 8 步', () => {
+  it('底鼓是「正拍 + 切分」：0/8 重拍，6/14 轻拍', () => {
     for (let s = 0; s < LOOP_STEPS; s++) {
       const hasKick = stepEvents(s).some((e) => e.kind === 'kick');
-      expect(hasKick).toBe(s % 8 === 0);
+      expect(hasKick).toBe([0, 6, 8, 14].includes(s % STEPS_PER_BAR));
     }
   });
 

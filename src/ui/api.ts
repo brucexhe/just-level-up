@@ -42,6 +42,8 @@ export interface MinimapData {
   player: MinimapPoint;
   monsters: MinimapMonster[];
   obstacles: MinimapPoint[];
+  /** 地上的掉落物 */
+  drops: MinimapPoint[];
   /** 相机可视区域（世界坐标） */
   view: { x: number; y: number; w: number; h: number };
   stage: number;

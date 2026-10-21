@@ -1,7 +1,7 @@
 import { EQUIP_SLOTS, totalPoints } from '../core/equipment';
 import { expToNext } from '../core/progression';
 import { skillMpCost } from '../core/skills';
-import { maxHp, maxMp, powerScore, type GameState } from '../state/gameState';
+import { maxHp, maxMp, type GameState } from '../state/gameState';
 import { SKILLS, type SkillId } from '../data/skills';
 import type {
   Cooldown,
@@ -94,7 +94,6 @@ export class GameUI {
           <div class="hud-main">
             <div class="hero-row">
               <span class="lv" data-live="level">Lv 1</span>
-              <span class="pw">战力 <b class="num" data-live="power">0</b></span>
               <span class="hud-spacer"></span>
               <span class="hud-tag" title="金币">🪙<b class="num" data-live="gold">0</b></span>
               <span class="hud-tag" title="击杀">💀<b class="num" data-live="kills">0</b></span>
@@ -117,6 +116,7 @@ export class GameUI {
           <span class="mm-lg"><i class="d mine"></i>你</span>
           <span class="mm-lg"><i class="d mob"></i>怪 <b data-live="mobcount">0</b></span>
           <span class="mm-lg"><i class="d boss"></i>BOSS <b data-live="bosscount">0</b></span>
+          <span class="mm-lg"><i class="d drop"></i>掉落 <b data-live="dropcount">0</b></span>
         </div>
       </div>
 
@@ -437,7 +437,6 @@ export class GameUI {
     const mhp = maxHp(s);
     const mmp = maxMp(s);
     const next = expToNext(s.level);
-    const pw = powerScore(s);
 
     this.root.querySelectorAll<HTMLElement>('[data-live]').forEach((el) => {
       switch (el.dataset.live) {
@@ -452,9 +451,6 @@ export class GameUI {
           break;
         case 'level':
           setTxt(el, `Lv ${fmtNum(s.level)}`);
-          break;
-        case 'power':
-          setTxt(el, fmtNum(pw));
           break;
         case 'gold':
           setTxt(el, fmtNum(s.gold));
@@ -585,6 +581,20 @@ export class GameUI {
       }
     }
 
+    // 地上的掉落物（金色小菱形，值得专门跑一趟）
+    for (const g of d.drops) {
+      const x = at(g.x);
+      const y = at(g.y);
+      ctx.fillStyle = '#ffd93d';
+      ctx.beginPath();
+      ctx.moveTo(x, y - 5);
+      ctx.lineTo(x + 5, y);
+      ctx.lineTo(x, y + 5);
+      ctx.lineTo(x - 5, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     // 玩家（亮点 + 光环 + 白边，最容易一眼找到）
     const px = at(d.player.x);
     const py = at(d.player.y);
@@ -612,6 +622,7 @@ export class GameUI {
     setTxt(this.root.querySelector('[data-live="mlv"]'), `怪 Lv${fmtNum(d.monsterLevel)}`);
     setTxt(this.root.querySelector('[data-live="mobcount"]'), fmtNum(mobs));
     setTxt(this.root.querySelector('[data-live="bosscount"]'), fmtNum(bosses));
+    setTxt(this.root.querySelector('[data-live="dropcount"]'), fmtNum(d.drops.length));
   }
 
   private setBadge(id: PanelId, n: number) {

@@ -64,7 +64,7 @@
   position: absolute;
   left: 12px;
   top: 12px;
-  width: 232px;
+  width: 244px;
   pointer-events: auto;
   cursor: pointer;
   border-radius: 12px;
@@ -102,9 +102,11 @@
 .hud .hero-row {
   gap: 5px;
   margin-bottom: 0;
+  flex-wrap: nowrap;
 }
 .hud .hero-row .lv {
   font-size: 14px;
+  white-space: nowrap;
 }
 .hud .hero-row .pw {
   font-size: 10px;
@@ -119,6 +121,8 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 10px;
   color: #cfd8e6;
 }
@@ -235,6 +239,11 @@
   transform: rotate(45deg);
   border-radius: 1px;
 }
+.mm-lg .d.drop {
+  background: #ffd93d;
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
 
 /* ============================ 面板容器 ============================ */
 
@@ -243,7 +252,7 @@
   position: absolute;
   top: 172px;
   bottom: 84px;
-  width: 322px;
+  width: 288px;
   pointer-events: none;
 }
 .dock-left {
@@ -291,9 +300,9 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 9px;
-  height: 42px;
-  padding: 0 12px;
+  gap: 8px;
+  height: 38px;
+  padding: 0 10px;
   background: linear-gradient(180deg, rgba(56, 74, 104, 0.55), rgba(30, 39, 55, 0.35));
   border-bottom: 1px solid #2a3547;
   cursor: grab;
@@ -308,17 +317,17 @@
   background: linear-gradient(90deg, transparent, rgba(255, 217, 61, 0.5), transparent);
 }
 .panel-head .ph-ico {
-  font-size: 17px;
+  font-size: 16px;
   filter: drop-shadow(0 0 6px rgba(255, 217, 61, 0.35));
 }
 .panel-head h3 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 2px;
   color: #ffe08a;
 }
 .panel-head .ph-sub {
-  font-size: 11px;
+  font-size: 10px;
   color: #7d8aa0;
   margin-left: auto;
 }
@@ -329,7 +338,7 @@
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
   border: 1px solid #3a4761;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   color: #9aa4b2;
   display: flex;
@@ -350,7 +359,7 @@
   min-height: 0; /* flex 列布局下允许收缩，overflow 才能生效 */
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 11px;
+  padding: 9px;
 }
 
 /* ============================ 通用小组件 ============================ */
@@ -359,8 +368,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 14px 0 8px;
-  font-size: 11px;
+  margin: 12px 0 7px;
+  font-size: 10px;
   letter-spacing: 2px;
   color: #7d8aa0;
 }
@@ -399,7 +408,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 23px;
+  font-size: 22px;
   background: linear-gradient(180deg, #2b3852, #1b2231);
   border: 1px solid #46587a;
   box-shadow: inset 0 0 18px rgba(255, 217, 61, 0.16);
@@ -418,7 +427,7 @@
   gap: 7px;
 }
 .hero-row .lv {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #ffd93d;
   letter-spacing: 1px;
@@ -429,7 +438,7 @@
 }
 .hero-row .pw b {
   color: #ffb454;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -492,11 +501,11 @@
   border: 1px solid rgba(126, 231, 135, 0.28);
 }
 .points-banner .pb-l {
-  font-size: 11px;
+  font-size: 10px;
   color: #9aa8bd;
 }
 .points-banner .pb-v {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: #7ee787;
 }
@@ -519,7 +528,7 @@
 .btn {
   padding: 5px 10px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 1px;
   background: linear-gradient(180deg, #29344a, #1d2534);
   border: 1px solid #3a4761;
@@ -560,7 +569,7 @@
 .btn.big {
   width: 100%;
   padding: 9px;
-  font-size: 12px;
+  font-size: 11px;
   border-radius: 10px;
 }
 
@@ -574,17 +583,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 6px 9px;
+  padding: 5px 8px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid #26303f;
 }
 .kv span {
-  font-size: 11px;
+  font-size: 10px;
   color: #8d9ab0;
 }
 .kv b {
-  font-size: 12px;
+  font-size: 11px;
   color: #e6ecf6;
   font-weight: 600;
 }
@@ -593,9 +602,9 @@
 }
 
 .note {
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.6;
   color: #8d9ab0;
   background: rgba(255, 255, 255, 0.03);
@@ -616,8 +625,8 @@
 .attr-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 7px;
+  padding: 4px 7px;
   border-radius: 8px;
   transition: background 0.14s;
 }
@@ -627,23 +636,23 @@
 .attr-row .ic {
   width: 18px;
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
 }
 .attr-row .nm {
   width: 46px;
-  font-size: 12px;
+  font-size: 11px;
   color: #cfd8e6;
 }
 .attr-row .vl {
   flex: 1;
   text-align: right;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #fff;
 }
 .attr-row .vl i {
   font-style: normal;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   color: #7ee787;
   margin-left: 3px;
@@ -656,7 +665,7 @@
   min-width: 26px;
   height: 22px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 10px;
   background: linear-gradient(180deg, #2c3a29, #1e2718);
   border: 1px solid #46603c;
   color: #a8e6a0;
@@ -690,7 +699,7 @@
 }
 .slot {
   position: relative;
-  height: 58px;
+  height: 52px;
   border-radius: 10px;
   display: flex;
   flex-direction: column;
@@ -711,7 +720,7 @@
   box-shadow: 0 0 0 1px rgba(255, 217, 61, 0.35), 0 0 16px rgba(255, 217, 61, 0.18);
 }
 .slot .sico {
-  font-size: 19px;
+  font-size: 18px;
   line-height: 1;
   opacity: 0.9;
 }
@@ -730,7 +739,7 @@
 }
 .slot.empty .sico {
   opacity: 0.28;
-  font-size: 16px;
+  font-size: 15px;
 }
 .slot.empty .sname {
   color: #5c6779;
@@ -764,17 +773,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: 21px;
   background: #161d29;
   border: 1px solid #3a4761;
 }
 .ic-head .nm {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 .ic-head .sub {
   margin-top: 3px;
-  font-size: 11px;
+  font-size: 10px;
   color: #8d9ab0;
 }
 .chips {
@@ -786,7 +795,7 @@
 .chip {
   padding: 3px 7px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 10px;
   background: rgba(126, 231, 135, 0.1);
   border: 1px solid rgba(126, 231, 135, 0.22);
   color: #b8f0b0;
@@ -811,7 +820,7 @@
   border-top: 1px dashed #35415a;
 }
 .alloc-box .ab-title {
-  font-size: 11px;
+  font-size: 10px;
   color: #8d9ab0;
   margin-bottom: 5px;
 }
@@ -823,7 +832,7 @@
 .alloc-grid button {
   padding: 5px 0;
   border-radius: 7px;
-  font-size: 11px;
+  font-size: 10px;
   background: linear-gradient(180deg, #2f3a26, #1e2517);
   border: 1px solid #4a6039;
   color: #bdeeb4;
@@ -868,11 +877,11 @@
   box-shadow: 0 0 14px rgba(255, 217, 61, 0.16);
 }
 .sk-tab .sk-tab-ico {
-  font-size: 21px;
+  font-size: 20px;
   line-height: 1;
 }
 .sk-tab .sk-tab-nm {
-  font-size: 11px;
+  font-size: 10px;
   color: #cfd8e6;
 }
 .sk-tab .sk-tab-lv {
@@ -900,7 +909,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 .sd-head .key {
@@ -915,13 +924,13 @@
 }
 .sd-desc {
   margin: 8px 0 10px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.65;
   color: #b7c2d4;
 }
 .sd-next {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 10px;
   color: #7ee787;
 }
 
@@ -936,7 +945,7 @@
   flex: 1;
   padding: 7px 0;
   border-radius: 9px;
-  font-size: 12px;
+  font-size: 11px;
   background: linear-gradient(180deg, #1d2534, #161c28);
   border: 1px solid #2c3749;
   color: #8d9ab0;
@@ -976,12 +985,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 17px;
+  font-size: 16px;
   background: #121822;
   border: 1px solid #3a4761;
 }
 .bag-item .bi-nm {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 .bag-item .bi-sub {
@@ -1001,7 +1010,7 @@
 .bag-empty {
   padding: 26px 0;
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   color: #5c6779;
 }
 
@@ -1017,11 +1026,11 @@
   border: 1px solid rgba(255, 217, 61, 0.3);
 }
 .shop-coin .l {
-  font-size: 11px;
+  font-size: 10px;
   color: #b7a86a;
 }
 .shop-coin b {
-  font-size: 19px;
+  font-size: 18px;
   color: #ffd93d;
 }
 
@@ -1045,17 +1054,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 21px;
+  font-size: 20px;
   background: #121822;
   border: 1px solid #3a4761;
 }
 .potion .pt-nm {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 .potion .pt-sub {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 10px;
   color: #8d9ab0;
 }
 .potion .pt-bar {
@@ -1116,7 +1125,7 @@
   transform: translateY(-2px);
 }
 .skill-slot .ss-ico {
-  font-size: 19px;
+  font-size: 18px;
   z-index: 2;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
 }
@@ -1152,7 +1161,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #fff;
   text-shadow: 0 2px 4px #000;

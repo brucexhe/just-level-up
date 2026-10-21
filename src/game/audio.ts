@@ -29,7 +29,7 @@ export type SfxName =
 /** 一小节 16 步，4 小节一个循环 */
 export const STEPS_PER_BAR = 16;
 export const LOOP_STEPS = STEPS_PER_BAR * 4;
-export const BPM = 88;
+export const BPM = 116;
 /** 一个 16 分音符的秒数 */
 export const STEP_SEC = 60 / BPM / 4;
 
@@ -67,15 +67,16 @@ export function stepEvents(step: number): NoteEvent[] {
   if (BASS_STEPS.includes(inBar)) {
     out.push({ kind: 'bass', midi: chord.root, vel: inBar === 0 ? 0.9 : 0.6 });
   }
-  // 琶音：八分音符，走和弦音并隔小节升八度
-  if (inBar % 2 === 0) {
-    const i = (inBar / 2) % chord.tones.length;
+  // 琶音：十六分音符（更密的颗粒感 = 更轻快），走和弦音并隔小节升八度
+  {
+    const i = inBar % chord.tones.length;
     const oct = bar % 2 === 1 ? 12 : 0;
-    out.push({ kind: 'arp', midi: chord.tones[i] + oct, vel: 0.34 });
+    out.push({ kind: 'arp', midi: chord.tones[i] + oct, vel: inBar % 4 === 0 ? 0.42 : 0.3 });
   }
   if (inBar % 8 === 0) out.push({ kind: 'kick', midi: 0, vel: 0.9 });
+  if (inBar === 6 || inBar === 14) out.push({ kind: 'kick', midi: 0, vel: 0.5 });
   if (inBar % 8 === 4) out.push({ kind: 'snare', midi: 0, vel: 0.5 });
-  if (inBar % 2 === 1) out.push({ kind: 'hat', midi: 0, vel: inBar % 4 === 3 ? 0.22 : 0.13 });
+  if (inBar % 2 === 1) out.push({ kind: 'hat', midi: 0, vel: inBar % 4 === 3 ? 0.26 : 0.15 });
   return out;
 }
 
@@ -246,24 +247,28 @@ export class AudioEngine {
     for (const e of events) {
       switch (e.kind) {
         case 'bass':
+          // 短促的拨弦感，让低音更有弹性
           this.tone({
             type: 'triangle',
             freq: midiToFreq(e.midi),
             at,
-            dur: 0.24,
-            peak: 0.5 * e.vel,
+            dur: 0.16,
+            peak: 0.52 * e.vel,
             bus,
+            attack: 0.003,
           });
           break;
         case 'arp':
+          // 换成方波 → 更亮的拨弦音色（pluck）
           this.tone({
             type: 'square',
             freq: midiToFreq(e.midi),
             at,
-            dur: 0.16,
-            peak: 0.16 * e.vel,
+            dur: 0.11,
+            peak: 0.2 * e.vel,
             bus,
-            detune: 4,
+            attack: 0.002,
+            detune: 6,
           });
           break;
         case 'kick':

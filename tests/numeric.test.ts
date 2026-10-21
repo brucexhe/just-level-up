@@ -9,6 +9,7 @@ import {
   mitigationRate,
   moveSpeed,
 } from '../src/core/formulas';
+import { BALANCE } from '../src/core/balance';
 import {
   breakthroughBonusRange,
   cumulativeExp,
@@ -49,9 +50,16 @@ describe('formulas', () => {
     expect(effectiveDefense(100, 0, 0.5)).toBe(50);
   });
 
-  it('mitigationRate uses K0 * attackerLevel', () => {
-    // def=100, level=1 -> K=100 -> 100/200 = 0.5
-    expect(mitigationRate(100, 1)).toBeCloseTo(0.5);
+  it('mitigationRate: 防御要真的有用，且受上限封顶', () => {
+    // 1 级攻击者：分母 = 12 + 1.5 = 13.5
+    expect(mitigationRate(13.5, 1)).toBeCloseTo(0.5);
+    // 10 级怪打你：分母 = 12 + 15 = 27
+    expect(mitigationRate(5, 10)).toBeCloseTo(5 / 32, 2); // 5 点防御 ≈ 16%
+    expect(mitigationRate(20, 10)).toBeCloseTo(20 / 47, 2); // 20 点防御 ≈ 43%
+    // 防御成长带来的收益是单调的
+    expect(mitigationRate(40, 10)).toBeGreaterThan(mitigationRate(20, 10));
+    // 封顶 65%，堆防御不能免伤
+    expect(mitigationRate(1e6, 10)).toBeCloseTo(BALANCE.MIT_CAP, 5);
   });
 
   it('damage never drops below 1 even vs huge defense', () => {
@@ -63,12 +71,14 @@ describe('formulas', () => {
   });
 
   it('penetration increases damage', () => {
+    // 注意：防御过高时减伤会被 MIT_CAP 封顶，此时穿透体现不出来，
+    // 所以用一组会落在封顶之下的数值来验证。
     const base = computeDamage(
-      { attack: 200, defense: 500, attackerLevel: 1 },
+      { attack: 200, defense: 60, attackerLevel: 1 },
       fixed(0.5),
     );
     const pen = computeDamage(
-      { attack: 200, defense: 500, attackerLevel: 1, flatPen: 400 },
+      { attack: 200, defense: 60, attackerLevel: 1, flatPen: 40 },
       fixed(0.5),
     );
     expect(pen).toBeGreaterThan(base);
@@ -95,7 +105,9 @@ describe('formulas', () => {
   it('attackInterval shrinks with agi; moveSpeed caps at 3x; cdr caps', () => {
     expect(attackIntervalMs(100)).toBe(500);
     expect(attackIntervalMs(0)).toBe(1000);
-    expect(moveSpeed(10000)).toBe(600);
+    // 基准移速 100 → 上限 3 倍 = 300
+    expect(moveSpeed(0)).toBe(BALANCE.BASE_MOVE_SPEED);
+    expect(moveSpeed(10000)).toBe(BALANCE.BASE_MOVE_SPEED * 3);
     expect(cooldownMs(1000, 1)).toBe(250);
   });
 });

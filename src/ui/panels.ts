@@ -25,7 +25,6 @@ import {
   aggregatedStats,
   maxHp,
   maxMp,
-  powerScore,
   sellAllSkillBooks,
   sellEquippedItem,
   sellInventoryItem,
@@ -127,20 +126,14 @@ const characterPanel: PanelDef = {
         <div class="hero-main">
           <div class="hero-row">
             <span class="lv">Lv ${fmtNum(s.level)}</span>
-            <span class="pw">战力 <b class="num">${fmtNum(powerScore(s))}</b></span>
+            <span class="pw">金币 <b class="num" style="color:#ffd93d">${fmtNum(s.gold)}</b></span>
           </div>
           <div class="bar"><i style="width:${((s.exp / next) * 100).toFixed(1)}%"></i>
             <span>EXP ${fmtNum(s.exp)} / ${fmtNum(next)}</span></div>
         </div>
       </div>
 
-      ${pointsBanner(
-        '可分配属性点',
-        s.attrPoints,
-        `<span class="pb-l">金币 <b class="num" data-live="gold" style="color:#ffd93d">${fmtNum(
-          s.gold,
-        )}</b></span>`,
-      )}
+      ${pointsBanner('可分配属性点', s.attrPoints, '')}
 
       <div class="sec-title">生命 / 法力</div>
       ${liveBar('hp', s)}

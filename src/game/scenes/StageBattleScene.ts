@@ -8,7 +8,6 @@ import {
   gainExp,
   maxHp,
   maxMp,
-  powerScore,
   restoreHp,
   restoreMp,
   skillLevel,
@@ -16,7 +15,7 @@ import {
   spendMp,
   type GameState,
 } from '../../state/gameState';
-import { rollDrops } from '../../core/drops';
+import { rollDrops, type GroundDrop } from '../../core/drops';
 import { goldDrop } from '../../core/economy';
 import { expToNext, isBreakthrough, killExp } from '../../core/progression';
 import { skillMpCost, skillPower, skillValue } from '../../core/skills';
@@ -37,6 +36,7 @@ import {
   type SkillId,
 } from '../../data/skills';
 import { ATTR_META } from '../../data/attrs';
+import { RARITY_META, SLOT_META } from '../../data/items';
 import { BASE_ATTRS } from '../../core/types';
 import { GameUI } from '../../ui';
 import type {
@@ -60,9 +60,20 @@ import {
 
 const MAP_SIZE = 2000;
 const ATTACK_RANGE = 90;
+/** 警戒范围：超出这个距离怪物不再追击，也不再显示等级/血条 */
+const CHASE_RANGE = 300;
+/** 掉落物拾取半径 */
+const PICKUP_RANGE = 36;
 const MONSTER_COUNT = 10;
 const REGEN_PER_SEC = 1;
 const STAGE_NAMES = ['草原', '森林', '荒漠', '雪原', '沼泽', '火山', '深渊', '天空'];
+
+/** 技能书在地上显示的颜色（与技能本身的气质对应） */
+const BOOK_COLOR: Record<string, string> = {
+  fireball: '#ff9f43',
+  frenzy: '#ff7bd5',
+  poison: '#9ade6a',
+};
 
 const ATTR_KEYS = BASE_ATTRS;
 const ATTR_ZH: Record<string, string> = Object.fromEntries(
@@ -73,6 +84,16 @@ interface Dot {
   perTick: number;
   until: number;
   tickAt: number;
+}
+
+/** 躺在地上的掉落物（需要走过去才拾取） */
+interface GroundDropView {
+  drop: GroundDrop;
+  x: number;
+  y: number;
+  ring: Phaser.GameObjects.Image;
+  icon: Phaser.GameObjects.Text;
+  label: Phaser.GameObjects.Text;
 }
 
 interface MonsterView {
@@ -113,6 +134,8 @@ export class StageBattleScene extends Phaser.Scene {
   private saveAt = 0;
   /** 静态障碍坐标缓存（小地图用） */
   private obstaclePoints: { x: number; y: number }[] = [];
+  /** 地上的掉落物 */
+  private groundDrops: GroundDropView[] = [];
 
   private ui!: GameUI;
 
@@ -224,6 +247,44 @@ export class StageBattleScene extends Phaser.Scene {
       }),
       save: () => saveState(this.state),
       backup: () => backupState(this.state),
+      /** 地上的掉落物（调试/截图用） */
+      drops: () =>
+        this.groundDrops.map((g) => ({
+          x: Math.round(g.x),
+          y: Math.round(g.y),
+          kind: g.drop.kind,
+        })),
+      moveTo: (x: number, y: number) => this.moveToWorld(x, y),
+      /** 相机是否正在全屏闪光（冒烟测试用：受伤时应该为 false） */
+      flashActive: () => this.cameras.main.flashEffect.isRunning,
+      /** 角色当前是否被染色（受伤闪红用） */
+      playerTinted: () => this.player.isTinted,
+      /** 让最近的怪咬一口（冒烟测试用） */
+      hurtTest: () => {
+        const m = this.monsters.find((v) => v.sprite.active);
+        if (!m) return false;
+        this.monsterAttack(m);
+        return true;
+      },
+      /** 怪物快照（调试用：距离 / 是否在追 / 等级标签可见性） */
+      monsters: () =>
+        this.monsters
+          .filter((m) => m.sprite.active)
+          .map((m) => ({
+            x: Math.round(m.sprite.x),
+            y: Math.round(m.sprite.y),
+            level: m.data.level,
+            aggressive: m.data.aggressive,
+            labelVisible: m.label.visible,
+            dist: Math.round(
+              Phaser.Math.Distance.Between(
+                m.sprite.x,
+                m.sprite.y,
+                this.player.x,
+                this.player.y,
+              ),
+            ),
+          })),
       /** 当前场上的挥砍特效数量（冒烟测试用） */
       fx: () => {
         let blade = 0;
@@ -325,7 +386,7 @@ export class StageBattleScene extends Phaser.Scene {
     const barW = isBoss ? 60 : 34;
     const hpBg = this.add
       .image(x, y - barY, 'bar')
-      .setDisplaySize(barW, 5)
+      .setDisplaySize(barW, 2.5)
       .setTint(0x000000)
       .setDepth(y + 1)
       .setAlpha(0.7)
@@ -333,7 +394,7 @@ export class StageBattleScene extends Phaser.Scene {
     const hpFg = this.add
       .image(x - barW / 2, y - barY, 'bar')
       .setOrigin(0, 0.5)
-      .setDisplaySize(barW, 5)
+      .setDisplaySize(barW, 2.5)
       .setTint(isBoss ? 0xff3b3b : 0xe05656)
       .setDepth(y + 1)
       .setVisible(false);
@@ -389,6 +450,30 @@ export class StageBattleScene extends Phaser.Scene {
         if (hit) {
           this.moveTarget = null;
           this.attackTarget = hit;
+          // 点谁就立刻朝谁砍一刀（有动画 + 音效），不等自动攻击节拍
+          const angle = Phaser.Math.Angle.Between(
+            this.player.x,
+            this.player.y,
+            hit.sprite.x,
+            hit.sprite.y,
+          );
+          this.player.setFlipX(hit.sprite.x < this.player.x);
+          this.slashEffect(angle);
+          this.swingBlade(angle);
+          audio.play('swing');
+          if (this.inAttackRange(hit)) this.tryMelee();
+        } else {
+          // 点空地也挥一刀，方向朝点击处，保证每次点击都有反馈
+          const angle = Phaser.Math.Angle.Between(
+            this.player.x,
+            this.player.y,
+            p.worldX,
+            p.worldY,
+          );
+          this.player.setFlipX(p.worldX < this.player.x);
+          this.slashEffect(angle);
+          this.swingBlade(angle);
+          audio.play('swing');
         }
       }
     });
@@ -633,6 +718,13 @@ export class StageBattleScene extends Phaser.Scene {
       m.sprite.destroy();
     }
     this.monsters = [];
+    for (const g of this.groundDrops) {
+      this.tweens.killTweensOf([g.icon, g.label, g.ring]);
+      g.ring.destroy();
+      g.icon.destroy();
+      g.label.destroy();
+    }
+    this.groundDrops = [];
     for (let i = 0; i < MONSTER_COUNT; i++) this.spawnMonster();
     this.attackTarget = null;
     this.moveTarget = null;
@@ -663,6 +755,7 @@ export class StageBattleScene extends Phaser.Scene {
       player: { x: this.player.x, y: this.player.y },
       monsters,
       obstacles: this.obstaclePoints,
+      drops: this.groundDrops.map((g) => ({ x: g.x, y: g.y })),
       view: { x: cam.x, y: cam.y, w: cam.width, h: cam.height },
       stage,
       stageName: STAGE_NAMES[(stage - 1) % STAGE_NAMES.length],
@@ -706,7 +799,8 @@ export class StageBattleScene extends Phaser.Scene {
     }
     switch (id) {
       case 'attack':
-        this.tryMelee(now);
+        // 攻击间隔没到 / 够不着时也要挥一刀：按键永远有画面和声音反馈
+        if (!this.tryMelee(now)) this.emptySwing();
         break;
       case 'fireball':
         this.castFireball(this.input.activePointer, lv);
@@ -850,10 +944,33 @@ export class StageBattleScene extends Phaser.Scene {
     return base / this.frenzyMult();
   }
 
-  private tryMelee(time: number = this.time.now) {
-    if (time < this.playerNextAttackAt) return;
+  /** 空挥一次：只有动画和音效，不造成伤害（用于按键反馈） */
+  private emptySwing(): void {
+    const t =
+      (this.attackTarget && this.attackTarget.sprite.active
+        ? this.attackTarget
+        : null) ?? this.nearestMonster(ATTACK_RANGE * 3);
+    const angle = t
+      ? Phaser.Math.Angle.Between(
+          this.player.x,
+          this.player.y,
+          t.sprite.x,
+          t.sprite.y,
+        )
+      : this.player.flipX
+        ? Math.PI
+        : 0;
+    if (t) this.player.setFlipX(t.sprite.x < this.player.x);
+    this.slashEffect(angle);
+    this.swingBlade(angle);
+    audio.play('swing');
+  }
+
+  /** 近战一次；返回是否真的砍出去了 */
+  private tryMelee(time: number = this.time.now): boolean {
+    if (time < this.playerNextAttackAt) return false;
     const target = this.meleeTarget();
-    if (!target) return;
+    if (!target) return false;
     this.playerNextAttackAt = time + this.meleeInterval();
 
     const stats = aggregatedStats(this.state);
@@ -882,6 +999,7 @@ export class StageBattleScene extends Phaser.Scene {
       yoyo: true,
     });
     this.applyDamage(target, dmg, angle);
+    return true;
   }
 
   /** 优先攻击左键锁定的目标（需在攻击距离内），否则就近攻击 */
@@ -952,12 +1070,17 @@ export class StageBattleScene extends Phaser.Scene {
     if (m.data.hp <= 0) this.killMonster(m);
   }
 
+  /** 等级标签与血条的可见性由「距离」统一控制 */
+  private setMonsterHudVisible(m: MonsterView, on: boolean): void {
+    if (m.label.visible !== on) m.label.setVisible(on);
+    if (m.hpBg.visible !== on) m.hpBg.setVisible(on);
+    if (m.hpFg.visible !== on) m.hpFg.setVisible(on);
+  }
+
   private refreshMonsterBar(m: MonsterView) {
-    m.hpBg.setVisible(true);
-    m.hpFg.setVisible(true);
     const ratio = Phaser.Math.Clamp(m.data.hp / m.data.maxHp, 0, 1);
     const w = m.isBoss ? 60 : 34;
-    m.hpFg.setDisplaySize(w * ratio, 5);
+    m.hpFg.setDisplaySize(w * ratio, 2.5);
     m.label.setVisible(true);
     m.label.setText(m.isBoss ? `BOSS Lv${m.data.level}` : `Lv${m.data.level}`);
   }
@@ -995,20 +1118,25 @@ export class StageBattleScene extends Phaser.Scene {
     this.state.kills += 1;
     this.state.highestMonsterLevel = Math.max(this.state.highestMonsterLevel, ml);
 
-    // 掉落：装备 / 技能书都很稀有（各 ≤10%，BOSS 保底 1 件装备）
+    // 掉落：装备 / 技能书都很稀有且互斥，掉在地上需要走过去拾取
     const drops = rollDrops(ml, isBoss);
     const gainText = [`+${killExp(ml) * mul}exp`, `+${gold}金币`].join(' ');
-    for (const it of drops.equip) this.state.inventory.push(it);
-    for (const b of drops.books) this.state.skillBooks.push(b);
+    drops.forEach((d, i) => {
+      const jx = px + (i === 0 ? 0 : Phaser.Math.Between(-26, 26));
+      const jy = py + (i === 0 ? 0 : Phaser.Math.Between(-26, 26));
+      this.spawnGroundDrop(d, jx, jy, ml);
+    });
 
-    const dropParts: string[] = [];
-    if (drops.equip.length) dropParts.push(`${drops.equip.length} 件装备`);
-    if (drops.books.length) {
-      dropParts.push(`《${skillName(drops.books[0]!.skillId)}技能书》`);
-      audio.play('equip');
-    }
-    const dropText = dropParts.join(' + ');
-    this.flyCoins(px, py, drops.equip.length > 0 || isBoss ? 6 : 3);
+    const dropText = drops.length
+      ? drops
+          .map((d) =>
+            d.kind === 'equip'
+              ? `${SLOT_META[d.item.slot].name}（${RARITY_META[d.item.rarity].name}）`
+              : `${skillName(d.book.skillId)}技能书`,
+          )
+          .join(' + ')
+      : '';
+    this.flyCoins(px, py, drops.length > 0 || isBoss ? 6 : 3);
     audio.play('coin');
 
     if (isBoss) {
@@ -1026,6 +1154,9 @@ export class StageBattleScene extends Phaser.Scene {
         dropText ? '#ffd93d' : '#9ad06a',
       );
     }
+    if (dropText) {
+      this.ui.toast('掉落物躺在地上，走过去即可拾取', '#9aa4b2');
+    }
     if (this.state.level > before) this.levelUpFx(before);
 
     this.monsterLevel += 1;
@@ -1033,6 +1164,88 @@ export class StageBattleScene extends Phaser.Scene {
     if (this.monsterLevel % 10 === 0 && this.bossAtLevel !== this.monsterLevel) {
       this.bossAtLevel = this.monsterLevel;
       this.time.delayedCall(1400, () => this.spawnMonster(true));
+    }
+  }
+
+  /** 掉落物落在死亡点：光环 + 图标 +「等级 · 品质」标签，颜色按品质/技能区分 */
+  private spawnGroundDrop(d: GroundDrop, x: number, y: number, level: number) {
+    const px = Phaser.Math.Clamp(x, 20, MAP_SIZE - 20);
+    const py = Phaser.Math.Clamp(y, 20, MAP_SIZE - 20);
+    const meta =
+      d.kind === 'equip'
+        ? {
+            icon: SLOT_META[d.item.slot].icon,
+            color: RARITY_META[d.item.rarity].color,
+            text: `Lv${level} · ${RARITY_META[d.item.rarity].name}`,
+          }
+        : {
+            icon: SKILL_BY_ID[d.book.skillId].icon,
+            color: BOOK_COLOR[d.book.skillId],
+            text: `Lv${level} · ${SKILL_BY_ID[d.book.skillId].name}书`,
+          };
+    const tint = parseInt(meta.color.slice(1), 16);
+
+    const ring = this.add
+      .image(px, py + 8, 'ring')
+      .setTint(tint)
+      .setScale(0.32)
+      .setAlpha(0.9)
+      .setDepth(py - 0.5);
+    const icon = this.text(px, py - 6, meta.icon, meta.color, 20)
+      .setOrigin(0.5)
+      .setDepth(py + 1);
+    const label = this.text(px, py + 14, meta.text, meta.color, 11)
+      .setOrigin(0.5)
+      .setDepth(py + 1);
+
+    // 轻微上下浮动 + 呼吸，地上才看得见
+    this.tweens.add({
+      targets: [icon, label],
+      y: '-=5',
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+    this.tweens.add({
+      targets: ring,
+      alpha: 0.35,
+      scale: 0.62,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+
+    this.groundDrops.push({ drop: d, x: px, y: py, ring, icon, label });
+  }
+
+  /** 走过去拾取：只对距离内的掉落物生效 */
+  private updateGroundDrops() {
+    if (this.groundDrops.length === 0) return;
+    const px = this.player.x;
+    const py = this.player.y;
+    for (const g of [...this.groundDrops]) {
+      if (Phaser.Math.Distance.Between(px, py, g.x, g.y) > PICKUP_RANGE) continue;
+      this.groundDrops = this.groundDrops.filter((x) => x !== g);
+      this.tweens.killTweensOf([g.icon, g.label, g.ring]);
+      g.ring.destroy();
+      g.icon.destroy();
+      g.label.destroy();
+      if (g.drop.kind === 'equip') {
+        this.state.inventory.push(g.drop.item);
+        this.ui.toast(
+          `拾取 ${SLOT_META[g.drop.item.slot].name} · ${RARITY_META[g.drop.item.rarity].name}`,
+          RARITY_META[g.drop.item.rarity].color,
+        );
+      } else {
+        this.state.skillBooks.push(g.drop.book);
+        this.ui.toast(
+          `拾取《${skillName(g.drop.book.skillId)}技能书》`,
+          BOOK_COLOR[g.drop.book.skillId],
+        );
+      }
+      audio.play('coin');
     }
   }
 
@@ -1098,7 +1311,7 @@ export class StageBattleScene extends Phaser.Scene {
     }
     const n = equipBest(this.state);
     this.ui.toast(
-      n > 0 ? `穿戴 ${n} 件更优装备，战力 ${powerScore(this.state)}` : '当前装备已是最优',
+      n > 0 ? `穿戴 ${n} 件更优装备` : '当前装备已是最优',
       '#7ee787',
     );
   }
@@ -1171,7 +1384,7 @@ export class StageBattleScene extends Phaser.Scene {
       skillBooks: this.state.skillBooks.length,
       monsterLevel: this.monsterLevel,
       monstersAlive: alive,
-      power: powerScore(this.state),
+
     };
   }
 
@@ -1252,6 +1465,7 @@ export class StageBattleScene extends Phaser.Scene {
     }
 
     if (time >= this.playerNextAttackAt) this.tryMelee(time);
+    this.updateGroundDrops();
 
     for (const m of [...this.monsters]) {
       if (!m.sprite.active) continue;
@@ -1273,18 +1487,27 @@ export class StageBattleScene extends Phaser.Scene {
         }
       }
 
-      if (time < m.knockUntil) continue;
-      if (!m.data.aggressive) {
-        m.sprite.setVelocity(0, 0);
-        if (m.sprite.anims.isPlaying) m.sprite.anims.stop();
-        continue;
-      }
       const d = Phaser.Math.Distance.Between(
         m.sprite.x,
         m.sprite.y,
         this.player.x,
         this.player.y,
       );
+      // 等级与血条只在「可战斗范围」内显示，远处保持安静
+      this.setMonsterHudVisible(m, d <= CHASE_RANGE);
+
+      if (time < m.knockUntil) continue;
+      if (!m.data.aggressive) {
+        m.sprite.setVelocity(0, 0);
+        if (m.sprite.anims.isPlaying) m.sprite.anims.stop();
+        continue;
+      }
+      // 超出警戒范围就不再追击：站住不动，等玩家靠近
+      if (d > CHASE_RANGE) {
+        m.sprite.setVelocity(0, 0);
+        if (m.sprite.anims.isPlaying) m.sprite.anims.stop();
+        continue;
+      }
       const ms = moveSpeed(m.data.stats.speed ?? 0) * (m.isBoss ? 0.45 : 0.55);
       if (d > ATTACK_RANGE * 0.75) {
         const ang = Phaser.Math.Angle.Between(
@@ -1317,12 +1540,17 @@ export class StageBattleScene extends Phaser.Scene {
     this.state.hp -= dmg;
     this.floatText(this.player.x, this.player.y - 40, `-${dmg}`, '#ff6b6b', 16);
     this.cameras.main.shake(60, 0.003);
+    // 受伤反馈只作用在角色身上：闪红 + 抖动，不再整屏泛红
+    this.player.setTintFill(0xff6b6b);
+    this.time.delayedCall(110, () => {
+      if (this.player.active) this.player.clearTint();
+    });
     audio.play('hurt');
     if (this.state.hp <= 0) {
       this.state.hp = maxHp(this.state);
       this.state.mp = maxMp(this.state);
       this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
-      this.cameras.main.flash(400, 200, 0, 0);
+      this.cameras.main.shake(160, 0.006);
       audio.play('die');
       this.ui.toast(`被 Lv${m.data.level} ${m.isBoss ? 'BOSS ' : ''}击杀，已回城复活`, '#ff6b6b');
     }

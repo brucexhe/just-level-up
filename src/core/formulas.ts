@@ -13,9 +13,17 @@ export function effectiveDefense(
   return Math.max(0, (def - flatPen) * (1 - clamp(pctPen, 0, 1)));
 }
 
+/**
+ * 减伤率 = 防御 / (防御 + MIT_K0 + MIT_KD × 攻击方等级)，并受 MIT_CAP 封顶。
+ *
+ * 例：10 级怪打你 —— 分母 = 12 + 1.5×10 = 27
+ *   5 点防御 → 5/32 ≈ 16% 减伤
+ *   20 点防御 → 20/47 ≈ 43% 减伤
+ *   50 点防御 → 50/77 ≈ 65%（封顶）
+ */
 export function mitigationRate(defEff: number, attackerLevel: number): number {
-  const k = BALANCE.K0 * Math.max(1, attackerLevel);
-  return defEff / (defEff + k);
+  const k = BALANCE.MIT_K0 + BALANCE.MIT_KD * Math.max(1, attackerLevel);
+  return clamp(defEff / (defEff + k), 0, BALANCE.MIT_CAP);
 }
 
 export function computeDamage(

@@ -1,11 +1,21 @@
 export const BALANCE = {
+  /**
+   * 减伤公式的常数项：减伤 = 防御 / (防御 + MIT_K0 + MIT_KD × 攻击方等级)
+   * 之前是 K0(100) × 攻击方等级 —— 10 级怪的分母就有 1000，
+   * 5 点防御只减伤 0.5%，等于完全没用。现在改成「常数 + 很小的等级项」，
+   * 前期防御就有手感，后期靠 MIT_CAP 封顶防止堆防御无敌。
+   */
+  MIT_K0: 12,
+  MIT_KD: 1.5,
+  /** 减伤上限（防止后期堆防御到免伤） */
+  MIT_CAP: 0.65,
   K0: 100,
   HP_PER_POINT: 1,
   MP_PER_POINT: 1,
   H0: 100,
   AGI0: 100,
   SPD0: 100,
-  BASE_MOVE_SPEED: 200,
+  BASE_MOVE_SPEED: 100,
   BASE_ATTACK_INTERVAL: 1000,
   CRIT_DMG_BASE: 1.5,
   CDR_MAX: 0.75,
@@ -18,10 +28,10 @@ export const BALANCE = {
   DAMAGE_FLOAT_MAX: 1.05,
   BREAKTHROUGH_LO_SLOPE: 1,
   BREAKTHROUGH_HI_SLOPE: 2,
-  /** 普通怪掉装备的概率（每只怪最多 1 件） */
-  DROP_EQUIP_CHANCE: 0.08,
-  /** 普通怪掉技能书的概率（每只怪最多 1 本） */
-  DROP_BOOK_CHANCE: 0.06,
+  /** 普通怪掉装备的概率（与技能书互斥，两者相加 = 总掉率 10%） */
+  DROP_EQUIP_CHANCE: 0.06,
+  /** 普通怪掉技能书的概率（与装备互斥） */
+  DROP_BOOK_CHANCE: 0.04,
   /** BOSS 保底掉几件装备（BOSS 每 10 级才一只，作为里程碑奖励） */
   BOSS_EQUIP_GUARANTEE: 1,
 } as const;
