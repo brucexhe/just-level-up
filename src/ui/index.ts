@@ -110,7 +110,6 @@ export class GameUI {
             <div class="bar exp"><i data-w="exp" style="width:0%"></i><span data-live="exp">EXP 0 / 0</span></div>
           </div>
         </div>
-        <span class="hud-pts" data-live="points" hidden></span>
       </div>
 
       <div class="minimap">
@@ -539,13 +538,6 @@ export class GameUI {
         case 'gold':
           setTxt(el, fmtNum(s.gold));
           break;
-        case 'points': {
-          const n = s.attrPoints;
-          const on = n > 0;
-          setTxt(el, on ? `待加点 ${fmtNum(n)}` : '');
-          if (el.hidden === on) el.hidden = !on;
-          break;
-        }
       }
     });
 

@@ -162,20 +162,6 @@
 .hud .bar.exp > span {
   font-size: 8px;
 }
-.hud-pts {
-  position: absolute;
-  top: -6px;
-  right: -5px;
-  padding: 1px 7px;
-  border-radius: 8px;
-  font-size: 9px;
-  font-weight: 700;
-  color: #0b0f14;
-  background: linear-gradient(180deg, #ff6b6b, #d33a3a);
-  box-shadow: 0 0 12px rgba(229, 72, 77, 0.6);
-  animation: hotPulse 1.6s ease-in-out infinite;
-}
-
 /* ============================ 右上角 小地图 ============================ */
 
 .minimap {
