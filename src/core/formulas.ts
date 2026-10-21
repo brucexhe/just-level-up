@@ -16,10 +16,16 @@ export function effectiveDefense(
 /**
  * 减伤率 = 防御 / (防御 + MIT_K0 + MIT_KD × 攻击方等级)，并受 MIT_CAP 封顶。
  *
- * 例：10 级怪打你 —— 分母 = 12 + 1.5×10 = 27
- *   5 点防御 → 5/32 ≈ 16% 减伤
- *   20 点防御 → 20/47 ≈ 43% 减伤
- *   50 点防御 → 50/77 ≈ 65%（封顶）
+ * 注意攻击方等级也在分母里，所以**减伤率只在"受击者与攻击方同级"时才是下面这些数**，
+ * 打比你高/低的怪会偏。人物面板上已标注"对同级"。
+ *
+ * 例：10 级怪打一个 10 级的人（裸防御 10+9=19，分母 = 72 + 0.9×10 = 81）
+ *   裸防御 19 点 → 19/100 ≈ 19% 减伤
+ *   投到 100 点  → 100/181 ≈ 55% 减伤
+ *   投到 190 点  → 190/271 ≈ 70% → 封顶 65%
+ *
+ * 调参见 `core/balance.ts` 里 MIT_K0 / MIT_KD 的注释：
+ * 两个数是配套的（K0 定前期手感、KD 定随等级的爬升速度），改一个就得重新看整条曲线。
  */
 export function mitigationRate(defEff: number, attackerLevel: number): number {
   const k = BALANCE.MIT_K0 + BALANCE.MIT_KD * Math.max(1, attackerLevel);

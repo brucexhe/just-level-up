@@ -150,8 +150,12 @@ const characterPanel: PanelDef = {
         <div class="kv"><span>攻击频率</span><b class="num">${(1000 / interval).toFixed(2)}/s</b></div>
         <div class="kv"><span>移动速度</span><b class="num">${Math.round(moveSpeed(agg.speed ?? 0))}</b></div>
         <div class="kv"><span>暴击率</span><b class="num">${pct(Math.min(0.75, agg.crit ?? 0))}</b></div>
-        <div class="kv"><span>物理减伤</span><b class="num">${pct(mitigationRate(agg.pDef ?? 0, s.level))}</b></div>
-        <div class="kv"><span>法术减伤</span><b class="num">${pct(mitigationRate(agg.mDef ?? 0, s.level))}</b></div>
+        <div class="kv"><span>物理减伤 <i>对同级</i></span><b class="num">${pct(
+          mitigationRate(agg.pDef ?? 0, s.level),
+        )}</b></div>
+        <div class="kv"><span>法术减伤 <i>对同级</i></span><b class="num">${pct(
+          mitigationRate(agg.mDef ?? 0, s.level),
+        )}</b></div>
         <div class="kv"><span>暴击伤害</span><b class="num">${pct(BALANCE.CRIT_DMG_BASE - 1, 0)}</b></div>
         <div class="kv"><span>普攻 DPS</span><b class="num">${fmtNum(dps)}</b></div>
       </div>

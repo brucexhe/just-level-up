@@ -51,15 +51,32 @@ describe('formulas', () => {
   });
 
   it('mitigationRate: 防御要真的有用，且受上限封顶', () => {
-    // 1 级攻击者：分母 = 12 + 1.5 = 13.5
-    expect(mitigationRate(13.5, 1)).toBeCloseTo(0.5);
-    // 10 级怪打你：分母 = 12 + 15 = 27
-    expect(mitigationRate(5, 10)).toBeCloseTo(5 / 32, 2); // 5 点防御 ≈ 16%
-    expect(mitigationRate(20, 10)).toBeCloseTo(20 / 47, 2); // 20 点防御 ≈ 43%
+    // 1 级攻击者：分母 = 72 + 0.9 = 72.9
+    expect(mitigationRate(72.9, 1)).toBeCloseTo(0.5);
+    // 10 级怪打 10 级的人：分母 = 72 + 9 = 81
+    expect(mitigationRate(9, 10)).toBeCloseTo(9 / 90, 2); // 9 点防御 ≈ 10%
+    expect(mitigationRate(19, 10)).toBeCloseTo(19 / 100, 2); // 裸防御 ≈ 19%
     // 防御成长带来的收益是单调的
-    expect(mitigationRate(40, 10)).toBeGreaterThan(mitigationRate(20, 10));
+    expect(mitigationRate(40, 10)).toBeGreaterThan(mitigationRate(19, 10));
     // 封顶 65%，堆防御不能免伤
     expect(mitigationRate(1e6, 10)).toBeCloseTo(BALANCE.MIT_CAP, 5);
+  });
+
+  it('白给的减伤随等级缓慢上升（不能像旧参数那样锁死在 40%）', () => {
+    const bare = (L: number) => mitigationRate(L + 9, L);
+    // 起点要低：1 级裸装别一上来就四成减伤
+    expect(bare(1)).toBeLessThan(0.15);
+    // 随等级单调上升
+    let prev = 0;
+    for (const L of [1, 4, 10, 20, 50, 100, 300, 1000, 3000, 10000]) {
+      const m = bare(L);
+      expect(m).toBeGreaterThan(prev);
+      prev = m;
+    }
+    // 后期明显变硬，但不能早期就撞上封顶
+    expect(bare(100)).toBeGreaterThan(0.35);
+    expect(bare(100)).toBeLessThan(BALANCE.MIT_CAP);
+    expect(bare(10000)).toBeLessThan(BALANCE.MIT_CAP);
   });
 
   it('damage never drops below 1 even vs huge defense', () => {

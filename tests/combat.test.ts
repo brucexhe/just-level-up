@@ -24,7 +24,7 @@ describe('怪物攻击力（前期不该几下被打死）', () => {
       fixed(0.5),
     );
     const mit = mitigationRate(10, 10);
-    expect(mit).toBeGreaterThan(0.2); // 10 点防御要真的有用
+    expect(mit).toBeGreaterThan(0.1); // 10 点防御要真的有用（约 11%）
     expect(dmg).toBeGreaterThanOrEqual(1);
     expect(dmg).toBeLessThanOrEqual(5);
     expect(Math.ceil(40 / dmg)).toBeGreaterThanOrEqual(8);
@@ -51,8 +51,12 @@ describe('怪物攻击力（前期不该几下被打死）', () => {
         { attack: m.stats.pAtk ?? 1, defense: def, attackerLevel: 10 },
         fixed(0.5),
       );
-    expect(at(40)).toBeLessThan(at(20));
-    expect(at(20)).toBeLessThan(at(10));
+    // 10 级怪只打 6 点，取整后相邻档位差别会被抹平，所以取跨度大一点的档位
+    expect(at(40)).toBeLessThan(at(10));
+    expect(at(80)).toBeLessThan(at(40));
+    // 减伤率本身是严格单调的
+    expect(mitigationRate(80, 10)).toBeGreaterThan(mitigationRate(40, 10));
+    expect(mitigationRate(40, 10)).toBeGreaterThan(mitigationRate(10, 10));
   });
 
   it('怪物血量与防御超线性成长：越到后期同级怪越难打', () => {
