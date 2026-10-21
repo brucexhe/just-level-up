@@ -70,6 +70,26 @@ const ATTACK_RANGE = 90;
 const CHASE_RANGE = 300;
 /** 掉落物拾取半径 */
 const PICKUP_RANGE = 36;
+/**
+ * 怪物头顶从上到下的排版：**等级 → 血量 → 血条**。
+ *
+ * 血条本身只用来看比例，所以很细；等级和血量各占一行放在条上方——
+ * 条内放不下后期的大数值（一万级怪的血量有好几位数）。
+ */
+const HP_BAR = {
+  w: 34,
+  h: 2.5,
+  bossW: 60,
+  bossH: 2.5,
+  /** 血条中心相对怪物中心的偏移 */
+  offsetY: 34,
+  bossOffsetY: 54,
+  /** 血量文字中心 → 血条中心 */
+  hpGap: 8,
+  /** 等级文字中心 → 血量文字中心 */
+  labelGap: 11,
+};
+
 /** 每关每个等级各刷几只（10 个等级 × 10 只 = 一关 100 只） */
 const STAGE_MONSTERS_PER_LEVEL = 10;
 /** 场景装饰物（树/石头/灌木）数量 */
@@ -83,6 +103,14 @@ const BOOK_COLOR: Record<string, string> = {
   frenzy: '#ff7bd5',
   poison: '#9ade6a',
 };
+
+/** 血量数值缩写（怪物后期血量会很大） */
+function fmtHp(v: number): string {
+  const n = Math.round(v);
+  if (n >= 1e8) return `${(n / 1e8).toFixed(1)}亿`;
+  if (n >= 1e4) return `${(n / 1e4).toFixed(1)}万`;
+  return `${n}`;
+}
 
 const ATTR_KEYS = BASE_ATTRS;
 const ATTR_ZH: Record<string, string> = Object.fromEntries(
@@ -110,6 +138,9 @@ interface MonsterView {
   sprite: Phaser.Physics.Arcade.Sprite;
   hpBg: Phaser.GameObjects.Image;
   hpFg: Phaser.GameObjects.Image;
+  /** 血条上方第二行：实时血量 */
+  hpText: Phaser.GameObjects.Text;
+  /** 血条上方第一行：等级 */
   label: Phaser.GameObjects.Text;
   nextAttackAt: number;
   knockUntil: number;
@@ -117,6 +148,10 @@ interface MonsterView {
   isBoss: boolean;
   /** BOSS 走进视野时的登场提示只播一次 */
   announced: boolean;
+  /** 等级/血条当前是否处于显示状态（用于淡入淡出，避免每帧 tween） */
+  hudOn: boolean;
+  /** 标签上已渲染的血量，用于脏检查 */
+  shownHp: number;
 }
 
 export class StageBattleScene extends Phaser.Scene {
@@ -467,6 +502,7 @@ export class StageBattleScene extends Phaser.Scene {
     for (const m of [...this.monsters]) {
       m.hpBg.destroy();
       m.hpFg.destroy();
+      m.hpText.destroy();
       m.label.destroy();
       m.sprite.destroy();
     }
@@ -485,10 +521,9 @@ export class StageBattleScene extends Phaser.Scene {
 
   private spawnMonster(level: number, isBoss = false) {
     const skin = skinForLevel(level);
-    // 地图很大，怪只铺在中心 60% 的区域内：
-    // 全图铺的话玩家出生后最近的怪可能在 2000px 外，跑过去要 20 秒
-    const lo = Math.round(MAP_SIZE * 0.2);
-    const hi = Math.round(MAP_SIZE * 0.8);
+    // 全图随机分布（留 120px 边距，避免怪卡在地图边缘）
+    const lo = 120;
+    const hi = MAP_SIZE - 120;
     let x = 0;
     let y = 0;
     for (let i = 0; i < 30; i++) {
@@ -508,19 +543,20 @@ export class StageBattleScene extends Phaser.Scene {
     sprite.setScale(isBoss ? 5.5 : 3).setDepth(y).play(`walk-${skin}`);
     if (isBoss) sprite.setTint(0xff9a9a);
 
-    const barY = isBoss ? 54 : 34;
-    const barW = isBoss ? 60 : 34;
+    const barY = isBoss ? HP_BAR.bossOffsetY : HP_BAR.offsetY;
+    const barW = isBoss ? HP_BAR.bossW : HP_BAR.w;
+    const barH = isBoss ? HP_BAR.bossH : HP_BAR.h;
     const hpBg = this.add
       .image(x, y - barY, 'bar')
-      .setDisplaySize(barW, 2.5)
+      .setDisplaySize(barW, barH)
       .setTint(0x000000)
       .setDepth(y + 1)
-      .setAlpha(0.7)
+      .setAlpha(0.75)
       .setVisible(false);
     const hpFg = this.add
       .image(x - barW / 2, y - barY, 'bar')
       .setOrigin(0, 0.5)
-      .setDisplaySize(barW, 2.5)
+      .setDisplaySize(barW, barH)
       .setTint(isBoss ? 0xff3b3b : 0xe05656)
       .setDepth(y + 1)
       .setVisible(false);
@@ -531,28 +567,47 @@ export class StageBattleScene extends Phaser.Scene {
       data.hp = data.maxHp;
       data.stats.pAtk = Math.round((data.stats.pAtk ?? 1) * 1.6);
     }
+    // 第一行：等级
     const label = this.add
-      .text(x, y - barY - 12, '', {
+      .text(x, y - barY - HP_BAR.hpGap - HP_BAR.labelGap, '', {
         fontFamily: 'ui-monospace, monospace',
-        fontSize: '11px',
+        fontSize: '10px',
         color: isBoss ? '#ff6b6b' : '#ffffff',
         stroke: '#000000',
         strokeThickness: 3,
       })
       .setOrigin(0.5)
-      .setDepth(y + 2);
+      .setDepth(y + 2)
+      .setVisible(false)
+      .setAlpha(1);
+
+    // 第二行：实时血量（血条正上方，分开两行才不会被条挤住）
+    const hpText = this.add
+      .text(x, y - barY - HP_BAR.hpGap, '', {
+        fontFamily: 'ui-monospace, monospace',
+        fontSize: '10px',
+        color: '#ffe08a',
+        stroke: '#000000',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(y + 2)
+      .setVisible(false);
 
     const view: MonsterView = {
       data,
       sprite,
       hpBg,
       hpFg,
+      hpText,
       label,
       nextAttackAt: 0,
       knockUntil: 0,
       dots: [],
       isBoss,
       announced: false,
+      hudOn: false,
+      shownHp: -1,
     };
     sprite.setData('view', view);
     this.monsters.push(view);
@@ -1184,19 +1239,57 @@ export class StageBattleScene extends Phaser.Scene {
     if (m.data.hp <= 0) this.killMonster(m);
   }
 
-  /** 等级标签与血条的可见性由「距离」统一控制 */
+  /**
+   * 走进战斗范围才亮出血条和等级，并带淡入淡出，
+   * 让「进入战斗」这件事有明确的画面反馈。
+   */
   private setMonsterHudVisible(m: MonsterView, on: boolean): void {
-    if (m.label.visible !== on) m.label.setVisible(on);
-    if (m.hpBg.visible !== on) m.hpBg.setVisible(on);
-    if (m.hpFg.visible !== on) m.hpFg.setVisible(on);
+    if (m.hudOn === on) return;
+    m.hudOn = on;
+    this.tweens.killTweensOf([m.label, m.hpBg, m.hpFg, m.hpText]);
+    if (on) {
+      m.label.setVisible(true).setAlpha(0);
+      m.hpFg.setVisible(true).setAlpha(0);
+      m.hpBg.setVisible(true).setAlpha(0);
+      m.hpText.setVisible(true).setAlpha(0);
+      m.shownHp = -1; // 强制刷新一次血量文字
+      this.tweens.add({
+        targets: [m.label, m.hpFg, m.hpText],
+        alpha: 1,
+        duration: 130,
+      });
+      this.tweens.add({ targets: m.hpBg, alpha: 0.75, duration: 130 });
+    } else {
+      this.tweens.add({
+        targets: [m.label, m.hpBg, m.hpFg, m.hpText],
+        alpha: 0,
+        duration: 110,
+        onComplete: () => {
+          m.label.setVisible(false);
+          m.hpBg.setVisible(false);
+          m.hpFg.setVisible(false);
+          m.hpText.setVisible(false);
+        },
+      });
+    }
   }
 
+  /** 血条宽度按剩余比例缩放 */
   private refreshMonsterBar(m: MonsterView) {
     const ratio = Phaser.Math.Clamp(m.data.hp / m.data.maxHp, 0, 1);
-    const w = m.isBoss ? 60 : 34;
-    m.hpFg.setDisplaySize(w * ratio, 2.5);
-    m.label.setVisible(true);
+    const w = m.isBoss ? HP_BAR.bossW : HP_BAR.w;
+    const h = m.isBoss ? HP_BAR.bossH : HP_BAR.h;
+    m.hpFg.setDisplaySize(w * ratio, h);
+  }
+
+  /** 等级 + 条内血量：只在数字变化时重写，避免每帧 setText */
+  private refreshMonsterLabel(m: MonsterView): void {
+    const hp = Math.max(0, Math.ceil(m.data.hp));
+    if (m.shownHp === hp) return;
+    m.shownHp = hp;
     m.label.setText(m.isBoss ? `BOSS Lv${m.data.level}` : `Lv${m.data.level}`);
+    // 只显示剩余血量：比例看血条就够了，总血量是冗余信息
+    m.hpText.setText(fmtHp(hp));
   }
 
   private killMonster(m: MonsterView) {
@@ -1206,6 +1299,7 @@ export class StageBattleScene extends Phaser.Scene {
     const isBoss = m.isBoss;
     m.hpBg.destroy();
     m.hpFg.destroy();
+    m.hpText.destroy();
     m.label.destroy();
     m.sprite.destroy();
     this.monsters = this.monsters.filter((x) => x !== m);
@@ -1601,10 +1695,16 @@ export class StageBattleScene extends Phaser.Scene {
     for (const m of [...this.monsters]) {
       if (!m.sprite.active) continue;
       m.sprite.setDepth(m.sprite.y);
-      const barY = m.isBoss ? 54 : 34;
+      const barY = m.isBoss ? HP_BAR.bossOffsetY : HP_BAR.offsetY;
+      const barW = m.isBoss ? HP_BAR.bossW : HP_BAR.w;
       m.hpBg.setPosition(m.sprite.x, m.sprite.y - barY);
-      m.hpFg.setPosition(m.sprite.x - (m.isBoss ? 30 : 17), m.sprite.y - barY);
-      m.label.setPosition(m.sprite.x, m.sprite.y - barY - 13);
+      m.hpFg.setPosition(m.sprite.x - barW / 2, m.sprite.y - barY);
+      // 从上到下：等级 → 血量 → 血条
+      m.label.setPosition(
+        m.sprite.x,
+        m.sprite.y - barY - HP_BAR.hpGap - HP_BAR.labelGap,
+      );
+      m.hpText.setPosition(m.sprite.x, m.sprite.y - barY - HP_BAR.hpGap);
 
       // DoT 结算
       if (m.dots.length > 0) {
@@ -1624,8 +1724,9 @@ export class StageBattleScene extends Phaser.Scene {
         this.player.x,
         this.player.y,
       );
-      // 等级与血条只在「可战斗范围」内显示，远处保持安静
+      // 进入战斗范围（CHASE_RANGE）才显示等级 + 血量，远处保持安静
       this.setMonsterHudVisible(m, d <= CHASE_RANGE);
+      if (m.hudOn) this.refreshMonsterLabel(m);
       // BOSS 走到眼前才播登场提示
       if (m.isBoss && !m.announced && d <= CHASE_RANGE) {
         m.announced = true;
