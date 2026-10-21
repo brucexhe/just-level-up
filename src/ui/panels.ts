@@ -453,9 +453,7 @@ function bookRows(s: GameState): string {
           </div>
         </div>
         <div class="bi-acts">
-          <button class="btn gold" data-act="use-book" data-arg="${b.id}">穿戴 → Lv${fmtNum(
-            b.points,
-          )}</button>
+          <button class="btn gold" data-act="use-book" data-arg="${b.id}">穿戴</button>
           <button class="btn danger" data-act="sell-book" data-arg="${b.id}">卖出 +${fmtNum(
             bookPoints(b),
           )}</button>

@@ -1037,6 +1037,22 @@
   font-size: 10px;
   color: #7d8aa0;
 }
+/* 技能书换装预览：↑升 / ↓降 / 持平 */
+.bi-up,
+.bi-dn,
+.bi-eq {
+  font-weight: 700;
+  margin: 0 1px;
+}
+.bi-up {
+  color: #7ee787;
+}
+.bi-dn {
+  color: #ff8a8a;
+}
+.bi-eq {
+  color: #8b97ab;
+}
 .bag-item .bi-acts {
   display: flex;
   gap: 5px;

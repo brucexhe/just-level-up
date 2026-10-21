@@ -50,7 +50,6 @@ export interface MinimapData {
   stageName: string;
   /** 已解锁的最高关卡（小地图上可切换的上限） */
   maxStage: number;
-  monsterLevel: number;
   /** 本关剩余怪物数 */
   monstersLeft: number;
 }

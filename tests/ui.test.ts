@@ -114,20 +114,24 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(s.skillPoints).toBe(4);
   });
 
-  it('背包面板可切换装备 / 技能书，并能学习技能书', () => {
+  it('背包面板可切换装备 / 技能书，技能书穿戴即替换等级（旧等级回包）', () => {
     const s = createInitialState();
     s.inventory.push(dropEquipment(9, () => 0.4));
     const book = dropSkillBook(9, () => 0.4);
     book.skillId = 'poison';
+    book.points = 6;
     s.skillBooks.push(book);
     const { api, view } = fakeApi(() => s);
 
     view.bagTab = 'book';
     const html = PANEL_BY_ID.bag.render(s, api);
     expect(html).toContain('毒刃');
+    expect(html).toContain('穿戴');
     PANEL_BY_ID.bag.action('use-book', book.id, s, api);
-    expect(s.skills.poison).toBe(1);
-    expect(s.skillBooks).toHaveLength(0);
+    // 穿戴 = 等级替换成书的等级，原 Lv1 退回背包
+    expect(s.skills.poison).toBe(6);
+    expect(s.skillBooks).toHaveLength(1);
+    expect(s.skillBooks[0]!.points).toBe(1);
 
     view.bagTab = 'equip';
     const html2 = PANEL_BY_ID.bag.render(s, api);

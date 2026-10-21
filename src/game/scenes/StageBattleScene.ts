@@ -1059,7 +1059,6 @@ export class StageBattleScene extends Phaser.Scene {
       stage: this.stage,
       stageName: STAGE_NAMES[(this.stage - 1) % STAGE_NAMES.length],
       maxStage: this.maxStage(),
-      monsterLevel: this.stageRange().hi,
       monstersLeft: this.monsters.length,
     };
   }

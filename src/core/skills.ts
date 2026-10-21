@@ -34,14 +34,20 @@ export function makeSkillBook(skillId: SkillDef['id'], points: number): SkillBoo
   };
 }
 
-/** 技能当前等级的威力系数 */
+/**
+ * 技能当前等级的威力系数。
+ *
+ * 成长刻意压得很慢：**每级 +1% 基数**，也就是 100 级才翻倍。
+ * 技能书等级可以轻易到几十上百（书等级 ≤ 怪等级），
+ * 如果按「每级 +0.5」那种线性涨，后期一个技能就能秒一片，装备和加点都失去意义。
+ */
 export function skillPower(def: SkillDef, level: number): number {
-  return def.power + def.powerGrowth * Math.max(0, level - 1);
+  return def.power * (1 + Math.max(0, level - 1) / 100);
 }
 
-/** 技能当前等级的附加数值（半径 / 时长） */
+/** 技能当前等级的附加数值（半径 / 时长）：每级 +1 */
 export function skillValue(def: SkillDef, level: number): number {
-  return def.value + def.valueGrowth * Math.max(0, level - 1);
+  return def.value + Math.max(0, level - 1);
 }
 
 /** 技能当前等级的法力消耗 */

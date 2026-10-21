@@ -112,14 +112,12 @@ export class GameUI {
           <button class="mm-nav" data-stage="-1" title="上一关">◀</button>
           <span class="mm-stage" data-live="stage">第 1 关 · 草原</span>
           <button class="mm-nav" data-stage="1" title="下一关">▶</button>
-          <span class="mm-lv" data-live="mlv">怪 Lv1</span>
         </div>
         <canvas class="mm-canvas" width="256" height="256" title="点击查看/移动：点地图任意位置自动前往"></canvas>
         <div class="mm-foot">
           <span class="mm-lg"><i class="d mine"></i>你</span>
           <span class="mm-lg"><i class="d mob"></i>怪 <b data-live="mobcount">0</b></span>
           <span class="mm-lg"><i class="d boss"></i>BOSS <b data-live="bosscount">0</b></span>
-          <span class="mm-lg"><i class="d drop"></i>掉落 <b data-live="dropcount">0</b></span>
         </div>
       </div>
 
@@ -630,13 +628,9 @@ export class GameUI {
     ctx.shadowBlur = 0;
 
     setTxt(this.root.querySelector('[data-live="stage"]'), `第 ${d.stage} 关 · ${d.stageName}`);
-    setTxt(
-      this.root.querySelector('[data-live="mlv"]'),
-      `怪 Lv${fmtNum(d.stage * 10 - 9)}-${fmtNum(d.monsterLevel)} · 剩 ${fmtNum(d.monstersLeft)}`,
-    );
+    // 小地图只标「你 / 怪 / BOSS」三类点：怪物等级和掉落数量不在这里显示
     setTxt(this.root.querySelector('[data-live="mobcount"]'), fmtNum(mobs));
     setTxt(this.root.querySelector('[data-live="bosscount"]'), fmtNum(bosses));
-    setTxt(this.root.querySelector('[data-live="dropcount"]'), fmtNum(d.drops.length));
   }
 
   private setBadge(id: PanelId, n: number) {

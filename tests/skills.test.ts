@@ -3,16 +3,18 @@ import {
   dropSkillBook,
   skillMpCost,
   skillPower,
+  skillValue,
   skillUpgradeCost,
 } from '../src/core/skills';
 import { dropEquipment, rarityForRatio } from '../src/core/equipment';
 import {
   createInitialState,
   equipBest,
+  equipSkillBook,
   sellAllSkillBooks,
+  sellSkillBook,
   skillLevel,
   upgradeSkill,
-  useSkillBook,
 } from '../src/state/gameState';
 import { SKILL_BY_ID } from '../src/data/skills';
 
@@ -39,26 +41,79 @@ describe('技能书 / 技能点', () => {
     }
   });
 
-  it('开局三个主动技能就都会（Lv1），技能书一律转成技能点', () => {
+  it('开局三个主动技能就都会（Lv1）', () => {
     const s = createInitialState();
     for (const id of ['attack', 'fireball', 'frenzy', 'poison'] as const) {
       expect(skillLevel(s, id)).toBe(1);
     }
+  });
 
-    // 已经会了 → 书直接换技能点（8 × 50% = 4）
+  it('穿戴技能书 = 直接把技能等级替换成书的等级，旧等级退回背包', () => {
+    const s = createInitialState();
+    expect(skillLevel(s, 'fireball')).toBe(1);
+
     const b = { id: 'a', skillId: 'fireball' as const, points: 8 };
     s.skillBooks.push(b);
-    const r = useSkillBook(s, b);
-    expect(r.kind).toBe('convert');
+    const r = equipSkillBook(s, b);
+
+    expect(r.kind).toBe('equip');
+    expect(r.kind === 'equip' && r.from).toBe(1);
+    expect(r.kind === 'equip' && r.to).toBe(8);
+    expect(skillLevel(s, 'fireball')).toBe(8);
+    // 原 Lv1 退回背包，而不是凭空消失
+    expect(s.skillBooks).toHaveLength(1);
+    expect(s.skillBooks[0].points).toBe(1);
+    expect(s.skillBooks[0].skillId).toBe('fireball');
+    expect(s.skillBooks[0].id).not.toBe(b.id);
+  });
+
+  it('再穿一本更低的书会降回去（和穿差装备一样，允许但不推荐）', () => {
+    const s = createInitialState();
+    s.skills.fireball = 9;
+    const b = { id: 'low', skillId: 'fireball' as const, points: 3 };
+    s.skillBooks.push(b);
+    equipSkillBook(s, b);
+    expect(skillLevel(s, 'fireball')).toBe(3);
+    // 原 Lv9 退回背包
+    expect(s.skillBooks.some((x) => x.points === 9)).toBe(true);
+  });
+
+  it('卖出技能书 = 获得该书等级一半的技能点', () => {
+    const s = createInitialState();
+    const b = { id: 'a', skillId: 'poison' as const, points: 9 };
+    s.skillBooks.push(b);
+    const got = sellSkillBook(s, b);
+    expect(got).toBe(4); // floor(9 × 50%)
     expect(s.skillPoints).toBe(4);
     expect(s.skillBooks).toHaveLength(0);
-    expect(skillLevel(s, 'fireball')).toBe(1);
+    // 卖出不影响技能本身
+    expect(skillLevel(s, 'poison')).toBe(1);
   });
 
   it('技能威力随等级成长（默认 Lv1 很弱，得靠书加点）', () => {
     const fire = SKILL_BY_ID.fireball;
     expect(skillPower(fire, 1)).toBeLessThan(skillPower(fire, 5));
     expect(skillPower(fire, 5)).toBeLessThan(skillPower(fire, 10));
+  });
+
+  it('威力系数：每级 +1% 基数，100 级才翻倍', () => {
+    const fire = SKILL_BY_ID.fireball; // base 2
+    expect(skillPower(fire, 1)).toBeCloseTo(2, 5);
+    expect(skillPower(fire, 11)).toBeCloseTo(2.2, 5); // +10%
+    // 100 级 ≈ 翻倍，而不是旧公式那种 6 倍
+    expect(skillPower(fire, 100) / skillPower(fire, 1)).toBeCloseTo(1.99, 2);
+    expect(skillPower(fire, 100)).toBeLessThan(skillPower(fire, 1) * 2.1);
+    // 200 级 ≈ 3 倍（线性外推，不是指数）
+    expect(skillPower(fire, 200) / skillPower(fire, 1)).toBeCloseTo(2.99, 2);
+  });
+
+  it('附加数值：每级 +1', () => {
+    const fire = SKILL_BY_ID.fireball; // base 90（爆炸半径）
+    expect(skillValue(fire, 1)).toBe(90);
+    expect(skillValue(fire, 10)).toBe(99);
+    expect(skillValue(fire, 100)).toBe(189);
+    const poison = SKILL_BY_ID.poison; // base 4000（持续时间 ms）
+    expect(skillValue(poison, 100)).toBe(4099);
   });
 
   it('技能点升级消耗 = 当前等级，且威力随等级成长', () => {
