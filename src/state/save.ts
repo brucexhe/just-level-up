@@ -1,7 +1,7 @@
 import { EQUIP_SLOTS, type EquipSlot, type EquipmentItem } from '../core/equipment';
 import { BASE_ATTRS, type AttrSet } from '../core/types';
 import { SKILLS, type SkillId } from '../data/skills';
-import { createInitialState, type GameState } from './gameState';
+import { createInitialState, dayKey, type GameState } from './gameState';
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = 'level-up/save/v1';
@@ -141,8 +141,6 @@ export function normalizeState(raw: unknown): GameState {
     equipPoints: Math.max(0, Math.floor(num(r.equipPoints, 0))),
     skillPoints: Math.max(0, Math.floor(num(r.skillPoints, 0))),
     gold: Math.max(0, Math.floor(num(r.gold, 0))),
-    kills: Math.max(0, Math.floor(num(r.kills, 0))),
-    bossKills: Math.max(0, Math.floor(num(r.bossKills, 0))),
     highestMonsterLevel: Math.max(1, Math.floor(num(r.highestMonsterLevel, 1))),
     baseStats: stats(r.baseStats),
     inventory: [],
@@ -184,6 +182,26 @@ export function normalizeState(raw: unknown): GameState {
     }
   }
   if (!s.skills.attack) s.skills.attack = 1;
+
+  s.stage = Math.max(1, Math.floor(num(r.stage, 1)));
+  s.stageDay = typeof r.stageDay === 'string' ? r.stageDay : dayKey();
+  s.stages = {};
+  if (r.stages && typeof r.stages === 'object') {
+    for (const [k, v] of Object.entries(r.stages as Record<string, unknown>)) {
+      const stageNo = Number(k);
+      if (!Number.isFinite(stageNo) || stageNo < 1) continue;
+      const raw = (v ?? {}) as Record<string, unknown>;
+      const killed: Record<number, number> = {};
+      if (raw.killed && typeof raw.killed === 'object') {
+        for (const [lv, n] of Object.entries(raw.killed as Record<string, unknown>)) {
+          const l = Number(lv);
+          const c = Math.floor(num(n, 0));
+          if (Number.isFinite(l) && l > 0 && c > 0) killed[l] = c;
+        }
+      }
+      s.stages[Math.floor(stageNo)] = { killed, bossDead: raw.bossDead === true };
+    }
+  }
   return s;
 }
 

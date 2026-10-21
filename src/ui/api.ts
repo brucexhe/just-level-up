@@ -48,7 +48,11 @@ export interface MinimapData {
   view: { x: number; y: number; w: number; h: number };
   stage: number;
   stageName: string;
+  /** 已解锁的最高关卡（小地图上可切换的上限） */
+  maxStage: number;
   monsterLevel: number;
+  /** 本关剩余怪物数 */
+  monstersLeft: number;
 }
 
 /** 设置面板需要的能力（暂停 / 音频 / 存档），由场景实现 */
@@ -70,6 +74,8 @@ export interface SettingsApi {
   reset(): void;
   savedAt(): number | null;
   backupAt(): number | null;
+  /** 本关剩余怪物数 */
+  monstersLeft(): number;
 }
 
 export interface UIApi {

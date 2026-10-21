@@ -30,6 +30,8 @@ export interface GameUIOptions {
   minimap(): MinimapData;
   /** 在小地图上点击 → 移动到世界坐标 */
   moveTo(x: number, y: number): void;
+  /** 切换关卡（不会自动跳关，由玩家手动选择） */
+  gotoStage(stage: number): void;
   /** 设置面板能力（暂停 / 音频 / 存档） */
   settings: SettingsApi;
   /** UI 音效回调（由场景注入，避免 UI 直接依赖音频实现） */
@@ -95,8 +97,7 @@ export class GameUI {
             <div class="hero-row">
               <span class="lv" data-live="level">Lv 1</span>
               <span class="hud-spacer"></span>
-              <span class="hud-tag" title="金币">🪙<b class="num" data-live="gold">0</b></span>
-              <span class="hud-tag" title="击杀">💀<b class="num" data-live="kills">0</b></span>
+              <span class="hud-tag" title="金币"><i class="coin-ic"></i><b class="num" data-live="gold">0</b></span>
             </div>
             <div class="bar hp"><i data-w="hp" style="width:100%"></i><span data-live="hp">0 / 0</span></div>
             <div class="bar mp"><i data-w="mp" style="width:100%"></i><span data-live="mp">0 / 0</span></div>
@@ -108,7 +109,9 @@ export class GameUI {
 
       <div class="minimap">
         <div class="mm-head">
+          <button class="mm-nav" data-stage="-1" title="上一关">◀</button>
           <span class="mm-stage" data-live="stage">第 1 关 · 草原</span>
+          <button class="mm-nav" data-stage="1" title="下一关">▶</button>
           <span class="mm-lv" data-live="mlv">怪 Lv1</span>
         </div>
         <canvas class="mm-canvas" width="256" height="256" title="点击查看/移动：点地图任意位置自动前往"></canvas>
@@ -146,6 +149,17 @@ export class GameUI {
     this.toolBar = this.root.querySelector('.toolbar') as HTMLElement;
     this.mapCanvas = this.root.querySelector('.mm-canvas') as HTMLCanvasElement;
     this.mapCtx = this.mapCanvas.getContext('2d');
+
+    // 小地图上的关卡切换（上一关 / 下一关）
+    this.root.querySelectorAll<HTMLElement>('[data-stage]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const delta = Number(btn.dataset.stage ?? '0');
+        const d = this.opts.minimap();
+        const next = clampRange(d.stage + delta, 1, d.maxStage);
+        if (next !== d.stage) this.opts.gotoStage(next);
+      });
+    });
 
     this.buildSkillBar();
     this.buildToolBar();
@@ -424,7 +438,6 @@ export class GameUI {
       s.gold,
       s.inventory.length,
       s.skillBooks.length,
-      s.kills,
       eq,
       sk,
       this.view.equipSlot ?? '-',
@@ -454,9 +467,6 @@ export class GameUI {
           break;
         case 'gold':
           setTxt(el, fmtNum(s.gold));
-          break;
-        case 'kills':
-          setTxt(el, fmtNum(s.kills));
           break;
         case 'points': {
           const n = s.attrPoints;
@@ -574,9 +584,10 @@ export class GameUI {
         ctx.shadowBlur = 0;
       } else {
         mobs += 1;
+        // 一关 100 只怪，点大了会糊成一片，半径压到 2.6
         ctx.fillStyle = m.aggressive ? '#e05656' : '#a97bf0';
         ctx.beginPath();
-        ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.arc(x, y, 2.6, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -619,7 +630,10 @@ export class GameUI {
     ctx.shadowBlur = 0;
 
     setTxt(this.root.querySelector('[data-live="stage"]'), `第 ${d.stage} 关 · ${d.stageName}`);
-    setTxt(this.root.querySelector('[data-live="mlv"]'), `怪 Lv${fmtNum(d.monsterLevel)}`);
+    setTxt(
+      this.root.querySelector('[data-live="mlv"]'),
+      `怪 Lv${fmtNum(d.stage * 10 - 9)}-${fmtNum(d.monsterLevel)} · 剩 ${fmtNum(d.monstersLeft)}`,
+    );
     setTxt(this.root.querySelector('[data-live="mobcount"]'), fmtNum(mobs));
     setTxt(this.root.querySelector('[data-live="bosscount"]'), fmtNum(bosses));
     setTxt(this.root.querySelector('[data-live="dropcount"]'), fmtNum(d.drops.length));
@@ -664,6 +678,10 @@ export class GameUI {
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+function clampRange(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
 }
 
 function subtitleOf(id: PanelId, s: GameState): string {

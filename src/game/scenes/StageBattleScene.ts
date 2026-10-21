@@ -4,6 +4,7 @@ import {
   aggregatedStats,
   allocateAttrPoint,
   createInitialState,
+  dayKey,
   equipBest,
   gainExp,
   maxHp,
@@ -15,11 +16,15 @@ import {
   spendMp,
   type GameState,
 } from '../../state/gameState';
+import {
+  levelBandOfStage,
+  maxStageFromProgress,
+  remainingOfLevel,
+} from '../../core/stage';
 import { rollDrops, type GroundDrop } from '../../core/drops';
 import { goldDrop } from '../../core/economy';
 import { expToNext, isBreakthrough, killExp } from '../../core/progression';
 import { skillMpCost, skillPower, skillValue } from '../../core/skills';
-import { stageIndexForLevel } from '../../core/stage';
 import { createMonster, type Combatant } from '../combat';
 import {
   bakeGrass,
@@ -58,13 +63,17 @@ import {
   backupAt,
 } from '../../state/save';
 
-const MAP_SIZE = 2000;
+/** 地图边长（正方形）。5000 才装得下一关 100 只怪而不显得挤 */
+const MAP_SIZE = 5000;
 const ATTACK_RANGE = 90;
 /** 警戒范围：超出这个距离怪物不再追击，也不再显示等级/血条 */
 const CHASE_RANGE = 300;
 /** 掉落物拾取半径 */
 const PICKUP_RANGE = 36;
-const MONSTER_COUNT = 10;
+/** 每关每个等级各刷几只（10 个等级 × 10 只 = 一关 100 只） */
+const STAGE_MONSTERS_PER_LEVEL = 10;
+/** 场景装饰物（树/石头/灌木）数量 */
+const OBSTACLE_COUNT = 110;
 const REGEN_PER_SEC = 1;
 const STAGE_NAMES = ['草原', '森林', '荒漠', '雪原', '沼泽', '火山', '深渊', '天空'];
 
@@ -106,6 +115,8 @@ interface MonsterView {
   knockUntil: number;
   dots: Dot[];
   isBoss: boolean;
+  /** BOSS 走进视野时的登场提示只播一次 */
+  announced: boolean;
 }
 
 export class StageBattleScene extends Phaser.Scene {
@@ -114,7 +125,6 @@ export class StageBattleScene extends Phaser.Scene {
   private aura!: Phaser.GameObjects.Image;
   private playerLabel!: Phaser.GameObjects.Text;
   private state!: GameState;
-  private monsterLevel = 1;
   private playerNextAttackAt = 0;
   private monsters: MonsterView[] = [];
   private monsterGroup!: Phaser.Physics.Arcade.Group;
@@ -129,6 +139,8 @@ export class StageBattleScene extends Phaser.Scene {
   private frenzyUntil = 0;
   private cooldowns = new Map<SkillId, number>();
   private bossAtLevel = -1;
+  /** 当前关卡（1 起） */
+  private stage = 1;
   private paused = false;
   private pausedAt = 0;
   private saveAt = 0;
@@ -147,7 +159,14 @@ export class StageBattleScene extends Phaser.Scene {
     // 有存档就接着玩，没有就开新局
     const loaded = loadState();
     this.state = loaded ?? createInitialState();
-    this.monsterLevel = Math.max(1, this.state.highestMonsterLevel);
+    // 跨天 → 各关怪物全部重刷（「杀掉的怪第二天才刷新」）
+    const today = dayKey();
+    if (this.state.stageDay !== today) {
+      this.state.stageDay = today;
+      this.state.stages = {};
+      saveState(this.state);
+    }
+    this.stage = Math.max(1, Math.floor(this.state.stage || 1));
     const prefs = loadPrefs();
     audio.setVolume(prefs.volume);
     audio.setSfx(prefs.sfx);
@@ -199,7 +218,7 @@ export class StageBattleScene extends Phaser.Scene {
       .setDepth(9);
 
     this.monsterGroup = this.physics.add.group();
-    for (let i = 0; i < MONSTER_COUNT; i++) this.spawnMonster();
+    this.spawnStageMonsters();
 
     this.physics.add.collider(this.player, this.obstacles);
     this.physics.add.collider(this.monsterGroup, this.obstacles);
@@ -214,7 +233,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.unlockAudioOnGesture();
 
     if (loaded) {
-      this.ui.toast(`已载入存档：Lv${this.state.level} · 击杀 ${this.state.kills}`, '#9ad06a');
+      this.ui.toast(`已载入存档：Lv${this.state.level}`, '#9ad06a');
     }
 
     (window as unknown as Record<string, unknown>).__demo = {
@@ -255,6 +274,10 @@ export class StageBattleScene extends Phaser.Scene {
           kind: g.drop.kind,
         })),
       moveTo: (x: number, y: number) => this.moveToWorld(x, y),
+      gotoStage: (n: number) => this.gotoStage(n),
+      stage: () => ({ stage: this.stage, maxStage: this.maxStage(), left: this.monsters.length }),
+      /** 怪物血条高度（冒烟测试用） */
+      barHeight: () => this.monsters[0]?.hpBg.displayHeight ?? 0,
       /** 相机是否正在全屏闪光（冒烟测试用：受伤时应该为 false） */
       flashActive: () => this.cameras.main.flashEffect.isRunning,
       /** 角色当前是否被染色（受伤闪红用） */
@@ -289,12 +312,36 @@ export class StageBattleScene extends Phaser.Scene {
       fx: () => {
         let blade = 0;
         let slash = 0;
+        const info: Record<string, unknown>[] = [];
         for (const o of this.children.list) {
-          const key = (o as Phaser.GameObjects.Image).texture?.key;
-          if (key === 'blade') blade++;
-          if (key === 'slash') slash++;
+          const img = o as Phaser.GameObjects.Image;
+          const key = img.texture?.key;
+          if (key === 'blade' || key === 'slash') {
+            if (key === 'blade') blade++;
+            else slash++;
+            info.push({
+              key,
+              x: Math.round(img.x),
+              y: Math.round(img.y),
+              w: img.displayWidth,
+              h: img.displayHeight,
+              alpha: +img.alpha.toFixed(2),
+              depth: Math.round(img.depth),
+              visible: img.visible,
+            });
+          }
         }
-        return { blade, slash };
+        return { blade, slash, info, player: { x: Math.round(this.player.x), y: Math.round(this.player.y), depth: Math.round(this.player.depth) } };
+      },
+      /** 定格当前挥砍帧（截图/冒烟测试用） */
+      freezeSwing: () => {
+        for (const o of this.children.list) {
+          const img = o as Phaser.GameObjects.Image;
+          if (img.texture?.key === 'blade' || img.texture?.key === 'slash') {
+            this.tweens.killTweensOf(img);
+            img.setAlpha(1);
+          }
+        }
       },
       /** 主动普攻一次，返回是否真的砍出去了 */
       attack: () => {
@@ -341,7 +388,8 @@ export class StageBattleScene extends Phaser.Scene {
     const rnd = new Phaser.Math.RandomDataGenerator(['stage1']);
     let placed = 0;
     let guard = 0;
-    while (placed < 30 && guard++ < 300) {
+    // 地图放大后按比例补障碍，否则整片草原太空
+    while (placed < OBSTACLE_COUNT && guard++ < 2000) {
       const x = rnd.between(120, MAP_SIZE - 120);
       const y = rnd.between(120, MAP_SIZE - 120);
       if (Phaser.Math.Distance.Between(x, y, MAP_SIZE / 2, MAP_SIZE / 2) < 260) continue;
@@ -360,14 +408,92 @@ export class StageBattleScene extends Phaser.Scene {
     }
   }
 
-  private spawnMonster(isBoss = false) {
-    const level = this.monsterLevel;
+  // ---------- 关卡怪物 ----------
+
+  /** 第 k 关的等级段：[(k-1)*10+1, k*10] */
+  private stageRange(stage = this.stage): { lo: number; hi: number } {
+    const [lo, hi] = levelBandOfStage(stage);
+    return { lo, hi };
+  }
+
+  /** 已解锁的最高关卡：打过本关 BOSS 才开放下一关 */
+  private maxStage(): number {
+    return maxStageFromProgress(this.state.stages);
+  }
+
+  /**
+   * 按关卡铺怪：每关 10 个等级 × 每级 10 只，外加 1 只该关顶格的 BOSS。
+   * 当天被杀掉的不再出现（进度存在 state.stages），跨天才整关重刷。
+   */
+  private spawnStageMonsters(): void {
+    const prog = this.state.stages[this.stage] ?? { killed: {}, bossDead: false };
+    const { lo, hi } = this.stageRange();
+    for (let lv = lo; lv <= hi; lv++) {
+      const left = remainingOfLevel(STAGE_MONSTERS_PER_LEVEL, prog.killed[lv] ?? 0);
+      for (let i = 0; i < left; i++) this.spawnMonster(lv, false);
+    }
+    if (!prog.bossDead) this.spawnMonster(hi, true);
+  }
+
+  /** 记录本关击杀（用于「当天不再刷新」） */
+  private recordKill(level: number, isBoss: boolean): void {
+    const prog = (this.state.stages[this.stage] ??= { killed: {}, bossDead: false });
+    if (isBoss) prog.bossDead = true;
+    else prog.killed[level] = (prog.killed[level] ?? 0) + 1;
+  }
+
+  /** 切换关卡：不自动跳关，玩家在小地图上手动选 */
+  private gotoStage(n: number): void {
+    const target = Phaser.Math.Clamp(Math.floor(n), 1, this.maxStage());
+    if (target === this.stage) return;
+    this.stage = target;
+    this.state.stage = target;
+    this.clearMonsters();
+    this.clearGroundDrops();
+    this.attackTarget = null;
+    this.moveTarget = null;
+    this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
+    this.spawnStageMonsters();
+    saveState(this.state);
+    const { lo, hi } = this.stageRange();
+    this.ui.toast(
+      `进入第 ${this.stage} 关 · ${STAGE_NAMES[(this.stage - 1) % STAGE_NAMES.length]}（怪 Lv${lo}-${hi}）`,
+      '#ffd93d',
+    );
+    audio.play('click');
+  }
+
+  private clearMonsters(): void {
+    for (const m of [...this.monsters]) {
+      m.hpBg.destroy();
+      m.hpFg.destroy();
+      m.label.destroy();
+      m.sprite.destroy();
+    }
+    this.monsters = [];
+  }
+
+  private clearGroundDrops(): void {
+    for (const g of this.groundDrops) {
+      this.tweens.killTweensOf([g.icon, g.label, g.ring]);
+      g.ring.destroy();
+      g.icon.destroy();
+      g.label.destroy();
+    }
+    this.groundDrops = [];
+  }
+
+  private spawnMonster(level: number, isBoss = false) {
     const skin = skinForLevel(level);
+    // 地图很大，怪只铺在中心 60% 的区域内：
+    // 全图铺的话玩家出生后最近的怪可能在 2000px 外，跑过去要 20 秒
+    const lo = Math.round(MAP_SIZE * 0.2);
+    const hi = Math.round(MAP_SIZE * 0.8);
     let x = 0;
     let y = 0;
     for (let i = 0; i < 30; i++) {
-      x = Phaser.Math.Between(120, MAP_SIZE - 120);
-      y = Phaser.Math.Between(120, MAP_SIZE - 120);
+      x = Phaser.Math.Between(lo, hi);
+      y = Phaser.Math.Between(lo, hi);
       if (
         Phaser.Math.Distance.Between(
           x,
@@ -426,13 +552,10 @@ export class StageBattleScene extends Phaser.Scene {
       knockUntil: 0,
       dots: [],
       isBoss,
+      announced: false,
     };
     sprite.setData('view', view);
     this.monsters.push(view);
-    if (isBoss) {
-      this.ui.toast(`第 ${stageIndexForLevel(level)} 关 BOSS 出现了！Lv${level}`, '#ff6b6b');
-      this.cameras.main.flash(300, 180, 40, 40);
-    }
   }
 
   // ---------- 输入 ----------
@@ -596,6 +719,7 @@ export class StageBattleScene extends Phaser.Scene {
       now: () => this.time.now,
       minimap: () => this.minimapData(),
       moveTo: (x, y) => this.moveToWorld(x, y),
+      gotoStage: (n) => this.gotoStage(n),
       settings: this.settingsApi(),
       sfx: (n) => audio.play(n),
     });
@@ -642,6 +766,7 @@ export class StageBattleScene extends Phaser.Scene {
       },
       savedAt: () => savedAt(),
       backupAt: () => backupAt(),
+      monstersLeft: () => this.monsters.length,
     };
   }
 
@@ -706,26 +831,14 @@ export class StageBattleScene extends Phaser.Scene {
     this.state = s;
     this.state.hp = maxHp(s);
     this.state.mp = maxMp(s);
-    this.monsterLevel = Math.max(1, s.highestMonsterLevel);
+    this.stage = Math.max(1, Math.floor(s.stage || 1));
     this.bossAtLevel = -1;
     this.frenzyUntil = 0;
     this.cooldowns.clear();
     this.playerNextAttackAt = 0;
-    for (const m of [...this.monsters]) {
-      m.hpBg.destroy();
-      m.hpFg.destroy();
-      m.label.destroy();
-      m.sprite.destroy();
-    }
-    this.monsters = [];
-    for (const g of this.groundDrops) {
-      this.tweens.killTweensOf([g.icon, g.label, g.ring]);
-      g.ring.destroy();
-      g.icon.destroy();
-      g.label.destroy();
-    }
-    this.groundDrops = [];
-    for (let i = 0; i < MONSTER_COUNT; i++) this.spawnMonster();
+    this.clearMonsters();
+    this.clearGroundDrops();
+    this.spawnStageMonsters();
     this.attackTarget = null;
     this.moveTarget = null;
     this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
@@ -738,7 +851,6 @@ export class StageBattleScene extends Phaser.Scene {
   /** 小地图每帧取用的场景快照 */
   private minimapData(): MinimapData {
     const cam = this.cameras.main.worldView;
-    const stage = stageIndexForLevel(this.monsterLevel);
     const monsters: MinimapMonster[] = [];
     for (const m of this.monsters) {
       if (!m.sprite.active) continue;
@@ -757,9 +869,11 @@ export class StageBattleScene extends Phaser.Scene {
       obstacles: this.obstaclePoints,
       drops: this.groundDrops.map((g) => ({ x: g.x, y: g.y })),
       view: { x: cam.x, y: cam.y, w: cam.width, h: cam.height },
-      stage,
-      stageName: STAGE_NAMES[(stage - 1) % STAGE_NAMES.length],
-      monsterLevel: this.monsterLevel,
+      stage: this.stage,
+      stageName: STAGE_NAMES[(this.stage - 1) % STAGE_NAMES.length],
+      maxStage: this.maxStage(),
+      monsterLevel: this.stageRange().hi,
+      monstersLeft: this.monsters.length,
     };
   }
 
@@ -1115,7 +1229,6 @@ export class StageBattleScene extends Phaser.Scene {
     gainExp(this.state, killExp(ml) * mul);
     const gold = goldDrop(ml) * mul;
     this.state.gold += gold;
-    this.state.kills += 1;
     this.state.highestMonsterLevel = Math.max(this.state.highestMonsterLevel, ml);
 
     // 掉落：装备 / 技能书都很稀有且互斥，掉在地上需要走过去拾取
@@ -1140,9 +1253,8 @@ export class StageBattleScene extends Phaser.Scene {
     audio.play('coin');
 
     if (isBoss) {
-      this.state.bossKills += 1;
       this.ui.toast(
-        `击败第 ${stageIndexForLevel(ml)} 关 BOSS！${gainText}${
+        `击败第 ${this.stage} 关 BOSS！${gainText}${
           dropText ? ' · 掉落 ' + dropText : ''
         }`,
         '#ffd93d',
@@ -1159,11 +1271,16 @@ export class StageBattleScene extends Phaser.Scene {
     }
     if (this.state.level > before) this.levelUpFx(before);
 
-    this.monsterLevel += 1;
-    this.time.delayedCall(1200, () => this.spawnMonster());
-    if (this.monsterLevel % 10 === 0 && this.bossAtLevel !== this.monsterLevel) {
-      this.bossAtLevel = this.monsterLevel;
-      this.time.delayedCall(1400, () => this.spawnMonster(true));
+    // 本关这只怪今天不再刷新（记录在存档里，跨天才重刷）
+    this.recordKill(ml, isBoss);
+    saveState(this.state);
+
+    const left = this.monsters.length;
+    if (left === 0) {
+      this.ui.toast(
+        `第 ${this.stage} 关已清空，明天 0 点刷新；可在小地图切换到其它关卡`,
+        '#ffd93d',
+      );
     }
   }
 
@@ -1317,38 +1434,53 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   private slashEffect(angle: number) {
+    // 月牙就贴着角色扫出去，别甩到老远
     const arc = this.add.image(
-      this.player.x + Math.cos(angle) * 34,
-      this.player.y + Math.sin(angle) * 34,
+      this.player.x + Math.cos(angle) * 18,
+      this.player.y + Math.sin(angle) * 18,
       'slash',
     );
-    arc.setRotation(angle).setScale(3).setTint(0xfff2c8).setAlpha(0.95).setDepth(6);
+    // depth 必须压在角色之上：角色是按 y 排序的（上千层），写死 6 会被自己挡住
+    arc
+      .setRotation(angle - 0.35)
+      .setScale(2.6)
+      .setTint(0xfff2c8)
+      .setAlpha(0.9)
+      .setDepth(this.player.y + 4);
     this.tweens.add({
       targets: arc,
       alpha: 0,
-      scale: 3.8,
-      duration: 130,
+      scale: 3.1,
+      duration: 190,
       onComplete: () => arc.destroy(),
     });
   }
 
   /** 挥刀：一把刀绕角色从后向前扫过（普通攻击的实体动作） */
   private swingBlade(angle: number) {
-    const ox = this.player.x + Math.cos(angle) * 12;
-    const oy = this.player.y + Math.sin(angle) * 12;
+    // 刀贴着角色挥，稍微探出一点即可
+    const ox = this.player.x + Math.cos(angle) * 14;
+    const oy = this.player.y + Math.sin(angle) * 14;
     const blade = this.add
       .image(ox, oy, 'blade')
       .setScale(2.6)
-      .setDepth(7)
-      .setRotation(angle - 1.3)
-      .setAlpha(0.95);
+      .setDepth(this.player.y + 5)
+      .setTint(0xfff3c8)
+      .setRotation(angle - 1.5)
+      .setAlpha(1);
+    // 前 130ms 保持不透明（看得清刀），之后迅速淡出
     this.tweens.add({
       targets: blade,
-      rotation: angle + 0.7,
-      alpha: 0,
-      scale: 2.2,
-      duration: 170,
+      rotation: angle + 0.85,
+      scale: 2.6,
+      duration: 260,
       ease: 'Quad.Out',
+    });
+    this.tweens.add({
+      targets: blade,
+      alpha: 0,
+      duration: 110,
+      delay: 140,
       onComplete: () => blade.destroy(),
     });
   }
@@ -1379,10 +1511,9 @@ export class StageBattleScene extends Phaser.Scene {
       attrPoints: this.state.attrPoints,
       equipPoints: this.state.equipPoints,
       skillPoints: this.state.skillPoints,
-      kills: this.state.kills,
       inventory: this.state.inventory.length,
       skillBooks: this.state.skillBooks.length,
-      monsterLevel: this.monsterLevel,
+      monsterLevel: this.stageRange().hi,
       monstersAlive: alive,
 
     };
@@ -1495,6 +1626,13 @@ export class StageBattleScene extends Phaser.Scene {
       );
       // 等级与血条只在「可战斗范围」内显示，远处保持安静
       this.setMonsterHudVisible(m, d <= CHASE_RANGE);
+      // BOSS 走到眼前才播登场提示
+      if (m.isBoss && !m.announced && d <= CHASE_RANGE) {
+        m.announced = true;
+        this.ui.toast(`第 ${this.stage} 关 BOSS 出现了！Lv${m.data.level}`, '#ff6b6b');
+        this.cameras.main.shake(200, 0.006);
+        audio.play('boss');
+      }
 
       if (time < m.knockUntil) continue;
       if (!m.data.aggressive) {

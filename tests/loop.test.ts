@@ -8,6 +8,7 @@ import {
   gainExp,
   maxHp,
 } from '../src/state/gameState';
+import { BASE_ATTR_START } from '../src/state/gameState';
 import { createMonster } from '../src/game/combat';
 
 const fixed = (v: number) => () => v;
@@ -46,10 +47,10 @@ describe('P2 growth loop closes at locked starting values', () => {
 
     allocateAttrPoint(s, 'hp');
     expect(s.attrPoints).toBe(0);
-    expect(maxHp(s)).toBe(2);
+    expect(maxHp(s)).toBe(BASE_ATTR_START + 1);
     // 没有点了，再加失败
     expect(allocateAttrPoint(s, 'pAtk')).toBe(false);
-    expect(aggregatedStats(s).pAtk).toBe(1);
+    expect(aggregatedStats(s).pAtk).toBe(BASE_ATTR_START);
   });
 
   it('player out-scales a rising monster once points are invested', () => {

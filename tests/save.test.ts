@@ -26,7 +26,6 @@ describe('存档读写', () => {
     const s = createInitialState();
     gainExp(s, 40);
     s.gold = 321;
-    s.kills = 17;
     const item = dropEquipment(9);
     s.inventory.push(item);
     s.skillBooks.push(dropSkillBook(9));
@@ -39,7 +38,6 @@ describe('存档读写', () => {
     expect(back).not.toBeNull();
     expect(back!.level).toBe(s.level);
     expect(back!.gold).toBe(321);
-    expect(back!.kills).toBe(17);
     expect(back!.inventory).toHaveLength(1);
     expect(back!.inventory[0].id).toBe(item.id);
     expect(back!.skillBooks).toHaveLength(1);
@@ -70,14 +68,12 @@ describe('备份与恢复', () => {
   it('备份后可从备份恢复，且恢复出来的血量合法', () => {
     const s = createInitialState();
     gainExp(s, 30);
-    s.kills = 99;
     const at = backupState(s);
     expect(at).toBeGreaterThan(0);
     expect(hasSave()).toBe(true);
 
     const restored = restoreBackup();
     expect(restored).not.toBeNull();
-    expect(restored!.kills).toBe(99);
     expect(restored!.level).toBe(s.level);
     expect(restored!.hp).toBeLessThanOrEqual(maxHp(restored!));
   });
@@ -88,10 +84,10 @@ describe('备份与恢复', () => {
 
   it('恢复会同时把主存档刷新成备份内容', () => {
     const s = createInitialState();
-    s.kills = 55;
+    s.gold = 777;
     backupState(s);
     restoreBackup();
-    expect(loadState()!.kills).toBe(55);
+    expect(loadState()!.gold).toBe(777);
   });
 });
 

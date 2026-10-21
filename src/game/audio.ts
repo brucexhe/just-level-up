@@ -33,6 +33,7 @@ export const BPM = 116;
 /** 一个 16 分音符的秒数 */
 export const STEP_SEC = 60 / BPM / 4;
 
+/** 打击乐已移除（用户不要鼓声），保留类型仅为兼容旧数据 */
 export type NoteKind = 'bass' | 'arp' | 'kick' | 'snare' | 'hat';
 
 export interface NoteEvent {
@@ -73,10 +74,8 @@ export function stepEvents(step: number): NoteEvent[] {
     const oct = bar % 2 === 1 ? 12 : 0;
     out.push({ kind: 'arp', midi: chord.tones[i] + oct, vel: inBar % 4 === 0 ? 0.42 : 0.3 });
   }
-  if (inBar % 8 === 0) out.push({ kind: 'kick', midi: 0, vel: 0.9 });
-  if (inBar === 6 || inBar === 14) out.push({ kind: 'kick', midi: 0, vel: 0.5 });
-  if (inBar % 8 === 4) out.push({ kind: 'snare', midi: 0, vel: 0.5 });
-  if (inBar % 2 === 1) out.push({ kind: 'hat', midi: 0, vel: inBar % 4 === 3 ? 0.26 : 0.15 });
+  // 鼓组全部去掉：只要贝斯 + 琶音的轻快铺底，不要打击乐
+  void inBar;
   return out;
 }
 

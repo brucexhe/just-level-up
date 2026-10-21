@@ -49,11 +49,6 @@ export function bakeSimple(scene: Phaser.Scene): void {
     g.lineStyle(3, 0xffffff, 1).strokeCircle(24, 24, 20);
     g.generateTexture('ring', 48, 48);
     g.clear();
-    g.lineStyle(5, 0xffffff, 1);
-    g.beginPath();
-    g.arc(24, 24, 20, Phaser.Math.DegToRad(-60), Phaser.Math.DegToRad(60), false);
-    g.strokePath();
-    g.generateTexture('slash', 48, 48);
     g.destroy();
   }
 }
@@ -296,6 +291,31 @@ export function bakeProps(scene: Phaser.Scene): void {
     '.....TT.....',
     '....TTTT....',
   ], { G: 0x1e6433, D: 0x0e3d1e, W: 0x3f9a52, T: 0x4e3620 });
+
+  // 挥砍轨迹：一弯月牙（比原来的圆弧好看，也更像刀风）
+  bakeGrid(
+    scene,
+    'slash',
+    [
+      '.....WWW........',
+      '...WWWWW........',
+      '..WWWW.WW.......',
+      '..WWW...WW......',
+      '.WWW.....WW.....',
+      '.WW......WW.....',
+      '.WW.......WW....',
+      'WW.........WW...',
+      'WW.........WW...',
+      '.WW.......WW....',
+      '.WW......WW.....',
+      '.WWW.....WW.....',
+      '..WWW...WW......',
+      '..WWWW.WW.......',
+      '...WWWWW........',
+      '.....WWW........',
+    ],
+    { W: 0xffffff },
+  );
 
   // 挥砍时绕角色旋转的刀（水平朝向，靠 rotation 对准目标）
   bakeGrid(

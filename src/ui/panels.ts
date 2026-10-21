@@ -682,9 +682,10 @@ const settingsPanel: PanelDef = {
       <div class="sec-title">存档 <em>每 20 秒自动保存</em></div>
       <div class="kv-grid">
         <div class="kv"><span>等级</span><b class="num">Lv ${fmtNum(s.level)}</b></div>
-        <div class="kv"><span>击杀</span><b class="num">${fmtNum(s.kills)}</b></div>
+        <div class="kv"><span>金币</span><b class="num">${fmtNum(s.gold)}</b></div>
+        <div class="kv"><span>本关剩余</span><b class="num">${fmtNum(st.monstersLeft())}</b></div>
         <div class="kv"><span>上次保存</span><b class="num">${timeStr(st.savedAt())}</b></div>
-        <div class="kv"><span>备份时间</span><b class="num">${timeStr(st.backupAt())}</b></div>
+        <div class="kv wide"><span>备份时间</span><b class="num">${timeStr(st.backupAt())}</b></div>
       </div>
       <div class="ic-foot" style="padding:9px 0 0">
         <button class="btn" data-act="backup">📦 备份进度</button>

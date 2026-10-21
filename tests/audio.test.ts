@@ -107,18 +107,20 @@ afterEach(() => {
 });
 
 describe('BGM 序列（纯函数）', () => {
-  it('第 0 拍同时有贝斯 / 琶音 / 底鼓', () => {
+  it('第 0 拍有贝斯和琶音（鼓已移除）', () => {
     const evs = stepEvents(0);
     const kinds = evs.map((e) => e.kind);
     expect(kinds).toContain('bass');
     expect(kinds).toContain('arp');
-    expect(kinds).toContain('kick');
+    expect(kinds).not.toContain('kick');
   });
 
-  it('底鼓是「正拍 + 切分」：0/8 重拍，6/14 轻拍', () => {
+  it('背景音乐没有鼓：整段循环里不出现任何打击乐', () => {
     for (let s = 0; s < LOOP_STEPS; s++) {
-      const hasKick = stepEvents(s).some((e) => e.kind === 'kick');
-      expect(hasKick).toBe([0, 6, 8, 14].includes(s % STEPS_PER_BAR));
+      const kinds = stepEvents(s).map((e) => e.kind);
+      expect(kinds).not.toContain('kick');
+      expect(kinds).not.toContain('snare');
+      expect(kinds).not.toContain('hat');
     }
   });
 

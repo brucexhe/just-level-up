@@ -8,6 +8,7 @@ import {
   gainExp,
   type GameState,
 } from '../src/state/gameState';
+import { BASE_ATTR_START } from '../src/state/gameState';
 import type { UIApi, UIView } from '../src/ui/api';
 
 function fakeApi(state: () => GameState) {
@@ -48,6 +49,7 @@ function fakeApi(state: () => GameState) {
       reset: () => undefined,
       savedAt: () => null,
       backupAt: () => null,
+      monstersLeft: () => 101,
     },
   };
   return { api, view, toasts, state, flags };
@@ -70,11 +72,11 @@ describe('面板渲染（headless 字符串校验）', () => {
     gainExp(s, 5); // -> Lv2, 2 点
     const { api } = fakeApi(() => s);
     PANEL_BY_ID.character.action('attr', 'pAtk', s, api);
-    expect(s.baseStats.pAtk).toBe(2);
+    expect(s.baseStats.pAtk).toBe(BASE_ATTR_START + 1);
     expect(s.attrPoints).toBe(1);
     PANEL_BY_ID.character.action('attrmax', 'hp', s, api);
     expect(s.attrPoints).toBe(0);
-    expect(s.baseStats.hp).toBe(2);
+    expect(s.baseStats.hp).toBe(BASE_ATTR_START + 1);
   });
 
   it('装备面板展示 8 个槽位与选中装备详情', () => {

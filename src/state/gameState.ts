@@ -14,6 +14,23 @@ import {
 import { SKILL_BY_ID, type SkillId } from '../data/skills';
 import type { AttrSet, BaseAttr } from '../core/types';
 
+/** 某一关的击杀进度（当天清零，次日刷新） */
+export interface StageProgress {
+  /** 已击杀的普通怪：等级 → 只数 */
+  killed: Record<number, number>;
+  /** 本关 BOSS 是否已击杀 */
+  bossDead: boolean;
+}
+
+/** 人物初始每项属性的点数 */
+export const BASE_ATTR_START = 10;
+
+/** 本地日期键（用于「第二天才刷新」） */
+export function dayKey(now = new Date()): string {
+  const p = (n: number) => `${n}`.padStart(2, '0');
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+}
+
 export interface GameState {
   level: number;
   exp: number;
@@ -32,12 +49,17 @@ export interface GameState {
   /** 已学会技能 → 当前等级（0 / 缺省 = 未学会） */
   skills: Partial<Record<SkillId, number>>;
   highestMonsterLevel: number;
-  kills: number;
-  bossKills: number;
+  /** 当前所在关卡（1 起；玩家可在小地图上手动切换，不会自动跳关） */
+  stage: number;
+  /** 每关当天被击杀的怪物记录，跨天自动清空 */
+  stages: Record<number, StageProgress>;
+  /** 上次生成怪物的日期（跨天则整关重刷） */
+  stageDay: string;
 }
 
 export function createInitialState(): GameState {
   const baseStats = emptyStats();
+  // 初始属性统一 10 点（HP = 10 × HP_PER_POINT）
   for (const k of [
     'hp',
     'mp',
@@ -49,7 +71,7 @@ export function createInitialState(): GameState {
     'agi',
     'luck',
   ] as BaseAttr[]) {
-    baseStats[k] = 1;
+    baseStats[k] = BASE_ATTR_START;
   }
   const s: GameState = {
     level: 1,
@@ -66,8 +88,9 @@ export function createInitialState(): GameState {
     skillBooks: [],
     skills: { attack: 1 },
     highestMonsterLevel: 1,
-    kills: 0,
-    bossKills: 0,
+    stage: 1,
+    stages: {},
+    stageDay: dayKey(),
   };
   s.hp = maxHp(s);
   s.mp = maxMp(s);

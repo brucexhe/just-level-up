@@ -130,8 +130,28 @@
   font-size: 11px;
   color: #ffd93d;
 }
-.hud-tag[title='击杀'] b {
-  color: #9ad06a;
+
+/* 纯 CSS 金币：emoji 在部分环境会渲染成方框，画一个才稳 */
+.coin-ic {
+  position: relative;
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3c4 0%, #ffd93d 55%, #d99b1a 100%);
+  border: 1px solid #b8860b;
+  box-shadow: 0 0 5px rgba(255, 217, 61, 0.45);
+}
+.coin-ic::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid rgba(150, 100, 10, 0.55);
 }
 .hud .bar {
   height: 11px;
@@ -177,6 +197,25 @@
   justify-content: space-between;
   gap: 6px;
   padding: 0 2px 5px;
+}
+.mm-nav {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 9px;
+  color: #cfd8e6;
+  background: linear-gradient(180deg, #2b3852, #1b2231);
+  border: 1px solid #3a4761;
+  transition: 0.14s;
+}
+.mm-nav:hover {
+  color: #ffe08a;
+  border-color: #ffd93d;
+  background: linear-gradient(180deg, #3a3320, #241f14);
 }
 .mm-head .mm-stage {
   font-size: 11px;
