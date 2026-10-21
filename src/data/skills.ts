@@ -56,7 +56,7 @@ export const SKILLS: SkillDef[] = [
     mpCost: 3,
     mpCostGrowth: 0.5,
     cdMs: 60000,
-    power: 0.3,
+    power: 0.1,
     value: 5000,
     desc: '短时间内提升攻击力与攻击/施法速度。',
   },

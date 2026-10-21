@@ -317,8 +317,10 @@ export function bookPoints(book: SkillBook): number {
   return Math.max(1, Math.floor(book.points * BALANCE.SELL_REFUND_RATE));
 }
 
-/** 用技能点升级已学会技能；消耗 = 当前等级 */
+/** 用技能点升级已学会技能；消耗 = 当前等级。普攻除外，见下 */
 export function upgradeSkill(s: GameState, id: SkillId): boolean {
+  // 普攻人人自带、不吃技能点，等级恒定 Lv1 —— 和 BOOK_SKILLS 把普攻排除出掉落池是同一条规则
+  if (id === 'attack') return false;
   const lv = skillLevel(s, id);
   if (lv <= 0) return false;
   const cost = skillUpgradeCost(lv);

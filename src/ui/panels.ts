@@ -6,6 +6,7 @@ import { expToNext, isBreakthrough } from '../core/progression';
 import {
   describeSkill,
   skillMpCost,
+  skillPower,
   skillPowerCoef,
   skillValue,
   type SkillBook,
@@ -318,7 +319,17 @@ const skillsPanel: PanelDef = {
     const def = SKILL_BY_ID[cur];
     const lv = skillLevel(s, cur);
     const cost = skillUpgradeCostOf(s, cur);
-    const canUp = lv > 0 && s.skillPoints >= cost;
+    const upgradeable = cur !== 'attack';
+    const canUp = upgradeable && lv > 0 && s.skillPoints >= cost;
+    const tail = upgradeable
+      ? `<div class="sd-next">下一级：${esc(describeSkill(def, lv + 1))}</div>
+            <div style="height:9px"></div>
+            <button class="btn big gold ${canUp ? '' : 'disabled'}" data-act="upgrade" ${
+              canUp ? '' : 'disabled'
+            }>升级到 Lv${lv + 1}（消耗 ${fmtNum(cost)} 技能点）</button>`
+      : `<div class="note" style="margin-top:8px">普攻不吃技能点、也不能升级：伤害 =
+            物攻 ×${skillPower(def, lv).toFixed(2)}（狂暴期间另乘加成），攻速由敏捷决定。
+            技能点留给火球 / 狂暴 / 毒刃。</div>`;
     const detail =
       lv > 0
         ? `<div class="skill-detail">
@@ -342,11 +353,7 @@ const skillsPanel: PanelDef = {
                     : '—'
               }</b></div>
             </div>
-            <div class="sd-next">下一级：${esc(describeSkill(def, lv + 1))}</div>
-            <div style="height:9px"></div>
-            <button class="btn big gold ${canUp ? '' : 'disabled'}" data-act="upgrade" ${
-              canUp ? '' : 'disabled'
-            }>升级到 Lv${lv + 1}（消耗 ${fmtNum(cost)} 技能点）</button>
+            ${tail}
           </div>`
         : `<div class="skill-detail">
             <div class="sd-head">${def.icon} ${def.name}<span class="key">未习得</span></div>

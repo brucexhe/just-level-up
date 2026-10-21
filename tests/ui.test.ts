@@ -115,6 +115,20 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(s.skillPoints).toBe(4);
   });
 
+  it('技能面板：普攻没有升级入口，技能点也花不掉', () => {
+    const s = createInitialState();
+    s.skillPoints = 10;
+    const { api, view } = fakeApi(() => s);
+    view.skillId = 'attack';
+    const html = PANEL_BY_ID.skills.render(s, api);
+    expect(html).not.toContain('升级到 Lv');
+    expect(html).toContain('普攻不吃技能点');
+    // 就算绕过 UI 直接派发 upgrade，也不该扣点 / 升级
+    PANEL_BY_ID.skills.action('upgrade', '', s, api);
+    expect(s.skills.attack).toBe(1);
+    expect(s.skillPoints).toBe(10);
+  });
+
   it('背包面板可切换装备 / 技能书，技能书穿戴即替换等级（旧等级回包）', () => {
     const s = createInitialState();
     s.inventory.push(dropEquipment(9, () => 0.4));

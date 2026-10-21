@@ -67,25 +67,60 @@ export const BALANCE = {
   BOSS_MDEF_MULT: 1.6,
   /** BOSS 每 N 次出手里有 1 次是法术 */
   BOSS_MAGIC_EVERY: 3,
+  /**
+   * 遗留常量：旧减伤公式 `K = K0 × 攻击方等级` 的基数，已被上面的 MIT_K0 / MIT_KD 取代。
+   * 目前没有任何代码读它，调参时可以忽略（PLAN.md 里还留着这个名字）。
+   */
   K0: 100,
+  /**
+   * 属性点 → 面板上限的换算：最大生命 = hp 属性 × HP_PER_POINT，最大蓝同理。
+   * 保持 1:1 是为了让「加 1 点 hp」的收益一眼可读；要放大血量池就调这里，
+   * 别去动 ATTR_PER_LEVEL（那个一改会同时抬高九项属性）。
+   */
   HP_PER_POINT: 1,
   MP_PER_POINT: 1,
+  /**
+   * 命中公式的分母基数：命中率 = 1 − 闪避 / (闪避 + 命中 + H0)。
+   * H0 是「闪避贬值」旋钮：H0 越大，同样一点闪避换来的免命中率越少。
+   * 注意目前只有 tests 在调 hitRate，战斗还没接命中/闪避词缀。
+   */
   H0: 100,
+  /** 攻速基数：攻击间隔 = BASE_ATTACK_INTERVAL / (1 + 敏捷 / AGI0)，即敏捷 100 点时攻速翻倍 */
   AGI0: 100,
+  /** 移速基数：移速 = BASE_MOVE_SPEED × (1 + speed / SPD0)，即 speed 100 点时跑速翻倍 */
   SPD0: 100,
+  /** 基础移速；硬上限是它的 3 倍（倍数写死在 moveSpeed 里，不在这张表） */
   BASE_MOVE_SPEED: 100,
+  /** 基础攻击间隔（毫秒），由敏捷按 AGI0 缩短 */
   BASE_ATTACK_INTERVAL: 1000,
+  /**
+   * 暴击伤害倍率的兜底值：攻击方没带 critDmg 词缀时用它（1.5 = 暴击打 150%）。
+   * 注意现在战斗里没有暴击判定 —— computeDamage 的调用方都不传 isCrit，
+   * 所以这个数暂时只影响面板上「暴击伤害 +50%」那一行。
+   */
   CRIT_DMG_BASE: 1.5,
+  /** 冷却缩减上限：cdr 堆再高也最多减 75% 冷却（cooldownMs 目前只有测试在用） */
   CDR_MAX: 0.75,
+  /** 命中率下限 5%：再极端的闪避也留一线命中，避免出现「永远打不中」的死局 */
   HIT_FLOOR: 0.05,
+  /** 命中率上限 100%：多余命中不转换成其他收益 */
   HIT_CAP: 1.0,
+  /** 每升 1 级拿到的**自由**属性点，由玩家自己分配（与 ATTR_PER_LEVEL 的自动成长是两条线） */
   POINTS_PER_LEVEL: 1,
   /** 每升 1 级，九项属性各自自动 +1（等级自带的成长，与自由点数无关） */
   ATTR_PER_LEVEL: 1,
+  /** 药档步长：可买药档 = floor(等级/10) × 10，该档药的回复量与售价都等于档位数 */
   POTION_STEP: 10,
+  /** 卖出装备/技能书回收的点数比例（只退点数、不给金币，见 economy.sellGold） */
   SELL_REFUND_RATE: 0.5,
+  /** 每次结算的随机伤害浮动区间 ±5%，让跳出来的数字不至于完全一致 */
   DAMAGE_FLOAT_MIN: 0.95,
   DAMAGE_FLOAT_MAX: 1.05,
+  /**
+   * 进阶（等级是 10 的倍数）时的加法属性奖励区间 = [LO_SLOPE × n, HI_SLOPE × n]，
+   * n = 等级 / 10。区间随 n 线性变宽，所以每 10 级的「开奖感」是等比放大的；
+   * 幸运（luck）会把结果往 hi 那头偏，见 progression.rollBreakthroughBonus。
+   */
   BREAKTHROUGH_LO_SLOPE: 1,
   BREAKTHROUGH_HI_SLOPE: 2,
   /** 普通怪掉装备的概率（与技能书互斥，两者相加 = 总掉率 10%） */
