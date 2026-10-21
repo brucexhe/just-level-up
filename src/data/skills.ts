@@ -51,7 +51,7 @@ export const SKILLS: SkillDef[] = [
     powerGrowth: 0.5,
     value: 90,
     valueGrowth: 6,
-    desc: '向准星发射火球，命中后范围爆裂，法术伤害。',
+    desc: '需先用左键选中一只怪：火球会自动追向它，命中后范围爆裂，法术伤害。',
   },
   {
     id: 'frenzy',
@@ -81,7 +81,7 @@ export const SKILLS: SkillDef[] = [
     powerGrowth: 0.18,
     value: 4000,
     valueGrowth: 400,
-    desc: '给目标涂毒，持续时间内每 0.5 秒结算一次法术伤害。',
+    desc: '需先选中一只怪：以它为中心撒出毒雾，范围内所有怪持续中毒，每 0.5 秒结算一次法术伤害。',
   },
 ];
 
@@ -89,6 +89,9 @@ export const SKILLS: SkillDef[] = [
 export const FIREBALL_SPEED = 460;
 /** 毒刃每跳间隔 ms */
 export const POISON_TICK_MS = 500;
+/** 毒刃 AoE 半径：BASE + GROWTH × (技能等级 − 1)。地图很大，半径太小等于单体 */
+export const POISON_RADIUS_BASE = 90;
+export const POISON_RADIUS_GROWTH = 10;
 
 export const SKILL_BY_ID: Record<SkillId, SkillDef> = SKILLS.reduce(
   (acc, s) => {

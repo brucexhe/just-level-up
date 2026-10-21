@@ -9,8 +9,6 @@ import {
   gainExp,
   maxHp,
   maxMp,
-  restoreHp,
-  restoreMp,
   skillLevel,
   skillName,
   spendMp,
@@ -36,6 +34,8 @@ import {
 } from '../assets';
 import {
   FIREBALL_SPEED,
+  POISON_RADIUS_BASE,
+  POISON_RADIUS_GROWTH,
   POISON_TICK_MS,
   SKILL_BY_ID,
   type SkillId,
@@ -100,7 +100,6 @@ const HP_BAR = {
 const STAGE_MONSTERS_PER_LEVEL = 10;
 /** 场景装饰物（树/石头/灌木）数量 */
 const OBSTACLE_COUNT = 180;
-const REGEN_PER_SEC = 1;
 const STAGE_NAMES = ['草原', '森林', '荒漠', '雪原', '沼泽', '火山', '深渊', '天空'];
 
 /** 技能书在地上显示的颜色（与技能本身的气质对应） */
@@ -177,7 +176,6 @@ export class StageBattleScene extends Phaser.Scene {
   private steerSince = 0;
   private stuckX = 0;
   private stuckY = 0;
-  private regenAt = 0;
   private frenzyUntil = 0;
   private cooldowns = new Map<SkillId, number>();
   private bossAtLevel = -1;
@@ -190,6 +188,14 @@ export class StageBattleScene extends Phaser.Scene {
   private obstaclePoints: { x: number; y: number }[] = [];
   /** 地上的掉落物 */
   private groundDrops: GroundDropView[] = [];
+  /** 飞行中的火球 → 锁定的目标与拖尾（怪物会移动，直线飞会打空） */
+  private fireballs = new Map<
+    Phaser.Physics.Arcade.Image,
+    {
+      target: MonsterView;
+      trail: Phaser.GameObjects.Particles.ParticleEmitter;
+    }
+  >();
 
   private ui!: GameUI;
 
@@ -273,6 +279,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.setupInput();
     this.setupUI();
     this.unlockAudioOnGesture();
+    this.keepSaveFreshOnExit();
 
     if (loaded) {
       this.ui.toast(`已载入存档：Lv${this.state.level}`, '#9ad06a');
@@ -341,6 +348,9 @@ export class StageBattleScene extends Phaser.Scene {
             level: m.data.level,
             aggressive: m.data.aggressive,
             labelVisible: m.label.visible,
+            scaleX: +m.sprite.scaleX.toFixed(3),
+            scaleY: +m.sprite.scaleY.toFixed(3),
+            dots: m.dots.length,
             dist: Math.round(
               Phaser.Math.Distance.Between(
                 m.sprite.x,
@@ -350,6 +360,57 @@ export class StageBattleScene extends Phaser.Scene {
               ),
             ),
           })),
+      /** 强行选中第 idx 只活着的怪（传 null 取消选中），调试用 */
+      selectTarget: (idx: number | null) => {
+        if (idx === null) {
+          this.attackTarget = null;
+          return null;
+        }
+        const m = this.monsters.filter((v) => v.sprite.active)[idx];
+        this.attackTarget = m ?? null;
+        return m ? { level: m.data.level } : null;
+      },
+      /** 当前选中的怪（没有就是 null） */
+      selected: () => {
+        const t = this.selectedTarget();
+        return t
+          ? { level: t.data.level, hp: Math.round(t.data.hp), maxHp: t.data.maxHp }
+          : null;
+      },
+      /** 当前处于中毒状态的怪数量（毒刃 AoE 验证用） */
+      dotCount: () =>
+        this.monsters.filter((m) => m.sprite.active && m.dots.length > 0).length,
+      /** 世界坐标 → 画布内的像素坐标（点击测试用） */
+      screenOf: (x: number, y: number) => {
+        const c = this.cameras.main;
+        return { sx: (x - c.worldView.x) * c.zoom, sy: (y - c.worldView.y) * c.zoom };
+      },
+      /** 飞行中的火球：位置 / 朝向 / 锁定目标，用来验证「是不是真的追着怪飞」 */
+      fireballInfo: () => {
+        const list = [...this.fireballs.entries()].map(([fb, e]) => {
+          const toTarget = Phaser.Math.Angle.Between(
+            fb.x,
+            fb.y,
+            e.target.sprite.x,
+            e.target.sprite.y,
+          );
+          const diff = Math.abs(
+            Phaser.Math.Angle.Wrap(toTarget - fb.rotation),
+          );
+          return {
+            fx: Math.round(fb.x),
+            fy: Math.round(fb.y),
+            rotDeg: Math.round(Phaser.Math.RadToDeg(fb.rotation)),
+            toTargetDeg: Math.round(Phaser.Math.RadToDeg(toTarget)),
+            aimErrDeg: Math.round(Phaser.Math.RadToDeg(diff)),
+            targetLv: e.target.data.level,
+            tx: Math.round(e.target.sprite.x),
+            ty: Math.round(e.target.sprite.y),
+          };
+        });
+        return { flying: list.length, list };
+      },
+      cooldownOf: (id: SkillId) => this.cooldownOf(id),
       /** 当前场上的挥砍特效数量（冒烟测试用） */
       fx: () => {
         let blade = 0;
@@ -823,7 +884,7 @@ export class StageBattleScene extends Phaser.Scene {
       },
       reset: () => {
         clearSave();
-        this.applyState(createInitialState());
+        this.applyState(createInitialState(), true);
         audio.play('die');
       },
       savedAt: () => savedAt(),
@@ -875,7 +936,6 @@ export class StageBattleScene extends Phaser.Scene {
     if (!Number.isFinite(dt) || dt <= 0) return;
     for (const [k, v] of [...this.cooldowns]) this.cooldowns.set(k, v + dt);
     this.playerNextAttackAt += dt;
-    this.regenAt += dt;
     this.steerSince += dt;
     if (this.frenzyUntil > 0) this.frenzyUntil += dt;
     for (const m of this.monsters) {
@@ -889,10 +949,35 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   /** 整局替换存档状态（恢复备份 / 重置时调用） */
-  private applyState(s: GameState): void {
+  /**
+   * 换上另一份存档（读档 / 恢复备份 / 重置）。
+   * `heal = true` 才回满血蓝（重置新档用）；恢复备份要保留存档里的实时血蓝。
+   */
+  /**
+   * 自动保存每 20 秒才跑一次，中间掉血就刷新页面会「读档回血」。
+   * 关页面 / 切后台时立刻落盘，F5 拿到的就是当前这一刻的血蓝。
+   */
+  private keepSaveFreshOnExit(): void {
+    const flush = () => saveState(this.state);
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('beforeunload', flush);
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onHide);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('beforeunload', flush);
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onHide);
+    });
+  }
+
+  private applyState(s: GameState, heal = false): void {
     this.state = s;
-    this.state.hp = maxHp(s);
-    this.state.mp = maxMp(s);
+    if (heal) {
+      this.state.hp = maxHp(s);
+      this.state.mp = maxMp(s);
+    }
     this.stage = Math.max(1, Math.floor(s.stage || 1));
     this.bossAtLevel = -1;
     this.frenzyUntil = 0;
@@ -900,6 +985,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.playerNextAttackAt = 0;
     this.clearMonsters();
     this.clearGroundDrops();
+    this.clearFireballs();
     this.spawnStageMonsters();
     this.attackTarget = null;
     this.moveTarget = null;
@@ -968,6 +1054,15 @@ export class StageBattleScene extends Phaser.Scene {
     const def = SKILL_BY_ID[id];
     const now = this.time.now;
     if ((this.cooldowns.get(id) ?? 0) > now) return;
+    // 火球 / 毒刃都要先「选中」一只怪才能放：校验必须放在扣蓝之前，
+    // 否则没选怪也会白扣一次蓝、白进一次冷却
+    if ((id === 'fireball' || id === 'poison') && !this.selectedTarget()) {
+      this.ui.toast(
+        `请先用左键点选一只怪物，再释放${SKILL_BY_ID[id].name}`,
+        '#ff8a8a',
+      );
+      return;
+    }
     const cost = skillMpCost(def, lv);
     if (cost > 0 && !spendMp(s, cost)) {
       this.ui.toast('法力不足', '#6ab0f3');
@@ -979,7 +1074,7 @@ export class StageBattleScene extends Phaser.Scene {
         if (!this.tryMelee(now)) this.emptySwing();
         break;
       case 'fireball':
-        this.castFireball(this.input.activePointer, lv);
+        this.castFireball(lv);
         break;
       case 'frenzy':
         this.castFrenzy(lv);
@@ -1010,40 +1105,99 @@ export class StageBattleScene extends Phaser.Scene {
     this.ui.toast(`狂暴！攻击与攻速 +${Math.round((this.frenzyMult() - 1) * 100)}%`, '#ff9fd8');
   }
 
+  /** 毒刃：以选中的怪为中心撒毒雾，范围内所有怪一起中毒 */
   private castPoison(lv: number) {
-    const target =
-      (this.attackTarget && this.attackTarget.sprite.active ? this.attackTarget : null) ??
-      this.nearestMonster(140);
-    if (!target) {
-      this.ui.toast('附近没有可施毒的目标', '#9aa4b2');
-      return;
-    }
+    const target = this.selectedTarget();
+    if (!target) return;
     const stats = aggregatedStats(this.state);
-    const perTick = computeDamage({
-      attack: (stats.mAtk ?? 1) * skillPower(SKILL_BY_ID.poison, lv) * this.frenzyMult(),
-      defense: target.data.stats.mDef ?? 0,
-      attackerLevel: this.state.level,
+    const cx = target.sprite.x;
+    const cy = target.sprite.y;
+    const radius = POISON_RADIUS_BASE + POISON_RADIUS_GROWTH * (lv - 1);
+    const duration = skillValue(SKILL_BY_ID.poison, lv);
+    const power =
+      (stats.mAtk ?? 1) * skillPower(SKILL_BY_ID.poison, lv) * this.frenzyMult();
+
+    let hits = 0;
+    let perTick = 0;
+    for (const m of [...this.monsters]) {
+      if (!m.sprite.active) continue;
+      if (Phaser.Math.Distance.Between(cx, cy, m.sprite.x, m.sprite.y) > radius) continue;
+      // 每只怪按自己的法防单独结算
+      const tick = computeDamage({
+        attack: power,
+        defense: m.data.stats.mDef ?? 0,
+        attackerLevel: this.state.level,
+      });
+      m.dots.push({
+        perTick: tick,
+        until: this.time.now + duration,
+        tickAt: this.time.now + POISON_TICK_MS,
+      });
+      m.sprite.setTint(0x9ade6a);
+      this.time.delayedCall(160, () => {
+        if (m.sprite.active) m.sprite.clearTint();
+      });
+      if (hits === 0) perTick = tick;
+      hits += 1;
+    }
+
+    // 毒雾：一圈扩散的绿环 + 上升的毒泡
+    const cloud = this.add
+      .image(cx, cy + 8, 'ring')
+      .setTint(0x9ade6a)
+      .setScale(0.3)
+      .setAlpha(0.9)
+      .setDepth(cy + 1);
+    this.tweens.add({
+      targets: cloud,
+      scale: radius / 20,
+      alpha: 0,
+      duration: 420,
+      ease: 'Quad.Out',
+      onComplete: () => cloud.destroy(),
     });
-    target.dots.push({
-      perTick,
-      until: this.time.now + skillValue(SKILL_BY_ID.poison, lv),
-      tickAt: this.time.now + POISON_TICK_MS,
+    const puff = this.add.particles(cx, cy, 'dot', {
+      speed: { min: 20, max: 70 },
+      lifespan: 620,
+      scale: { start: 1.8, end: 0 },
+      tint: [0x9ade6a, 0x6fae5c, 0xd6f58a],
+      alpha: { start: 0.75, end: 0 },
+      emitting: false,
     });
-    target.sprite.setTint(0x9ade6a);
-    this.time.delayedCall(140, () => {
-      if (target.sprite.active) target.sprite.clearTint();
-    });
+    puff.setDepth(cy + 2);
+    puff.explode(22);
+    this.time.delayedCall(700, () => puff.destroy());
+
     audio.play('poison');
-    this.ui.toast(`施毒成功：每 0.5s ${perTick} 点，持续 ${(skillValue(SKILL_BY_ID.poison, lv) / 1000).toFixed(1)}s`, '#9ade6a');
+    this.ui.toast(
+      hits > 0
+        ? `毒雾弥漫：${hits} 只中毒，每 0.5s ${perTick} 点，持续 ${(duration / 1000).toFixed(1)}s`
+        : '毒雾落空：范围内没有怪',
+      hits > 0 ? '#9ade6a' : '#9aa4b2',
+    );
   }
 
-  private castFireball(pointer: Phaser.Input.Pointer, lv: number) {
+  /** 当前被左键选中的怪物（脚下有光圈的那个）；没有就是 null */
+  private selectedTarget(): MonsterView | null {
+    const t = this.attackTarget;
+    if (!t || !t.sprite.active) {
+      this.attackTarget = null;
+      return null;
+    }
+    return t;
+  }
+
+  private castFireball(lv: number) {
+    const target = this.selectedTarget();
+    if (!target) return;
     const stats = aggregatedStats(this.state);
+    // 打向「选中的怪物」，而不是鼠标方向：鼠标可能停在屏幕另一边，
+    // 键盘按 Q 时那个方向跟战斗毫无关系
     const angle = Phaser.Math.Angle.Between(
       this.player.x,
       this.player.y,
-      pointer.worldX,
-      pointer.worldY,
+      target.sprite.x,
+      target.sprite.y,
     );
     const fb = this.physics.add.image(this.player.x, this.player.y, 'fireball');
     fb.setScale(2.5).setDepth(6).setRotation(angle);
@@ -1059,16 +1213,52 @@ export class StageBattleScene extends Phaser.Scene {
       alpha: { start: 0.9, end: 0 },
     });
     trail.setDepth(5);
+    this.fireballs.set(fb, { target, trail });
 
     const mAtk = (stats.mAtk ?? 1) * this.frenzyMult();
-    this.physics.add.overlap(fb, this.monsterGroup, (fbObj) => {
+    this.physics.add.overlap(fb, this.monsterGroup, () => {
       this.explodeFireball(fb, trail, mAtk, lv);
-      (fbObj as Phaser.Physics.Arcade.Image).destroy();
     });
-    this.time.delayedCall(2200, () => {
-      if (trail.active) trail.destroy();
-      if (fb.active) fb.destroy();
-    });
+    // 兜底回收：飞过头 / 目标中途死了，火球不会一直留在场上
+    this.time.delayedCall(2200, () => this.retireFireball(fb));
+  }
+
+  /**
+   * 火球追踪：怪物是会跑的，按发射瞬间的方向直线飞过去必空，
+   * 所以每帧把速度重新指向锁定目标。
+   */
+  private updateFireballs(): void {
+    for (const [fb, e] of this.fireballs) {
+      // 目标死了就让它沿原方向飞完（还能炸到旁边的怪）
+      if (!fb.active || !e.target.sprite.active) {
+        this.fireballs.delete(fb);
+        continue;
+      }
+      const a = Phaser.Math.Angle.Between(
+        fb.x,
+        fb.y,
+        e.target.sprite.x,
+        e.target.sprite.y,
+      );
+      fb.setRotation(a);
+      this.physics.velocityFromRotation(a, FIREBALL_SPEED, fb.body!.velocity);
+    }
+  }
+
+  /** 火球退场（命中爆裂或飞行超时）：销毁本体与拖尾，并解除追踪 */
+  private retireFireball(fb: Phaser.Physics.Arcade.Image): void {
+    const e = this.fireballs.get(fb);
+    if (e && e.trail.active) {
+      e.trail.stop();
+      e.trail.destroy();
+    }
+    this.fireballs.delete(fb);
+    if (fb.active) fb.destroy();
+  }
+
+  /** 换关 / 读档时清空场上的火球 */
+  private clearFireballs(): void {
+    for (const fb of [...this.fireballs.keys()]) this.retireFireball(fb);
   }
 
   private explodeFireball(
@@ -1077,13 +1267,9 @@ export class StageBattleScene extends Phaser.Scene {
     mAtk: number,
     lv: number,
   ) {
-    if (trail.active) {
-      trail.stop();
-      trail.destroy();
-    }
     const px = fb.x;
     const py = fb.y;
-    if (fb.active) fb.destroy();
+    this.retireFireball(fb);
 
     const burst = this.add.particles(px, py, 'dot', {
       speed: { min: 80, max: 220 },
@@ -1215,7 +1401,17 @@ export class StageBattleScene extends Phaser.Scene {
     return bestD <= maxDist ? best : null;
   }
 
-  private applyDamage(m: MonsterView, dmg: number, angle: number, tint = 0xffffff) {
+  /**
+   * @param gentle 持续伤害（毒）每 0.5s 一跳，用「轻微」档：
+   *   不击退、只微微一缩、音效压低。否则中毒的怪会一直被顶来顶去、抖个不停。
+   */
+  private applyDamage(
+    m: MonsterView,
+    dmg: number,
+    angle: number,
+    tint = 0xffffff,
+    gentle = false,
+  ) {
     m.data.hp -= dmg;
     const heavy = dmg >= m.data.maxHp * 0.5;
     this.floatText(
@@ -1223,23 +1419,35 @@ export class StageBattleScene extends Phaser.Scene {
       m.sprite.y - 30,
       `${dmg}`,
       tint === 0xffffff ? '#ffd93d' : '#9ade6a',
-      heavy ? 24 : 17,
+      heavy ? 24 : gentle ? 14 : 17,
     );
-    audio.play(heavy ? 'crit' : 'hit');
+    audio.play(heavy ? 'crit' : 'hit', gentle ? 0.35 : 1);
     m.sprite.setTintFill(tint);
-    m.sprite.setVelocity(Math.cos(angle) * 130, Math.sin(angle) * 130);
-    m.knockUntil = this.time.now + 130;
-    // 受击抖动：轻微压扁再弹回，打击感更明确
     const baseScale = m.isBoss ? 5.5 : 3;
-    m.sprite.setScale(baseScale * 1.18, baseScale * 0.82);
-    this.tweens.add({
-      targets: m.sprite,
-      scaleX: baseScale,
-      scaleY: baseScale,
-      duration: 130,
-      ease: 'Back.Out',
-    });
-    this.time.delayedCall(90, () => {
+    if (gentle) {
+      // 只是「抽搐一下」：幅度 5%，不击退、不弹跳
+      m.sprite.setScale(baseScale * 1.05, baseScale * 0.95);
+      this.tweens.add({
+        targets: m.sprite,
+        scaleX: baseScale,
+        scaleY: baseScale,
+        duration: 90,
+        ease: 'Quad.Out',
+      });
+    } else {
+      m.sprite.setVelocity(Math.cos(angle) * 130, Math.sin(angle) * 130);
+      m.knockUntil = this.time.now + 130;
+      // 受击抖动：轻微压扁再弹回，打击感更明确
+      m.sprite.setScale(baseScale * 1.18, baseScale * 0.82);
+      this.tweens.add({
+        targets: m.sprite,
+        scaleX: baseScale,
+        scaleY: baseScale,
+        duration: 130,
+        ease: 'Back.Out',
+      });
+    }
+    this.time.delayedCall(gentle ? 70 : 90, () => {
       if (m.sprite.active) m.sprite.clearTint();
     });
     this.refreshMonsterBar(m);
@@ -1690,13 +1898,9 @@ export class StageBattleScene extends Phaser.Scene {
       this.targetRing.setVisible(false);
     }
 
-    if (time >= this.regenAt) {
-      this.regenAt = time + 1000;
-      restoreHp(this.state, REGEN_PER_SEC);
-      restoreMp(this.state, REGEN_PER_SEC);
-    }
-
+    // 没有自动回复：血蓝只能靠药店买药补（金币又只能靠打怪掉）
     if (time >= this.playerNextAttackAt) this.tryMelee(time);
+    this.updateFireballs();
     this.updateGroundDrops();
 
     for (const m of [...this.monsters]) {
@@ -1722,10 +1926,13 @@ export class StageBattleScene extends Phaser.Scene {
           if (!m.sprite.active) break; // 这一跳可能已击杀目标
           if (time >= d.tickAt) {
             d.tickAt = time + POISON_TICK_MS;
-            this.applyDamage(m, d.perTick, Math.PI / 2, 0x9ade6a);
+            this.applyDamage(m, d.perTick, Math.PI / 2, 0x9ade6a, true);
           }
         }
       }
+      // 毒的这一跳可能刚好把怪打死（label / hpText 已销毁），
+      // 后面还要 setText，不跳出去就会渲染到已销毁的纹理上
+      if (!m.sprite.active) continue;
 
       const d = Phaser.Math.Distance.Between(
         m.sprite.x,

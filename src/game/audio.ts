@@ -308,10 +308,20 @@ export class AudioEngine {
 
   // ---------------- 音效 ----------------
 
-  play(name: SfxName): void {
+  /**
+   * @param gain 单次播放的音量倍率（0~1）。持续伤害每 0.5s 一跳，
+   *   全音量命中音会变成噪音，所以需要能压低。
+   */
+  play(name: SfxName, gain = 1): void {
     const ctx = this.ensure();
     if (!ctx || !this.sfxBus || !this.sfxOn) return;
-    const bus = this.sfxBus;
+    let bus: GainNode = this.sfxBus;
+    if (gain < 1) {
+      const g = ctx.createGain();
+      g.gain.value = Math.max(0, Math.min(1, gain));
+      g.connect(this.sfxBus);
+      bus = g;
+    }
     const t = ctx.currentTime + 0.001;
     switch (name) {
       case 'swing':

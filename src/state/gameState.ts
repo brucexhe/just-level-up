@@ -86,7 +86,9 @@ export function createInitialState(): GameState {
     inventory: [],
     equipped: {},
     skillBooks: [],
-    skills: { attack: 1 },
+    // 三个主动技能开局就都会（普攻 + 火球 + 狂暴 + 毒刃），
+    // 但都只有 Lv1、威力很低，要靠技能书换技能点去升级
+    skills: { attack: 1, fireball: 1, frenzy: 1, poison: 1 },
     highestMonsterLevel: 1,
     stage: 1,
     stages: {},

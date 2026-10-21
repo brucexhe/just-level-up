@@ -39,30 +39,32 @@ describe('技能书 / 技能点', () => {
     }
   });
 
-  it('使用后学会技能；重复的书转为技能点', () => {
+  it('开局三个主动技能就都会（Lv1），技能书一律转成技能点', () => {
     const s = createInitialState();
-    expect(skillLevel(s, 'attack')).toBe(1); // 初始自带普攻
-    expect(skillLevel(s, 'fireball')).toBe(0);
+    for (const id of ['attack', 'fireball', 'frenzy', 'poison'] as const) {
+      expect(skillLevel(s, id)).toBe(1);
+    }
 
-    const b1 = { id: 'a', skillId: 'fireball' as const, points: 8 };
-    s.skillBooks.push(b1);
-    expect(useSkillBook(s, b1).kind).toBe('learn');
-    expect(skillLevel(s, 'fireball')).toBe(1);
-    expect(s.skillBooks).toHaveLength(0);
-
-    const b2 = { id: 'b', skillId: 'fireball' as const, points: 8 };
-    s.skillBooks.push(b2);
-    const r = useSkillBook(s, b2);
+    // 已经会了 → 书直接换技能点（8 × 50% = 4）
+    const b = { id: 'a', skillId: 'fireball' as const, points: 8 };
+    s.skillBooks.push(b);
+    const r = useSkillBook(s, b);
     expect(r.kind).toBe('convert');
-    expect(s.skillPoints).toBe(4); // 8 × 50%
+    expect(s.skillPoints).toBe(4);
+    expect(s.skillBooks).toHaveLength(0);
+    expect(skillLevel(s, 'fireball')).toBe(1);
+  });
+
+  it('技能威力随等级成长（默认 Lv1 很弱，得靠书加点）', () => {
+    const fire = SKILL_BY_ID.fireball;
+    expect(skillPower(fire, 1)).toBeLessThan(skillPower(fire, 5));
+    expect(skillPower(fire, 5)).toBeLessThan(skillPower(fire, 10));
   });
 
   it('技能点升级消耗 = 当前等级，且威力随等级成长', () => {
     const s = createInitialState();
     s.skillPoints = 10;
     const before = skillPower(SKILL_BY_ID.fireball, 1);
-    expect(upgradeSkill(s, 'fireball')).toBe(false); // 未学会
-    s.skills.fireball = 1;
     expect(skillUpgradeCost(1)).toBe(1);
     expect(upgradeSkill(s, 'fireball')).toBe(true);
     expect(skillLevel(s, 'fireball')).toBe(2);

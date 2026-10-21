@@ -5,9 +5,14 @@ export function goldDrop(monsterLevel: number, goldBonus = 0): number {
   return Math.round(monsterLevel * (1 + goldBonus));
 }
 
-/** 玩家可买药的档位 = floor(等级/10)*10；<10 级为 0（无药可买） */
+/**
+ * 玩家可买药的档位 = floor(等级/10) × 10。
+ * 10 级前没有整档药，就退化为「按等级给小药」——
+ * 因为没有自动回血回蓝了，前期若完全无药，掉血后就只能等升级或送死。
+ */
 export function potionTier(playerLevel: number): number {
-  return Math.floor(playerLevel / BALANCE.POTION_STEP) * BALANCE.POTION_STEP;
+  const tier = Math.floor(playerLevel / BALANCE.POTION_STEP) * BALANCE.POTION_STEP;
+  return tier > 0 ? tier : Math.max(1, Math.floor(playerLevel));
 }
 
 export type PotionKind = 'hp' | 'mp';

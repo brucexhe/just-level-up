@@ -100,13 +100,13 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(it.freeAllocated.pAtk).toBe(1);
   });
 
-  it('技能面板：未学会的技能不可升级，学会后可升', () => {
+  it('技能面板：三个主动技能默认已学会，可花技能点升级', () => {
     const s = createInitialState();
     const { api, view } = fakeApi(() => s);
     view.skillId = 'fireball';
-    expect(PANEL_BY_ID.skills.render(s, api)).toContain('未习得');
+    // 开局就会，所以不该再出现「未习得」
+    expect(PANEL_BY_ID.skills.render(s, api)).not.toContain('未习得');
 
-    s.skills.fireball = 1;
     s.skillPoints = 5;
     expect(PANEL_BY_ID.skills.render(s, api)).toContain('升级到 Lv2');
     PANEL_BY_ID.skills.action('upgrade', '', s, api);
@@ -138,10 +138,10 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(Object.keys(s.equipped).length).toBe(1);
   });
 
-  it('药店：等级 <10 无药可买；有钱后购买回血', () => {
+  it('药店：一级就有小药（无自动回复）；有钱后购买回血', () => {
     const s = createInitialState();
     const { api } = fakeApi(() => s);
-    expect(PANEL_BY_ID.shop.render(s, api)).toContain('等级不足 10 级');
+    expect(PANEL_BY_ID.shop.render(s, api)).not.toContain('等级不足 10 级');
 
     s.level = 20;
     s.gold = 100;

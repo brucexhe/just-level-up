@@ -598,6 +598,7 @@ const shopPanel: PanelDef = {
       ${card('hp', '🧴', `${tier}级回血药`, `回复 ${fmtNum(tier)} 点生命`)}
       ${card('mp', '🔷', `${tier}级回蓝药`, `回复 ${fmtNum(tier)} 点法力`)}
       <div class="note" style="margin-top:10px">
+        <b>不会自动回血回蓝</b>：除了升级和死亡复活会回满，平时只能靠这里的药。
         金币<b>唯一来源</b>是怪物掉落（掉金币 = 怪物等级），<b>唯一用途</b>是买药；装备和技能书只能靠打怪掉落。
       </div>
     `;

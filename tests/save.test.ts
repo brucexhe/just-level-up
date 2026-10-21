@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { dropEquipment } from '../src/core/equipment';
 import { dropSkillBook } from '../src/core/skills';
-import { createInitialState, gainExp, maxHp } from '../src/state/gameState';
+import { createInitialState, gainExp, maxHp, maxMp } from '../src/state/gameState';
 import {
   DEFAULT_PREFS,
   backupAt,
@@ -41,6 +41,51 @@ describe('存档读写', () => {
     expect(back!.inventory).toHaveLength(1);
     expect(back!.inventory[0].id).toBe(item.id);
     expect(back!.skillBooks).toHaveLength(1);
+  });
+
+  it('读档保留实时血蓝（不是回满，也不是初始 10）', () => {
+    const s = createInitialState();
+    s.level = 30;
+    s.baseStats.hp = 60; // 上限远高于初始 10
+    s.hp = 7;
+    s.mp = 3;
+    saveState(s);
+
+    const back = loadState()!;
+    expect(maxHp(back)).toBeGreaterThan(10);
+    expect(back.hp).toBe(7);
+    expect(back.mp).toBe(3);
+  });
+
+  it('血蓝读档会被夹到上限内；缺失或非法则按满值处理', () => {
+    const s = createInitialState();
+    s.hp = 999999; // 超过上限
+    s.mp = 999999;
+    saveState(s);
+    const over = loadState()!;
+    expect(over.hp).toBe(maxHp(over));
+    expect(over.mp).toBe(maxMp(over));
+
+    // 缺字段（旧存档 / 手改坏的）→ 满血满蓝，不能是 0
+    const none = normalizeState({ level: 5, baseStats: { hp: 30, mp: 20 } });
+    expect(none.hp).toBe(maxHp(none));
+    expect(none.mp).toBe(maxMp(none));
+    expect(none.hp).toBeGreaterThan(0);
+
+    const neg = normalizeState({ hp: -5, mp: -1, baseStats: { hp: 30, mp: 20 } });
+    expect(neg.hp).toBe(maxHp(neg));
+    expect(neg.mp).toBe(maxMp(neg));
+  });
+
+  it('恢复备份同样保留血蓝', () => {
+    const s = createInitialState();
+    s.baseStats.hp = 50;
+    s.hp = 12;
+    s.mp = 4;
+    backupState(s);
+    const back = restoreBackup()!;
+    expect(back.hp).toBe(12);
+    expect(back.mp).toBe(4);
   });
 
   it('没有存档或存档损坏都返回 null', () => {

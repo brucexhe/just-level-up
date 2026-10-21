@@ -1,7 +1,13 @@
 import { EQUIP_SLOTS, type EquipSlot, type EquipmentItem } from '../core/equipment';
 import { BASE_ATTRS, type AttrSet } from '../core/types';
 import { SKILLS, type SkillId } from '../data/skills';
-import { createInitialState, dayKey, type GameState } from './gameState';
+import {
+  createInitialState,
+  dayKey,
+  maxHp,
+  maxMp,
+  type GameState,
+} from './gameState';
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = 'level-up/save/v1';
@@ -181,7 +187,10 @@ export function normalizeState(raw: unknown): GameState {
       }
     }
   }
-  if (!s.skills.attack) s.skills.attack = 1;
+  // 三个主动技能默认就会（旧档也补上），只是等级低
+  for (const id of ['attack', 'fireball', 'frenzy', 'poison'] as SkillId[]) {
+    if (!((s.skills[id] ?? 0) > 0)) s.skills[id] = 1;
+  }
 
   s.stage = Math.max(1, Math.floor(num(r.stage, 1)));
   s.stageDay = typeof r.stageDay === 'string' ? r.stageDay : dayKey();
@@ -202,7 +211,22 @@ export function normalizeState(raw: unknown): GameState {
       s.stages[Math.floor(stageNo)] = { killed, bossDead: raw.bossDead === true };
     }
   }
+
+  // 当前血蓝要跟着存档走：没有自动回复，读档不该白送满血，掉过的血也不该凭空回来。
+  // 必须放在装备/属性都还原之后 —— 上限 maxHp 依赖已穿戴的装备。
+  s.hp = clampCurrent(r.hp, maxHp(s));
+  s.mp = clampCurrent(r.mp, maxMp(s));
   return s;
+}
+
+/**
+ * 读档时的当前值：合法就夹到 [1, 上限]，缺失 / 非法（≤0）则按满值处理。
+ * 判断要基于「原值是否存在」，不能用 num(...) 的默认值兜 —— 否则旧存档会读成初始值 10。
+ */
+function clampCurrent(raw: unknown, max: number): number {
+  const top = Math.max(1, max);
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return top;
+  return Math.max(1, Math.min(Math.floor(raw), top));
 }
 
 function read(key: string): SaveEnvelope | null {

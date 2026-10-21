@@ -160,8 +160,9 @@ describe('economy / potions', () => {
     expect(goldDrop(37)).toBe(37);
   });
 
-  it('potion tier by level/10', () => {
-    expect(potionTier(9)).toBe(0);
+  it('potion tier by level/10（10 级前退化为按等级的小药）', () => {
+    expect(potionTier(1)).toBe(1);
+    expect(potionTier(9)).toBe(9);
     expect(potionTier(10)).toBe(10);
     expect(potionTier(99)).toBe(90);
     expect(potionTier(100)).toBe(100);
@@ -169,10 +170,11 @@ describe('economy / potions', () => {
     expect(potionTier(900)).toBe(900);
   });
 
-  it('potion heal & price = tier; no potions below Lv10', () => {
+  it('potion heal & price = tier（前期也有药，因为没有自动回复）', () => {
     expect(potionHeal(90)).toBe(90);
     expect(potionPrice(90)).toBe(90);
-    expect(canBuyPotion(9)).toBe(false);
+    expect(canBuyPotion(1)).toBe(true);
+    expect(canBuyPotion(9)).toBe(true);
     expect(canBuyPotion(10)).toBe(true);
   });
 
