@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createMonster } from '../src/game/combat';
 import { attackIntervalMs, computeDamage, mitigationRate } from '../src/core/formulas';
 import { expToNext, killExp } from '../src/core/progression';
@@ -172,19 +172,19 @@ describe('成型后的平衡模拟', () => {
   });
 
   /**
-   * BOSS 法术压力：对比「一点法防都不投」和「自由点全投法防」能扛几下法术。
-   * 这条表就是「后期必须有法防」这个需求的验收标准 —— 差得不够多就说明
-   * BOSS_MATK_MULT / BOSS_MDEF_MULT 调得还不够。
+   * BOSS 法术压力：对比「一点法防都不投」和「自由点全投法防」各自能扛几下法术。
+   * 这张表就是「后期必须有法防」这个需求的验收标准 ——
+   * 两组数字差得不够多，就说明 BOSS_MATK_MULT / BOSS_MDEF_MULT 调得还不够。
    */
-  it('BOSS 法术压力：不堆法防会被几下打死', () => {
+  it('BOSS 法术压力：不堆法防会被几下打死，堆了才扛得住', () => {
     console.log('\n【BOSS 法术 vs 玩家法防（打同级）】\n');
-    console.log('等级    BOSS法攻   裸法防  裸装挨打  可扛 │ 全投法防  挨打  可扛');
+    console.log('等级   BOSS法攻   裸法防  挨打  可扛 │ 全投法防  挨打  可扛');
     for (const lv of LEVELS) {
       const boss = createMonster(lv, true);
       const mAtk = boss.stats.mAtk ?? 1;
-      const bareDef = BASE_ATTR_START + (lv - 1); // 只吃自动成长
-      const maxDef = bareDef + (lv - 1); // 自由点全投法防
-      const hp = bareDef; // 不投血时，血量 = 自动成长值
+      const bareDef = BASE_ATTR_START + (lv - 1);
+      const maxDef = bareDef + (lv - 1);
+      const hp = bareDef;
       const hit = (def: number) =>
         computeDamage({ attack: mAtk, defense: def, attackerLevel: lv }, () => 0.5);
       const d1 = hit(bareDef);
@@ -192,16 +192,25 @@ describe('成型后的平衡模拟', () => {
       console.log(
         `Lv${String(lv).padEnd(5)} ${String(mAtk).padStart(9)} ${String(
           bareDef,
-        ).padStart(9)} ${String(d1).padStart(9)} ${String(
+        ).padStart(8)} ${String(d1).padStart(6)} ${String(
           Math.ceil(hp / d1),
         ).padStart(5)} │ ${String(maxDef).padStart(9)} ${String(d2).padStart(6)} ${String(
           Math.ceil(hp / d2),
         ).padStart(5)}`,
       );
-      // 裸装扛不住：几下就死；堆了法防明显能多扛
-      expect(Math.ceil(hp / d1)).toBeLessThanOrEqual(5);
-      expect(Math.ceil(hp / d2)).toBeGreaterThan(Math.ceil(hp / d1));
-    });
+      // 法术那一发一定要比 BOSS 自己的物理普攻疼
+      const phys = computeDamage(
+        { attack: boss.stats.pAtk ?? 1, defense: bareDef, attackerLevel: lv },
+        () => 0.5,
+      );
+      expect(d1).toBeGreaterThan(phys);
+      // 裸装在后期扛不住：5 下以内必死
+      if (lv >= 100) {
+        expect(Math.ceil(hp / d1)).toBeLessThanOrEqual(5);
+        // 把自由点全投法防之后，明显能多扛
+        expect(Math.ceil(hp / d2)).toBeGreaterThan(Math.ceil(hp / d1));
+      }
+    }
   });
 });
 
