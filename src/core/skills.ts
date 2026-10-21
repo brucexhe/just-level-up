@@ -1,16 +1,16 @@
-import { rollItemPoints } from './loot';
+import { rollDropLevel } from './loot';
 import { BOOK_SKILLS, type SkillDef } from '../data/skills';
 
 export interface SkillBook {
   id: string;
   skillId: SkillDef['id'];
-  /** 技能书点数 ≤ 掉落怪等级；卖出回收半数 → 技能点 */
+  /** 书的等级 ∈ [所属关卡最低等级, 掉落怪等级]；穿上=把技能等级替换成它，卖出回收半数 → 技能点 */
   points: number;
 }
 
 let bookSeq = 0;
 
-/** 打怪掉技能书：点数 ∈ [1, monsterLevel]，技能从火球/狂暴/毒刃里随机（不含普攻） */
+/** 打怪掉技能书：等级 ∈ [关卡最低等级, 怪等级]，技能从火球/狂暴/毒刃里随机（不含普攻） */
 export function dropSkillBook(
   monsterLevel: number,
   rng: () => number = Math.random,
@@ -20,7 +20,7 @@ export function dropSkillBook(
   return {
     id: `sb-${Date.now().toString(36)}-${bookSeq}`,
     skillId: def.id,
-    points: Math.max(1, rollItemPoints(monsterLevel, rng)),
+    points: rollDropLevel(monsterLevel, rng),
   };
 }
 

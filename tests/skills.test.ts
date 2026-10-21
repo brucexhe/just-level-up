@@ -7,7 +7,14 @@ import {
   skillValue,
   skillUpgradeCost,
 } from '../src/core/skills';
-import { dropEquipment, rarityForRatio } from '../src/core/equipment';
+import {
+  dropEquipment,
+  maxRarityOfLevel,
+  rollRarity,
+  TIER_ORDER,
+  totalPoints,
+} from '../src/core/equipment';
+import { BALANCE } from '../src/core/balance';
 import {
   createInitialState,
   equipBest,
@@ -34,11 +41,11 @@ describe('技能书 / 技能点', () => {
     expect([...got].sort()).toEqual(['fireball', 'frenzy', 'poison']);
   });
 
-  it('掉落技能书点数封顶在怪物等级', () => {
-    for (let ml = 1; ml <= 30; ml++) {
-      const b = dropSkillBook(ml, fixed(0.99));
-      expect(b.points).toBeGreaterThanOrEqual(1);
-      expect(b.points).toBeLessThanOrEqual(ml);
+  it('掉出来的技能书等级 ∈ [关卡最低等级, 怪等级]：第 3 关 26 级怪 → 21-26', () => {
+    for (let i = 0; i < 300; i++) {
+      const b = dropSkillBook(26);
+      expect(b.points).toBeGreaterThanOrEqual(21);
+      expect(b.points).toBeLessThanOrEqual(26);
     }
   });
 
@@ -153,20 +160,76 @@ describe('技能书 / 技能点', () => {
   });
 });
 
-describe('装备稀有度', () => {
-  it('点数占满预算时稀有度更高', () => {
-    expect(rarityForRatio(0.05)).toBe('common');
-    expect(rarityForRatio(0.2)).toBe('fine');
-    expect(rarityForRatio(0.4)).toBe('rare');
-    expect(rarityForRatio(0.6)).toBe('epic');
-    expect(rarityForRatio(0.8)).toBe('legend');
-    expect(rarityForRatio(1)).toBe('myth');
+describe('装备品质（贪婪洞窟式：品质 = 权重 roll + 词条数 + 倍率）', () => {
+  it('等级封顶品质：每 2 级一档（1-2 普通 … 9-10 传说），神话不在阶梯里', () => {
+    const ladder: [number, string][] = [
+      [1, 'common'], [2, 'common'], [3, 'fine'], [4, 'fine'],
+      [5, 'rare'], [6, 'rare'], [7, 'epic'], [8, 'epic'],
+      [9, 'legend'], [10, 'legend'],
+      // 第 3 关同理：21-22 普通、25-26 稀有、29-30 传说
+      [21, 'common'], [26, 'rare'], [30, 'legend'],
+      [41, 'common'], [100, 'legend'],
+    ];
+    for (const [lv, r] of ladder) expect(maxRarityOfLevel(lv)).toBe(r);
   });
 
-  it('掉落的装备带稀有度与来源等级', () => {
-    const it = dropEquipment(20, fixed(0.5));
-    expect(it.rarity).toBeDefined();
-    expect(it.sourceLevel).toBe(20);
+  it('rollRarity 只在够得着的档位里按权重归一化，普通怪摸不到神话', () => {
+    // 封顶普通 → 池子里只有普通
+    expect(rollRarity('common', fixed(0.99))).toBe('common');
+    // 封顶稀有（权重 60/25/10，总 95）：rng 精确卡档
+    expect(rollRarity('rare', fixed(0.5))).toBe('common'); // 47.5 < 60
+    expect(rollRarity('rare', fixed(0.7))).toBe('fine'); // 66.5 落在 (60, 85]
+    expect(rollRarity('rare', fixed(0.98))).toBe('rare'); // 93.1 落在 (85, 95]
+    expect(rollRarity('legend', fixed(0.999999))).toBe('legend'); // 不带 myth 就永远到不了神话
+  });
+
+  it('整条掉落流水线：21 级怪必普通；26 级怪的分布符合权重 × 等级封顶', () => {
+    for (let i = 0; i < 200; i++) {
+      expect(dropEquipment(21).rarity).toBe('common'); // 段首封顶普通
+    }
+    // 等级先均匀 roll ∈ [21,26] 再封顶，期望 ≈ 普通 78% / 优秀 19% / 稀有 3.5%
+    let c = 0, f = 0, r = 0;
+    for (let i = 0; i < 3000; i++) {
+      const it = dropEquipment(26);
+      if (it.rarity === 'common') c++;
+      else if (it.rarity === 'fine') f++;
+      else if (it.rarity === 'rare') r++;
+      else throw new Error(`26 级普通怪不该掉 ${it.rarity}`);
+    }
+    expect(c / 3000).toBeGreaterThan(0.74);
+    expect(c / 3000).toBeLessThan(0.82);
+    expect(f / 3000).toBeGreaterThan(0.15);
+    expect(f / 3000).toBeLessThan(0.22);
+    expect(r / 3000).toBeGreaterThan(0.02);
+    expect(r / 3000).toBeLessThan(0.05);
+  });
+
+  it('总点数 = round(等级 × 品质倍率)，词条数 = 品质词条数', () => {
+    for (let i = 0; i < 200; i++) {
+      const it = dropEquipment(20); // 第 2 关（11-20 级）
+      const tier = TIER_ORDER.indexOf(it.rarity);
+      expect(it.level).toBeGreaterThanOrEqual(11);
+      expect(it.level).toBeLessThanOrEqual(20);
+      expect(totalPoints(it)).toBe(Math.round(it.level * BALANCE.RARITY_POINT_MULT[tier]!));
+      expect(Object.keys(it.stats).length).toBe(BALANCE.RARITY_AFFIXES[tier]!);
+    }
+  });
+
+  it('BOSS 保底装备 = BOSS 等级 + 神话（4 条、×2.2）', () => {
+    const it = dropEquipment(30, fixed(0.5), { bossGuarantee: true });
+    expect(it.level).toBe(30);
+    expect(it.rarity).toBe('myth');
+    expect(totalPoints(it)).toBe(Math.round(30 * BALANCE.RARITY_POINT_MULT[5]!));
+    expect(Object.keys(it.stats).length).toBe(BALANCE.RARITY_AFFIXES[5]!);
+  });
+
+  it('BOSS 额外判定：保底优秀起、可及神话（学"BOSS 必掉金色以上"）', () => {
+    expect(rollRarity('common', fixed(0), 'fine', true)).toBe('fine');
+    expect(rollRarity('common', fixed(0.999), 'fine', true)).toBe('myth');
+    for (let i = 0; i < 300; i++) {
+      const it = dropEquipment(26, Math.random, { minRarity: 'fine', allowMyth: true });
+      expect(TIER_ORDER.indexOf(it.rarity)).toBeGreaterThanOrEqual(1);
+    }
   });
 });
 

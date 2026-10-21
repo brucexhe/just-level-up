@@ -245,7 +245,7 @@ const equipmentPanel: PanelDef = {
           ? `<b>${SLOT_META[sel].name}</b> 部位空着，去「背包」挑一件穿上。`
           : '点击上方任一部位查看 / 强化该装备。'
       }</div>
-      <div class="note" style="margin-top:6px">装备<b>无强化</b>：掉落总点数 ≤ 怪等级；<b>先卸下</b>再在「背包」里卖掉，可得 <b>总点数 ×50%</b> 的自由装备点，手动投到已穿戴装备上。</div>`;
+      <div class="note" style="margin-top:6px">装备<b>无强化</b>：总点数 = 等级 × 品质倍率（品质越高词条越多、倍率越高）；<b>先卸下</b>再在「背包」里卖掉，可得 <b>总点数 ×50%</b> 的自由装备点，手动投到已穿戴装备上。</div>`;
     }
 
     return `

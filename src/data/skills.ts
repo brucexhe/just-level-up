@@ -43,7 +43,7 @@ export const SKILLS: SkillDef[] = [
     mpCost: 2,
     mpCostGrowth: 0.6,
     cdMs: 2500,
-    power: 2,
+    power: 1,
     value: 90,
     desc: '需先用左键选中一只怪：火球会自动追向它，命中后范围爆裂，法术伤害。',
   },

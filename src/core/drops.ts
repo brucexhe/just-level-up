@@ -10,8 +10,9 @@ export type GroundDrop =
 /**
  * 一次击杀的掉落结算（纯函数，便于单测与调参）。
  *
- * - 掉落很稀有：装备 6%、技能书 4%，两者**互斥**（一次最多掉一样东西，总掉率 10%）。
- * - BOSS 每 10 级才一只，保底 1 件装备作为里程碑奖励，另有一次普通判定的机会。
+ * - 装备 12%、技能书 8%，两者**互斥**（一次最多掉一样东西，总掉率 20%）。
+ * - BOSS 每 10 级才一只，保底 1 件**神话**装备（等级 = BOSS 等级）作为里程碑奖励，
+ *   另有一次普通判定的机会 —— 那次保底优秀起、可摸到神话（学贪婪洞窟"BOSS 必掉金色以上"）。
  * - 掉落物会掉在怪物尸体位置，需要角色走过去才会拾取（见场景 GroundDropView）。
  */
 export function rollDrops(
@@ -21,11 +22,21 @@ export function rollDrops(
 ): GroundDrop[] {
   const out: GroundDrop[] = [];
   if (isBoss) {
-    out.push({ kind: 'equip', item: dropEquipment(monsterLevel, rng) });
+    out.push({
+      kind: 'equip',
+      item: dropEquipment(monsterLevel, rng, { bossGuarantee: true }),
+    });
   }
   const r = rng();
   if (r < BALANCE.DROP_EQUIP_CHANCE) {
-    out.push({ kind: 'equip', item: dropEquipment(monsterLevel, rng) });
+    out.push({
+      kind: 'equip',
+      item: dropEquipment(
+        monsterLevel,
+        rng,
+        isBoss ? { minRarity: 'fine', allowMyth: true } : {},
+      ),
+    });
   } else if (r < BALANCE.DROP_EQUIP_CHANCE + BALANCE.DROP_BOOK_CHANCE) {
     out.push({ kind: 'book', book: dropSkillBook(monsterLevel, rng) });
   }

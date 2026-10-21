@@ -1752,7 +1752,7 @@ export class StageBattleScene extends Phaser.Scene {
     drops.forEach((d, i) => {
       const jx = px + (i === 0 ? 0 : Phaser.Math.Between(-26, 26));
       const jy = py + (i === 0 ? 0 : Phaser.Math.Between(-26, 26));
-      this.spawnGroundDrop(d, jx, jy, ml);
+      this.spawnGroundDrop(d, jx, jy);
     });
 
     const dropText = drops.length
@@ -1793,20 +1793,22 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   /** 掉落物落在死亡点：光环 + 图标 +「等级 · 品质」标签，颜色按品质/技能区分 */
-  private spawnGroundDrop(d: GroundDrop, x: number, y: number, level: number) {
+  private spawnGroundDrop(d: GroundDrop, x: number, y: number) {
     const px = Phaser.Math.Clamp(x, 20, MAP_SIZE - 20);
     const py = Phaser.Math.Clamp(y, 20, MAP_SIZE - 20);
+    // 标签必须是掉落物**自己**的等级（装备 item.level / 技能书 book.points），
+    // 写怪等级的话，地上标 Lv26、捡起来背包里只有 Lv6，就是之前那个 bug
     const meta =
       d.kind === 'equip'
         ? {
             icon: SLOT_META[d.item.slot].icon,
             color: RARITY_META[d.item.rarity].color,
-            text: `Lv${level} · ${RARITY_META[d.item.rarity].name}`,
+            text: `Lv${d.item.level} · ${RARITY_META[d.item.rarity].name}`,
           }
         : {
             icon: SKILL_BY_ID[d.book.skillId].icon,
             color: BOOK_COLOR[d.book.skillId],
-            text: `Lv${level} · ${SKILL_BY_ID[d.book.skillId].name}书`,
+            text: `Lv${d.book.points} · ${SKILL_BY_ID[d.book.skillId].name}书`,
           };
     const tint = parseInt(meta.color.slice(1), 16);
 

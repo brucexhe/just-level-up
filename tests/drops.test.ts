@@ -22,21 +22,21 @@ function sampleDropRates(n: number, isBoss: boolean) {
   return { equip: equip / n, book: book / n, any: any / n, maxCount };
 }
 
-describe('掉落概率（装备 / 技能书都很稀有且互斥）', () => {
-  it('掉率常量都在 10% 以内，两者相加也 ≤ 10%', () => {
-    expect(BALANCE.DROP_EQUIP_CHANCE).toBeLessThan(0.1);
-    expect(BALANCE.DROP_BOOK_CHANCE).toBeLessThan(0.1);
-    expect(BALANCE.DROP_EQUIP_CHANCE + BALANCE.DROP_BOOK_CHANCE).toBeLessThanOrEqual(0.1);
+describe('掉落概率（装备 / 技能书互斥）', () => {
+  it('掉率常量：装备 12% + 技能书 8% = 总 20%', () => {
+    expect(BALANCE.DROP_EQUIP_CHANCE).toBeCloseTo(0.12);
+    expect(BALANCE.DROP_BOOK_CHANCE).toBeCloseTo(0.08);
+    expect(BALANCE.DROP_EQUIP_CHANCE + BALANCE.DROP_BOOK_CHANCE).toBeCloseTo(0.2);
   });
 
-  it('普通怪：装备约 6%、技能书约 4%，总掉率约 10%', () => {
+  it('普通怪：装备约 12%、技能书约 8%，总掉率约 20%', () => {
     const r = sampleDropRates(40000, false);
-    expect(r.equip).toBeGreaterThan(0.05);
-    expect(r.equip).toBeLessThan(0.07);
-    expect(r.book).toBeGreaterThan(0.03);
-    expect(r.book).toBeLessThan(0.05);
-    expect(r.any).toBeGreaterThan(0.09);
-    expect(r.any).toBeLessThan(0.11);
+    expect(r.equip).toBeGreaterThan(0.11);
+    expect(r.equip).toBeLessThan(0.13);
+    expect(r.book).toBeGreaterThan(0.07);
+    expect(r.book).toBeLessThan(0.09);
+    expect(r.any).toBeGreaterThan(0.19);
+    expect(r.any).toBeLessThan(0.21);
   });
 
   it('普通怪一次最多掉 1 样东西', () => {
@@ -59,11 +59,12 @@ describe('掉落概率（装备 / 技能书都很稀有且互斥）', () => {
     expect(alwaysEquip).toBe(true);
   });
 
-  it('大部分击杀什么都不掉（这是有意为之）', () => {
+  it('大部分击杀仍然什么都不掉（约八成）', () => {
     let total = 0;
     const n = 20000;
     for (let i = 0; i < n; i++) total += rollDrops(20, false, Math.random).length;
-    expect(total / n).toBeLessThan(0.15);
+    expect(total / n).toBeGreaterThan(0.18);
+    expect(total / n).toBeLessThan(0.22);
   });
 
   it('掉出来的技能书不会是普攻', () => {
@@ -75,16 +76,21 @@ describe('掉落概率（装备 / 技能书都很稀有且互斥）', () => {
     }
   });
 
-  it('掉落物带等级信息（装备用 sourceLevel，技能书点数 ≤ 等级）', () => {
+  it('掉落物带等级信息（BOSS 保底 = BOSS 等级 + 神话；书等级 ∈ 关卡段）', () => {
     for (const ml of [5, 15, 40]) {
       const d = rollDrops(ml, true, () => 0.5);
+      // rng=0.5 已超过普通掉率，只会出 BOSS 保底那一件
       const eq = d.find((x) => x.kind === 'equip');
       expect(eq).toBeTruthy();
-      if (eq && eq.kind === 'equip') expect(eq.item.sourceLevel).toBe(ml);
+      if (eq && eq.kind === 'equip') {
+        expect(eq.item.level).toBe(ml);
+        expect(eq.item.rarity).toBe('myth');
+      }
     }
     const b = rollDrops(12, false, () => BALANCE.DROP_EQUIP_CHANCE + 0.001);
     if (b[0]!.kind === 'book') {
-      expect(b[0]!.book.points).toBeGreaterThanOrEqual(1);
+      // 12 级怪在第 2 关（11-20）：书等级只能是 11 或 12
+      expect(b[0]!.book.points).toBeGreaterThanOrEqual(11);
       expect(b[0]!.book.points).toBeLessThanOrEqual(12);
     }
   });

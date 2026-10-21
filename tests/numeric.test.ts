@@ -28,7 +28,7 @@ import {
   sellGold,
   sellRefundPoints,
 } from '../src/core/economy';
-import { distributePoints, rollItemPoints } from '../src/core/loot';
+import { distributePoints, rollDropLevel } from '../src/core/loot';
 import {
   levelBandOfStage,
   maxUnlockedStage,
@@ -227,20 +227,24 @@ describe('economy / potions', () => {
 });
 
 describe('loot', () => {
-  it('item points within [1, monsterLevel]', () => {
+  it('drop level within [stage lo, monsterLevel], both inclusive', () => {
     for (let ml = 1; ml <= 50; ml++) {
-      const p = rollItemPoints(ml, fixed(0.999));
-      expect(p).toBeGreaterThanOrEqual(1);
-      expect(p).toBeLessThanOrEqual(ml);
+      const [bandLo] = levelBandOfStage(stageIndexForLevel(ml));
+      // rng=0 → 下限，rng≈1 → 上限，两端都必须取得到
+      expect(rollDropLevel(ml, fixed(0))).toBe(bandLo);
+      expect(rollDropLevel(ml, fixed(0.999))).toBe(ml);
     }
   });
 
-  it('distributed points sum == budget, each >= 1', () => {
-    for (let budget = 1; budget <= 30; budget++) {
-      for (const r of [0, 0.3, 0.7, 0.99]) {
-        const parts = distributePoints(budget, fixed(r));
-        expect(parts.reduce((a, b) => a + b, 0)).toBe(budget);
-        expect(parts.every((x) => x >= 1)).toBe(true);
+  it('distributed points: sum == budget, count == min(lines, budget), each >= 1', () => {
+    for (const lines of [1, 2, 3, 4]) {
+      for (let budget = 1; budget <= 30; budget++) {
+        for (const r of [0, 0.3, 0.7, 0.99]) {
+          const parts = distributePoints(budget, lines, fixed(r));
+          expect(parts.reduce((a, b) => a + b, 0)).toBe(budget);
+          expect(parts.length).toBe(Math.min(lines, budget));
+          expect(parts.every((x) => x >= 1)).toBe(true);
+        }
       }
     }
   });

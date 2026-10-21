@@ -144,7 +144,8 @@ function item(raw: unknown): EquipmentItem | null {
     stats: stats(r.stats),
     freeAllocated: stats(r.freeAllocated),
     rarity: typeof r.rarity === 'string' ? (r.rarity as EquipmentItem['rarity']) : 'common',
-    sourceLevel: num(r.sourceLevel, 1),
+    // 旧档字段叫 sourceLevel（= 掉落怪等级）；现在 level 是装备自身等级
+    level: Math.max(1, Math.floor(num(r.level, num(r.sourceLevel, 1)))),
   };
 }
 
