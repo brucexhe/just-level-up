@@ -113,18 +113,37 @@ describe('formulas', () => {
 });
 
 describe('progression', () => {
-  it('expToNext = level+1', () => {
-    expect(expToNext(99)).toBe(100);
-    expect(expToNext(1)).toBe(2);
+  it('expToNext = 5×等级^1.5（幂律，不是常数步长的线性）', () => {
+    expect(expToNext(1)).toBe(5);
+    expect(expToNext(9)).toBe(135);
+    expect(expToNext(99)).toBe(4925);
+    // 需求必须比"怪给的经验(∝等级)"长得快，否则永远 1 只怪 1 级
+    for (const L of [1, 5, 10, 100, 1000]) {
+      expect(expToNext(L * 2) / expToNext(L)).toBeGreaterThan(2);
+    }
   });
 
-  it('cumulative matches sum of expToNext (~1 kill/level)', () => {
+  it('cumulative 与逐级的 expToNext 之和一致', () => {
     expect(cumulativeExp(1)).toBe(0);
-    expect(cumulativeExp(2)).toBe(2);
-    expect(cumulativeExp(100)).toBe(5049);
-    // 同级别怪 1 杀 1 级
+    expect(cumulativeExp(2)).toBe(expToNext(1));
+    let sum = 0;
+    for (let i = 1; i < 100; i++) sum += expToNext(i);
+    expect(cumulativeExp(100)).toBe(sum);
+    // 同级别怪的经验收益仍是线性的
     expect(killExp(9)).toBe(9);
-    expect(expToNext(9)).toBe(10);
+  });
+
+  it('杀同级怪升级所需只数 ≈ 5×√等级（前期不拖、后期变硬）', () => {
+    const kills = (L: number) => Math.ceil(expToNext(L) / killExp(L));
+    expect(kills(1)).toBe(5);
+    expect(kills(10)).toBe(16);
+    expect(kills(100)).toBe(50);
+    expect(kills(1000)).toBe(159);
+    expect(kills(10000)).toBe(500);
+    // 单调递增
+    for (const L of [1, 10, 100, 1000, 10000]) {
+      expect(kills(L * 4)).toBeGreaterThan(kills(L) * 1.5);
+    }
   });
 
   it('isBreakthrough every 10 levels', () => {

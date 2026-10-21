@@ -38,10 +38,11 @@ describe('P2 growth loop closes at locked starting values', () => {
 
   it('killing Lv1 monsters levels the player up and yields spendable points', () => {
     const s = createInitialState();
-    // 升 1→2 需 expToNext(1)=2 经验；每杀 Lv1 得 killExp(1)=1
+    // 升 1→2 需 expToNext(1)=5 经验；每杀 Lv1 得 killExp(1)=1 → 5 只升一级
     const need = expToNext(1);
     const perKill = killExp(1);
     const kills = Math.ceil(need / perKill);
+    expect(kills).toBeGreaterThan(1); // 回归：不能再退回「1 只怪 1 级」
     for (let i = 0; i < kills; i++) gainExp(s, perKill);
     expect(s.level).toBe(2);
     expect(s.attrPoints).toBe(1);
