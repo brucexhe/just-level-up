@@ -1,4 +1,11 @@
 import Phaser from 'phaser';
+import {
+  STAGES,
+  STAGE_COUNT,
+  type PropShape,
+  type PropStyle,
+  type StageDef,
+} from '../data/stages';
 
 type Grid = string[];
 type Palette = Record<string, number>;
@@ -119,6 +126,209 @@ export function bakeGrass(scene: Phaser.Scene): void {
 /** 草地底色，小地图等处复用，保证美术一致 */
 export const GRASS_BASE = 0x559851;
 
+/**
+ * 按关卡生成地面：底色 + 噪点 + 点缀。
+ * 10 关各有自己的配色和点缀形状（花 / 沙纹 / 雪点 / 裂缝 / 符文 …），
+ * 用同一个函数画，避免为每关写一遍。
+ */
+export function bakeGround(scene: Phaser.Scene, s: StageDef): void {
+  const key = groundKey(s.id);
+  if (scene.textures.exists(key)) return;
+  const { base, noise, accent, accentKind, density } = s.ground;
+  const g = scene.make.graphics({ x: 0, y: 0 });
+  g.fillStyle(base, 1).fillRect(0, 0, 64, 64);
+  const rnd = new Phaser.Math.RandomDataGenerator([`ground-${s.id}`]);
+
+  // 噪点：密度够高才有颗粒感，否则整屏像一块纯色
+  for (let i = 0; i < (density ?? 380); i++) {
+    g.fillStyle(rnd.pick(noise), 1).fillRect(rnd.between(0, 63), rnd.between(0, 63), 1, 1);
+  }
+
+  // 点缀：每关一种，随机撒 6 处
+  for (let i = 0; i < 6; i++) {
+    const x = rnd.between(3, 58);
+    const y = rnd.between(3, 58);
+    switch (accentKind) {
+      case 'flower': // 小花：一片亮叶 + 一个花点
+        g.fillStyle(accent, 1).fillRect(x, y, 2, 1);
+        g.fillStyle(rnd.pick([0xf0dc60, 0xe07a96]), 1).fillRect(x + 1, y - 1, 1, 1);
+        break;
+      case 'mushroom': // 小蘑菇：柄 + 伞
+        g.fillStyle(0xd8d0b0, 1).fillRect(x, y, 1, 2);
+        g.fillStyle(accent, 1).fillRect(x - 1, y - 1, 3, 1);
+        break;
+      case 'sand': // 风吹的沙纹：一条短横线
+        g.fillStyle(accent, 1).fillRect(x, y, rnd.between(3, 6), 1);
+        break;
+      case 'snow': // 雪：几粒白点
+        for (let k = 0; k < 3; k++) {
+          g.fillStyle(accent, 1).fillRect(x + k * 2, y + (k % 2), 1, 1);
+        }
+        break;
+      case 'pebble': // 泥沼里的小石头
+        g.fillStyle(accent, 1).fillRect(x, y, 2, 1);
+        g.fillStyle(0x2a2a1e, 1).fillRect(x, y + 1, 2, 1);
+        break;
+      case 'crack': // 熔岩缝：一条竖着的橙红裂纹
+        g.fillStyle(accent, 1).fillRect(x, y, 1, rnd.between(2, 4));
+        g.fillStyle(0xffd08a, 1).fillRect(x, y, 1, 1);
+        break;
+      case 'rune': // 深渊符文：一个十字
+        g.fillStyle(accent, 1).fillRect(x, y, 3, 1);
+        g.fillStyle(accent, 1).fillRect(x + 1, y - 1, 1, 3);
+        break;
+      case 'cloud': // 云：一小片白
+        g.fillStyle(accent, 1).fillRect(x, y, 4, 1);
+        g.fillStyle(accent, 1).fillRect(x + 1, y - 1, 2, 1);
+        break;
+      case 'brick': // 碎砖：一块矩形
+        g.fillStyle(accent, 1).fillRect(x, y, 3, 2);
+        break;
+      case 'star': // 星：一个亮点带十字光
+        g.fillStyle(accent, 1).fillRect(x, y, 1, 1);
+        g.fillStyle(0xb8c4ff, 1).fillRect(x - 1, y, 3, 1);
+        break;
+    }
+  }
+  g.generateTexture(key, 64, 64);
+  g.destroy();
+}
+
+export function groundKey(stageId: number): string {
+  return `ground-${stageId}`;
+}
+
+/** 障碍形状：共用一套像素骨架，按关卡上色（M=主 D=暗 W=高光 T=辅） */
+const PROP_SHAPES: Record<PropShape, string[]> = {
+  tree: [
+    '.....MM.....',
+    '...MMMMMM...',
+    '..MMMMMMMM..',
+    '.MMMWMMMMDD.',
+    '.MMMMMMMDDD.',
+    '..MMMMMDDDD.',
+    '...MMDDDDD..',
+    '.....TT.....',
+    '.....TT.....',
+    '....TTTT....',
+  ],
+  pine: [
+    '.....MM.....',
+    '....MMMM....',
+    '...MMMMMM...',
+    '..MMWMMMMM..',
+    '..MMMMMMDD..',
+    '...MMMMMM...',
+    '..MMMMMMMM..',
+    '.MMMMMMMMDD.',
+    '...MMMMMM...',
+    '.....TT.....',
+  ],
+  cactus: [
+    '....MM....',
+    '..M.MM.M..',
+    '..M.MM.M..',
+    'MMMMMMMMMM',
+    'MMMWMMMMMD',
+    'MMMMMMMMMD',
+    '.MMMMMMMD.',
+    '...MMMM...',
+    '...MMMM...',
+    '...MMMM...',
+  ],
+  rock: [
+    '..........',
+    '...MMMM...',
+    '..MWMWMM..',
+    '.MMMWMMMMD',
+    '.MMMMMMDMD',
+    'MMMMMMMMDD',
+    'MMDMMMMDDD',
+    '.DDDDDDDD.',
+  ],
+  bush: [
+    '..........',
+    '..MM.MM...',
+    '.MMMMMMM..',
+    'MMMWMMMMM.',
+    'MMMMMMMMD.',
+    '.MMDMMMDD.',
+    '..DDDDDD..',
+    '..........',
+  ],
+  mushroom: [
+    '...MMMM...',
+    '..MMMMMM..',
+    '.MWMMMMMD.',
+    '.MMMMMMMD.',
+    '...MTTM...',
+    '...MTTM...',
+    '...MTTM...',
+    '..TTTTTT..',
+  ],
+  crystal: [
+    '....MM....',
+    '...MMMM...',
+    '..MMWMMM..',
+    '..MMWMMD..',
+    '.MMMWMMD..',
+    '.MMMWMMD..',
+    '.MMMMMMD..',
+    '..MMMMD...',
+    '...MMD....',
+  ],
+  pillar: [
+    '..MMMMMM..',
+    '..MWMMMD..',
+    '..MMMMMD..',
+    '..MMMMMD..',
+    '..MMMMMD..',
+    '..MMMMMD..',
+    '..MMMMMD..',
+    '.MMMMMMMD.',
+    '.MMMMMMMD.',
+  ],
+  deadtree: [
+    '..M....M..',
+    '...M..M...',
+    '..M.MM.M..',
+    '...MMMM...',
+    '..M.MM.M..',
+    '....MM....',
+    '...MMMM...',
+    '....MM....',
+    '....MM....',
+    '...MMMM...',
+  ],
+  ice: [
+    '....MM....',
+    '...MMMM...',
+    '..MMWMMM..',
+    '..MMWMMD..',
+    '.MMMWMMD..',
+    '.MMMMMMD..',
+    '..MMMMD...',
+    '...MMD....',
+  ],
+};
+
+/** 按关卡配置 bake 一种障碍 */
+export function bakeProp(scene: Phaser.Scene, stageId: number, p: PropStyle): void {
+  const key = propKey(stageId, p.shape);
+  if (scene.textures.exists(key)) return;
+  const pal: Palette = {
+    M: p.main,
+    D: p.dark,
+    W: p.light ?? p.main,
+    T: p.extra ?? p.dark,
+  };
+  bakeGrid(scene, key, PROP_SHAPES[p.shape], pal);
+}
+
+export function propKey(stageId: number, shape: PropShape): string {
+  return `prop-${stageId}-${shape}`;
+}
+
 const PLAYER_PALETTE: Palette = {
   H: 0xc8d0e0,
   D: 0x6a7488,
@@ -163,127 +373,293 @@ export function bakePlayer(scene: Phaser.Scene): void {
 }
 
 /**
- * 史莱姆用青绿色：草地在改浅后是黄绿，同色系的绿史莱姆会糊在背景里，
- * 换成青绿色相即可一眼分辨。
+/**
+ * 怪物 = 形状骨架 × 配色。
+ *
+ * 一共 7 种骨架（史莱姆团 / 人形 / 巨兽 / 四足兽 / 虫 / 鸟 / 蟾），
+ * 10 关各配一套专属配色，所以每关的怪看起来都不一样，而代码量可控。
  */
-const SLIME_PALETTE: Palette = {
-  G: 0x2cbaa0,
-  D: 0x147a62,
-  W: 0xffffff,
-  B: 0x14202c,
+type MonsterShape = 'blob' | 'humanoid' | 'brute' | 'beast' | 'insect' | 'bird' | 'toad';
+
+const MONSTER_SHAPES: Record<MonsterShape, { a: string[]; b: string[] }> = {
+  blob: {
+    a: [
+      '............',
+      '....GGGG....',
+      '..GGGGGGGG..',
+      '.GGWWGGWWGG.',
+      '.GGBBGGGBBG.',
+      'GGGGGGGGGGGG',
+      'GGGGGGGGGGGG',
+      'GGDDDDDDDDGG',
+      '.GGGGGGGGGG.',
+      '..GGGGGGGG..',
+      '...DDDDDD...',
+      '............',
+    ],
+    b: [
+      '............',
+      '............',
+      '....GGGG....',
+      '..GGWWGGWW..',
+      '.GGBBGGGBBG.',
+      'GGGGGGGGGGGG',
+      'GGGGGGGGGGGG',
+      'GGDDDDDDDDGG',
+      'GGGGGGGGGGGG',
+      '.GGGGGGGGGG.',
+      '..DDDDDDDD..',
+      '............',
+    ],
+  },
+  humanoid: {
+    a: [
+      '..............',
+      '...G......G...',
+      '...GG....GG...',
+      '....GGGGGG....',
+      '...GGWGGWGG...',
+      '...GGBBGBBG...',
+      '....GGGGGG....',
+      '..CCGGGGGGCC..',
+      '..CCAAAAAACC..',
+      '....AAAAAA....',
+      '....LL..LL....',
+      '....LL..LL....',
+      '...LLL..LLL...',
+      '..............',
+    ],
+    b: [
+      '..............',
+      '...G......G...',
+      '...GG....GG...',
+      '....GGGGGG....',
+      '...GGWGGWGG...',
+      '...GGBBGBBG...',
+      '....GGGGGG....',
+      '..CCGGGGGGCC..',
+      '..CCAAAAAACC..',
+      '....AAAAAA....',
+      '.....LLLL.....',
+      '.....L..L.....',
+      '....LL..LL....',
+      '..............',
+    ],
+  },
+  brute: {
+    a: [
+      '................',
+      '....GGGGGGGG....',
+      '...GGGGGGGGGG...',
+      '...GGWGGGGWGG...',
+      '...GGBBGGGBBG...',
+      '...GGGGGGGGGG...',
+      '....DDDDDDDD....',
+      '..GGAAAAAAAAAA..',
+      '.GGGAAAAAAAAAAG.',
+      '.GG.AAAAAAAA.GG.',
+      '....AAAAAAAA....',
+      '....AAA..AAA....',
+      '....AAA..AAA....',
+      '...AAAA..AAAA...',
+      '................',
+      '................',
+    ],
+    b: [
+      '................',
+      '................',
+      '....GGGGGGGG....',
+      '...GGGGGGGGGG...',
+      '...GGWGGGGWGG...',
+      '...GGBBGGGBBG...',
+      '...GGGGGGGGGG...',
+      '....DDDDDDDD....',
+      '.GGGAAAAAAAAGG..',
+      'GGG.AAAAAAA.GGG.',
+      '....AAAAAAAA....',
+      '....AAA..AAA....',
+      '....AAA..AAA....',
+      '...AAAA..AAAA...',
+      '................',
+      '................',
+    ],
+  },
+  beast: {
+    a: [
+      '............',
+      '.G........G.',
+      '.GG......GG.',
+      '..GGGGGGGG..',
+      '..GGBBGGBB..',
+      '..GGGGGGGG..',
+      '.GGGGGGGGGG.',
+      '.GGGGGGGGGD.',
+      '..DGGGGGGD..',
+      '..L.L..L.L..',
+      '..L.L..L.L..',
+      '............',
+    ],
+    b: [
+      '............',
+      '............',
+      '.G........G.',
+      '.GG......GG.',
+      '..GGGGGGGG..',
+      '..GGBBGGBB..',
+      '..GGGGGGGG..',
+      '.GGGGGGGGGG.',
+      '.GGGGGGGGGD.',
+      '..DGGGGGGD..',
+      '.L.L....L.L.',
+      '............',
+    ],
+  },
+  insect: {
+    a: [
+      '............',
+      '.G.......G..',
+      '.GG.....GG..',
+      '..GGGGGGGG..',
+      '.GGGBGGBGGD.',
+      '.GGGGGGGGGD.',
+      '..DGGGGGGD..',
+      '....GGGG....',
+      '.L.L.LL.L.L.',
+      'L.L.L..L.L.L',
+      '............',
+      '............',
+    ],
+    b: [
+      '............',
+      '..G.......G.',
+      '..GG.....GG.',
+      '...GGGGGGGG.',
+      '..GGGBGGBGGD',
+      '..GGGGGGGGGD',
+      '...DGGGGGGD.',
+      '.....GGGG...',
+      '..LL..LL..L.',
+      '.L..LL..L.L.',
+      '............',
+      '............',
+    ],
+  },
+  bird: {
+    a: [
+      '..............',
+      '.GG........GG.',
+      'GGG........GGG',
+      'GGGG..GG..GGGG',
+      '.GGGGGGGGGGGG.',
+      '...GGBBGGBB...',
+      '....GGGGGG....',
+      '..CCGGGGGGCC..',
+      '..CCAAAAAACC..',
+      '....AAAAAA....',
+      '.....L..L.....',
+      '....LL..LL....',
+      '..............',
+      '..............',
+    ],
+    b: [
+      '..............',
+      '..............',
+      '.GG........GG.',
+      'GGG..GG....GGG',
+      'GGGGGGGGGGGGGG',
+      '...GGBBGGBB...',
+      '....GGGGGG....',
+      '..CCGGGGGGCC..',
+      '..CCAAAAAACC..',
+      '....AAAAAA....',
+      '.....LLLL.....',
+      '.....L..L.....',
+      '..............',
+      '..............',
+    ],
+  },
+  toad: {
+    a: [
+      '............',
+      '..G......G..',
+      '..GB....BG..',
+      '...GGGGGG...',
+      '..GGGGGGGG..',
+      '.GGGGGGGGGG.',
+      '.GGGGGGGGGG.',
+      '..DGGGGGGD..',
+      '.LLLLLLLLLL.',
+      'L.L.L..L.L.L',
+      '............',
+      '............',
+    ],
+    b: [
+      '............',
+      '............',
+      '..G......G..',
+      '..GB....BG..',
+      '...GGGGGG...',
+      '..GGGGGGGG..',
+      '.GGGGGGGGGG.',
+      '.GGGGGGGGGG.',
+      '..DGGGGGGD..',
+      '.LLLLLLLLLL.',
+      'L..L....L..L',
+      '............',
+    ],
+  },
 };
 
-export type MonsterSkin = 'slime' | 'goblin' | 'ogre';
+/** 10 关各自的怪物：骨架 + 配色（G 主色 D 暗色 W 眼白 B 眼珠 A 躯干 L 腿 C 武器） */
+const MONSTER_LOOK: Record<string, { shape: MonsterShape; pal: Palette }> = {
+  // 1 草原 —— 青绿史莱姆（草地是黄绿，青绿才不会糊在背景里）
+  slime: { shape: 'blob', pal: { G: 0x2cbaa0, D: 0x147a62, W: 0xffffff, B: 0x14202c } },
+  // 2 森林 —— 哥布林
+  goblin: {
+    shape: 'humanoid',
+    pal: { G: 0x5e8f2c, D: 0x35531c, W: 0xffffff, B: 0x14202c, A: 0x8a5a3a, C: 0x6a4a2a, L: 0x3a3a3a },
+  },
+  // 3 荒漠 —— 沙蝎
+  scorpion: { shape: 'insect', pal: { G: 0xc8a03a, D: 0x8a6418, W: 0xffe08a, B: 0x2a1c08, L: 0x6a4c10 } },
+  // 4 雪原 —— 雪狼
+  wolf: { shape: 'beast', pal: { G: 0xe8f0f8, D: 0x9aa8b8, W: 0xffffff, B: 0x14202c, L: 0xb8c6d4 } },
+  // 5 沼泽 —— 沼泽蟾
+  toad: { shape: 'toad', pal: { G: 0x5a7a3a, D: 0x2e4418, W: 0xffffff, B: 0x14202c, L: 0x3a5220 } },
+  // 6 火山 —— 熔岩兽
+  magma: {
+    shape: 'brute',
+    pal: { G: 0xd84a1a, D: 0x7a1e08, W: 0xffd23a, B: 0x2a1008, A: 0xa83a10 },
+  },
+  // 7 深渊 —— 深渊影
+  shade: { shape: 'blob', pal: { G: 0x6a3aa8, D: 0x2e1860, W: 0xd8b0ff, B: 0x12081e } },
+  // 8 天空 —— 鹰身女妖
+  harpy: {
+    shape: 'bird',
+    pal: { G: 0x7ab8e8, D: 0x3a6a9a, W: 0xffffff, B: 0x14202c, A: 0xe8d0a8, C: 0x8a6a4a, L: 0xc8a45a },
+  },
+  // 9 废墟 —— 骸骨兵
+  skeleton: {
+    shape: 'humanoid',
+    pal: { G: 0xdcd8cc, D: 0x8a8678, W: 0xffffff, B: 0x2a2830, A: 0xb8b4a4, C: 0x6a6458, L: 0xa8a496 },
+  },
+  // 10 星界 —— 星界灵
+  astral: { shape: 'blob', pal: { G: 0x6a7aff, D: 0x2a2a7a, W: 0xe8f0ff, B: 0x101038 } },
+};
 
-/** 按怪等级段选皮：1-9 史莱姆 / 10-19 哥布林 / 20+ 食人魔 */
-export function skinForLevel(level: number): MonsterSkin {
-  if (level >= 20) return 'ogre';
-  if (level >= 10) return 'goblin';
-  return 'slime';
+export type MonsterSkin = string;
+
+/** 每关固定一种怪：皮肤由关卡决定，不再按等级切 */
+export function skinForStage(artStage: number): MonsterSkin {
+  return STAGES[Math.min(Math.max(1, artStage), STAGE_COUNT) - 1]!.monster;
 }
 
+/** bake 全部 10 关的怪物（两帧走路动画） */
 export function bakeMonsters(scene: Phaser.Scene): void {
-  bakeGrid(scene, 'slime-a', [
-    '............',
-    '....GGGG....',
-    '..GGGGGGGG..',
-    '.GGWWGGWWGG.',
-    '.GGBBGGGBBG.',
-    'GGGGGGGGGGGG',
-    'GGGGGGGGGGGG',
-    'GGDDDDDDDDGG',
-    '.GGGGGGGGGG.',
-    '..GGGGGGGG..',
-    '...DDDDDD...',
-    '............',
-  ], SLIME_PALETTE);
-
-  bakeGrid(scene, 'slime-b', [
-    '............',
-    '............',
-    '....GGGG....',
-    '..GGWWGGWW..',
-    '.GGBBGGGBBG.',
-    'GGGGGGGGGGGG',
-    'GGGGGGGGGGGG',
-    'GGDDDDDDDDGG',
-    'GGGGGGGGGGGG',
-    '.GGGGGGGGGG.',
-    '..DDDDDDDD..',
-    '............',
-  ], SLIME_PALETTE);
-
-  bakeGrid(scene, 'goblin-a', [
-    '..............',
-    '...G......G...',
-    '...GG....GG...',
-    '....GGGGGG....',
-    '...GGWGGWGG...',
-    '...GGBBGBBG...',
-    '....GGGGGG....',
-    '..CCGGGGGGCC..',
-    '..CCAAAAAACC..',
-    '....AAAAAA....',
-    '....LL..LL....',
-    '....LL..LL....',
-    '...LLL..LLL...',
-    '..............',
-  ], { G: 0x5e8f2c, D: 0x35531c, W: 0xffffff, B: 0x14202c, A: 0x8a5a3a, C: 0x6a4a2a, L: 0x3a3a3a });
-
-  bakeGrid(scene, 'goblin-b', [
-    '..............',
-    '...G......G...',
-    '...GG....GG...',
-    '....GGGGGG....',
-    '...GGWGGWGG...',
-    '...GGBBGBBG...',
-    '....GGGGGG....',
-    '..CCGGGGGGCC..',
-    '..CCAAAAAACC..',
-    '....AAAAAA....',
-    '.....LLLL.....',
-    '.....L..L.....',
-    '....LL..LL....',
-    '..............',
-  ], { G: 0x5e8f2c, D: 0x35531c, W: 0xffffff, B: 0x14202c, A: 0x8a5a3a, C: 0x6a4a2a, L: 0x3a3a3a });
-
-  bakeGrid(scene, 'ogre-a', [
-    '................',
-    '....GGGGGGGG....',
-    '...GGGGGGGGGG...',
-    '...GGWGGGGWGG...',
-    '...GGBBGGGBBG...',
-    '...GGGGGGGGGG...',
-    '....DDDDDDDD....',
-    '..GGAAAAAAAAAA..',
-    '.GGGAAAAAAAAAAG.',
-    '.GG.AAAAAAAA.GG.',
-    '....AAAAAAAA....',
-    '....AAA..AAA....',
-    '....AAA..AAA....',
-    '...AAAA..AAAA...',
-    '................',
-    '................',
-  ], { G: 0xa05a3a, D: 0x5a3222, W: 0xffffff, A: 0x8a6a4a, B: 0x14202c });
-
-  bakeGrid(scene, 'ogre-b', [
-    '................',
-    '................',
-    '....GGGGGGGG....',
-    '...GGGGGGGGGG...',
-    '...GGWGGGGWGG...',
-    '...GGBBGGGBBG...',
-    '...GGGGGGGGGG...',
-    '....DDDDDDDD....',
-    '.GGGAAAAAAAAGG..',
-    'GGG.AAAAAAA.GGG.',
-    '....AAAAAAAA....',
-    '....AAA..AAA....',
-    '....AAA..AAA....',
-    '...AAAA..AAAA...',
-    '................',
-    '................',
-  ], { G: 0xa05a3a, D: 0x5a3222, W: 0xffffff, A: 0x8a6a4a, B: 0x14202c });
+  for (const [name, look] of Object.entries(MONSTER_LOOK)) {
+    const { a, b } = MONSTER_SHAPES[look.shape];
+    bakeGrid(scene, `${name}-a`, a, look.pal);
+    bakeGrid(scene, `${name}-b`, b, look.pal);
+  }
 }
 
 export function bakeProps(scene: Phaser.Scene): void {

@@ -8,7 +8,13 @@ import {
   stageCapacity,
   stageIndexForLevel,
 } from '../src/core/stage';
-import { createInitialState, dayKey } from '../src/state/gameState';
+import { createInitialState } from '../src/state/gameState';
+import {
+  STAGES,
+  artStageOf,
+  stageDef,
+  stageName,
+} from '../src/data/stages';
 import { normalizeState } from '../src/state/save';
 
 describe('关卡与怪物刷新', () => {
@@ -43,17 +49,15 @@ describe('关卡与怪物刷新', () => {
     expect(stageIndexForLevel(30)).toBe(3);
   });
 
-  it('存档默认在第 1 关，带当天日期', () => {
+  it('存档默认在第 1 关', () => {
     const s = createInitialState();
     expect(s.stage).toBe(1);
     expect(s.stages).toEqual({});
-    expect(s.stageDay).toBe(dayKey());
   });
 
   it('关卡进度能存能读（含 BOSS 标记）', () => {
     const s = normalizeState({
       stage: 3,
-      stageDay: '2026-10-21',
       stages: {
         1: { killed: { 3: 4, 7: 10 }, bossDead: true },
         2: { killed: { '15': 2 } },
@@ -61,7 +65,6 @@ describe('关卡与怪物刷新', () => {
       },
     });
     expect(s.stage).toBe(3);
-    expect(s.stageDay).toBe('2026-10-21');
     expect(s.stages[1]!.killed[3]).toBe(4);
     expect(s.stages[1]!.killed[7]).toBe(10);
     expect(s.stages[1]!.bossDead).toBe(true);
@@ -70,8 +73,29 @@ describe('关卡与怪物刷新', () => {
     expect(Object.keys(s.stages).sort()).toEqual(['1', '2']); // 非法关卡键被丢弃
   });
 
-  it('日期键按本地日期变化（跨天才能刷新）', () => {
-    expect(dayKey(new Date(2026, 0, 1, 23, 59))).toBe('2026-01-01');
-    expect(dayKey(new Date(2026, 0, 2, 0, 1))).toBe('2026-01-02');
+  it('一共 10 关，每 10 级一关，名称与怪物都不重复', () => {
+    expect(STAGES).toHaveLength(10);
+    for (let k = 1; k <= 10; k++) {
+      const st = stageDef(k);
+      expect(st.id).toBe(k);
+      expect(st.band[0]).toBe((k - 1) * 10 + 1);
+      expect(st.band[1]).toBe(k * 10);
+    }
+    expect(new Set(STAGES.map((s) => s.name)).size).toBe(10);
+    expect(new Set(STAGES.map((s) => s.monster)).size).toBe(10);
+    expect(new Set(STAGES.map((s) => s.ground.base)).size).toBe(10);
   });
+
+  it('第 11 关起是第 10 关的强化版：地形怪物沿用，等级继续涨', () => {
+    expect(artStageOf(11)).toBe(10);
+    expect(artStageOf(25)).toBe(10);
+    expect(artStageOf(10)).toBe(10);
+    expect(artStageOf(3)).toBe(3);
+    // 美术复用第 10 关，但等级段继续往上
+    expect(stageDef(11)).toBe(stageDef(10));
+    expect(levelBandOfStage(11)).toEqual([101, 110]);
+    expect(levelBandOfStage(12)).toEqual([111, 120]);
+    expect(stageName(11)).toBe(stageName(10));
+  });
+
 });

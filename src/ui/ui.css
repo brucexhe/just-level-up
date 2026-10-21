@@ -198,25 +198,26 @@
   gap: 6px;
   padding: 0 2px 5px;
 }
-.mm-nav {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  font-size: 9px;
-  color: #cfd8e6;
-  background: linear-gradient(180deg, #2b3852, #1b2231);
-  border: 1px solid #3a4761;
+/* 关卡名后面的「切换」按钮 */
+.mm-switch {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid #4a5a78;
+  background: rgba(255, 217, 61, 0.12);
+  color: #ffd93d;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 1px;
+  cursor: pointer;
   transition: 0.14s;
 }
-.mm-nav:hover {
-  color: #ffe08a;
+.mm-switch:hover {
+  background: rgba(255, 217, 61, 0.26);
   border-color: #ffd93d;
-  background: linear-gradient(180deg, #3a3320, #241f14);
 }
+
 .mm-head .mm-stage {
   font-size: 11px;
   font-weight: 600;
@@ -1568,4 +1569,124 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* ---------- 关卡选择弹窗 ---------- */
+.modal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 9, 14, 0.72);
+  backdrop-filter: blur(3px);
+  z-index: 80;
+}
+.modal[hidden] {
+  display: none;
+}
+.modal-box {
+  width: 640px;
+  max-width: 96%;
+  max-height: 92%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  border: 1px solid #3a4761;
+  background: linear-gradient(180deg, #1b2231, #12161f);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 38px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, rgba(56, 74, 104, 0.55), rgba(30, 39, 55, 0.35));
+  border-bottom: 1px solid #2a3547;
+}
+.modal-head h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #ffd93d;
+  letter-spacing: 1px;
+}
+.modal-head .close {
+  border: 0;
+  background: transparent;
+  color: #8b97ab;
+  font-size: 14px;
+  cursor: pointer;
+}
+.modal-head .close:hover {
+  color: #ff6b6b;
+}
+.stage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+}
+.stage-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid #2f3a4e;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  text-align: left;
+  transition: 0.14s;
+}
+.stage-card:hover:not(:disabled) {
+  border-color: #ffd93d99;
+  background: rgba(255, 217, 61, 0.07);
+}
+.stage-card.cur {
+  border-color: #ffd93d;
+  box-shadow: inset 0 0 20px rgba(255, 217, 61, 0.12);
+}
+.stage-card.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.sc-thumb {
+  width: 88px;
+  height: 48px;
+  flex: 0 0 88px;
+  border-radius: 8px;
+  border: 1px solid #2a3547;
+  background-size: cover;
+  background-position: center;
+  image-rendering: pixelated;
+}
+.sc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.sc-nm {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e8eef8;
+}
+.sc-sub {
+  font-size: 10px;
+  color: #7d8aa0;
+}
+.sc-lock {
+  font-size: 12px;
+}
+.modal-foot {
+  padding: 8px 12px;
+  border-top: 1px solid #2a3547;
+  font-size: 10px;
+  color: #7d8aa0;
+  text-align: center;
 }

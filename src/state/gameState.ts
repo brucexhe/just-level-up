@@ -26,12 +26,6 @@ export interface StageProgress {
 /** 人物初始每项属性的点数 */
 export const BASE_ATTR_START = 10;
 
-/** 本地日期键（用于「第二天才刷新」） */
-export function dayKey(now = new Date()): string {
-  const p = (n: number) => `${n}`.padStart(2, '0');
-  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
-}
-
 export interface GameState {
   level: number;
   exp: number;
@@ -52,10 +46,8 @@ export interface GameState {
   highestMonsterLevel: number;
   /** 当前所在关卡（1 起；玩家可在小地图上手动切换，不会自动跳关） */
   stage: number;
-  /** 每关当天被击杀的怪物记录，跨天自动清空 */
+  /** 每关的击杀记录：BOSS 死后整关重置并解锁下一关 */
   stages: Record<number, StageProgress>;
-  /** 上次生成怪物的日期（跨天则整关重刷） */
-  stageDay: string;
 }
 
 export function createInitialState(): GameState {
@@ -93,7 +85,6 @@ export function createInitialState(): GameState {
     highestMonsterLevel: 1,
     stage: 1,
     stages: {},
-    stageDay: dayKey(),
   };
   s.hp = maxHp(s);
   s.mp = maxMp(s);

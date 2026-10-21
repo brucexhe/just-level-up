@@ -3,7 +3,6 @@ import { BASE_ATTRS, type AttrSet } from '../core/types';
 import { SKILLS, type SkillId } from '../data/skills';
 import {
   createInitialState,
-  dayKey,
   maxHp,
   maxMp,
   type GameState,
@@ -193,7 +192,6 @@ export function normalizeState(raw: unknown): GameState {
   }
 
   s.stage = Math.max(1, Math.floor(num(r.stage, 1)));
-  s.stageDay = typeof r.stageDay === 'string' ? r.stageDay : dayKey();
   s.stages = {};
   if (r.stages && typeof r.stages === 'object') {
     for (const [k, v] of Object.entries(r.stages as Record<string, unknown>)) {

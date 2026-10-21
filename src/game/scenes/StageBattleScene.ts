@@ -4,7 +4,6 @@ import {
   aggregatedStats,
   allocateAttrPoint,
   createInitialState,
-  dayKey,
   equipBest,
   gainExp,
   maxHp,
@@ -25,12 +24,15 @@ import { expToNext, isBreakthrough, killExp } from '../../core/progression';
 import { skillMpCost, skillPower, skillValue } from '../../core/skills';
 import { createMonster, type Combatant } from '../combat';
 import {
-  bakeGrass,
+  bakeGround,
+  bakeProp,
+  groundKey,
+  propKey,
   bakeMonsters,
   bakePlayer,
   bakeProps,
   bakeSimple,
-  skinForLevel,
+  skinForStage,
 } from '../assets';
 import {
   FIREBALL_SPEED,
@@ -41,6 +43,13 @@ import {
   type SkillId,
 } from '../../data/skills';
 import { ATTR_META } from '../../data/attrs';
+import {
+  STAGES,
+  STAGE_COUNT,
+  artStageOf,
+  stageDef,
+  stageName as stageLabel,
+} from '../../data/stages';
 import { RARITY_META, SLOT_META } from '../../data/items';
 import { BASE_ATTRS } from '../../core/types';
 import { GameUI } from '../../ui';
@@ -100,7 +109,6 @@ const HP_BAR = {
 const STAGE_MONSTERS_PER_LEVEL = 10;
 /** 场景装饰物（树/石头/灌木）数量 */
 const OBSTACLE_COUNT = 180;
-const STAGE_NAMES = ['草原', '森林', '荒漠', '雪原', '沼泽', '火山', '深渊', '天空'];
 
 /** 技能书在地上显示的颜色（与技能本身的气质对应） */
 const BOOK_COLOR: Record<string, string> = {
@@ -210,6 +218,13 @@ export class StageBattleScene extends Phaser.Scene {
   private saveAt = 0;
   /** 静态障碍坐标缓存（小地图用） */
   private obstaclePoints: { x: number; y: number }[] = [];
+  /** 地面砖与地图边界（换关时重建） */
+  private ground?: Phaser.GameObjects.TileSprite;
+  private groundEdge?: Phaser.GameObjects.Rectangle;
+  /** 障碍的地面投影（换关时销毁） */
+  private propShadows: Phaser.GameObjects.Image[] = [];
+  /** 关卡缩略图（选关弹窗用） */
+  private stageThumbs: Record<number, string> = {};
   /** 地上的掉落物 */
   private groundDrops: GroundDropView[] = [];
   /** 飞行中的火球 → 锁定的目标与拖尾（怪物会移动，直线飞会打空） */
@@ -231,13 +246,6 @@ export class StageBattleScene extends Phaser.Scene {
     // 有存档就接着玩，没有就开新局
     const loaded = loadState();
     this.state = loaded ?? createInitialState();
-    // 跨天 → 各关怪物全部重刷（「杀掉的怪第二天才刷新」）
-    const today = dayKey();
-    if (this.state.stageDay !== today) {
-      this.state.stageDay = today;
-      this.state.stages = {};
-      saveState(this.state);
-    }
     this.stage = Math.max(1, Math.floor(this.state.stage || 1));
     const prefs = loadPrefs();
     audio.setVolume(prefs.volume);
@@ -246,19 +254,19 @@ export class StageBattleScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
 
     bakeSimple(this);
-    bakeGrass(this);
+    for (const st of STAGES) {
+      bakeGround(this, st);
+      for (const prop of st.props) bakeProp(this, st.id, prop);
+    }
     bakePlayer(this);
     bakeMonsters(this);
+    // 刀光 / 月牙 / 金币 / 火球等公共特效贴图（函数名里的“props”是历史遗留）
     bakeProps(this);
     this.createAnims();
 
-    this.add.tileSprite(MAP_SIZE / 2, MAP_SIZE / 2, MAP_SIZE, MAP_SIZE, 'grass').setDepth(-10);
-    this.add
-      .rectangle(MAP_SIZE / 2, MAP_SIZE / 2, MAP_SIZE, MAP_SIZE)
-      .setStrokeStyle(8, 0x2c4d33)
-      .setDepth(-9);
-
+    this.layGround();
     this.buildObstacles();
+    this.buildStageThumbs();
 
     this.shadow = this.add
       .image(0, 0, 'shadow')
@@ -373,6 +381,8 @@ export class StageBattleScene extends Phaser.Scene {
             x: Math.round(m.sprite.x),
             y: Math.round(m.sprite.y),
             level: m.data.level,
+            boss: m.isBoss,
+            hp: Math.round(m.data.hp),
             aggressive: m.data.aggressive,
             labelVisible: m.label.visible,
             scaleX: +m.sprite.scaleX.toFixed(3),
@@ -404,6 +414,26 @@ export class StageBattleScene extends Phaser.Scene {
           ? { level: t.data.level, hp: Math.round(t.data.hp), maxHp: t.data.maxHp }
           : null;
       },
+      /** 场上所有用缺省贴图的对象（调试用） */
+      missingTextures: () =>
+        this.children.list
+          .map((o) => {
+            const t = (o as Phaser.GameObjects.Sprite).texture;
+            return t && t.key === '__MISSING'
+              ? {
+                  type: o.type,
+                  x: Math.round((o as unknown as { x: number }).x),
+                  y: Math.round((o as unknown as { y: number }).y),
+                  w: Math.round((o as Phaser.GameObjects.Sprite).displayWidth),
+                }
+              : null;
+          })
+          .filter(Boolean),
+      /** 已烘焙的纹理 key（调试用） */
+      texKeys: () => this.textures.getTextureKeys(),
+      /** 场上障碍实际用的贴图 key（调试用） */
+      propTextures: () =>
+        this.obstacles.getChildren().map((o) => (o as Phaser.Physics.Arcade.Sprite).texture.key),
       /** 当前处于中毒状态的怪数量（毒刃 AoE 验证用） */
       dotCount: () =>
         this.monsters.filter((m) => m.sprite.active && m.dots.length > 0).length,
@@ -508,31 +538,107 @@ export class StageBattleScene extends Phaser.Scene {
       }
     };
     mk('walk-player', 'player-a', 'player-b');
-    mk('walk-slime', 'slime-a', 'slime-b');
-    mk('walk-goblin', 'goblin-a', 'goblin-b');
-    mk('walk-ogre', 'ogre-a', 'ogre-b');
+    for (const st of STAGES) mk(`walk-${st.monster}`, `${st.monster}-a`, `${st.monster}-b`);
   }
 
-  private buildObstacles() {
-    this.obstacles = this.physics.add.staticGroup();
-    const rnd = new Phaser.Math.RandomDataGenerator(['stage1']);
+  /**
+   * 关卡缩略图：用 Phaser 现成的地面/怪物纹理画到离屏 canvas，
+   * 再转成 dataURL 给 DOM 弹窗用（避免为 UI 再维护一套像素资源）。
+   */
+  private buildStageThumbs(): void {
+    const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+    for (const st of STAGES) {
+      const c = document.createElement('canvas');
+      c.width = 176;
+      c.height = 96;
+      const g = c.getContext('2d');
+      if (!g) continue;
+      // 地面
+      g.fillStyle = hex(st.ground.base);
+      g.fillRect(0, 0, c.width, c.height);
+      // 噪点：两色交替，模拟地面颗粒
+      const rnd = new Phaser.Math.RandomDataGenerator([`thumb-${st.id}`]);
+      for (let i = 0; i < 260; i++) {
+        g.fillStyle = hex(rnd.pick(st.ground.noise));
+        g.fillRect(rnd.between(0, c.width - 1), rnd.between(0, c.height - 1), 2, 2);
+      }
+      // 点缀
+      g.fillStyle = hex(st.ground.accent);
+      for (let i = 0; i < 5; i++) {
+        g.fillRect(rnd.between(4, c.width - 8), rnd.between(4, c.height - 8), 3, 2);
+      }
+      // 障碍：用关卡的 3 种障碍色各画一个三角/方块剪影
+      const spot: [number, number][] = [
+        [22, 62],
+        [56, 70],
+        [38, 40],
+      ];
+      st.props.forEach((p, i) => {
+        const [x, y] = spot[i] ?? [80, 60];
+        g.fillStyle = hex(p.main);
+        g.beginPath();
+        g.moveTo(x, y - 16);
+        g.lineTo(x + 11, y);
+        g.lineTo(x - 11, y);
+        g.closePath();
+        g.fill();
+        g.fillStyle = hex(p.dark);
+        g.fillRect(x - 2, y, 4, 5);
+      });
+      // 怪物：直接把该关怪物的像素纹理放大贴上去
+      const tex = this.textures.get(`${st.monster}-a`);
+      const src = tex?.getSourceImage() as unknown as CanvasImageSource | undefined;
+      if (src) {
+        g.imageSmoothingEnabled = false;
+        g.drawImage(src, 96, 26, 56, 56);
+      }
+      this.stageThumbs[st.id] = c.toDataURL();
+    }
+  }
+
+  /** 地面：整张地图铺当前关卡的地砖，边界线也跟着关卡配色走 */
+  private layGround(): void {
+    const st = stageDef(this.stage);
+    if (this.ground) this.ground.destroy();
+    if (this.groundEdge) this.groundEdge.destroy();
+    this.ground = this.add
+      .tileSprite(MAP_SIZE / 2, MAP_SIZE / 2, MAP_SIZE, MAP_SIZE, groundKey(artStageOf(this.stage)))
+      .setDepth(-10);
+    this.groundEdge = this.add
+      .rectangle(MAP_SIZE / 2, MAP_SIZE / 2, MAP_SIZE, MAP_SIZE)
+      .setStrokeStyle(8, st.ground.base)
+      .setDepth(-9);
+  }
+
+  private buildObstacles(): void {
+    if (this.obstacles) this.obstacles.clear(true, true);
+    else this.obstacles = this.physics.add.staticGroup();
+    this.obstaclePoints = [];
+    for (const img of this.propShadows) img.destroy();
+    this.propShadows = [];
+
+    const art = artStageOf(this.stage);
+    const st = stageDef(art);
+    const rnd = new Phaser.Math.RandomDataGenerator([`stage${art}`]);
     let placed = 0;
     let guard = 0;
-    // 地图放大后按比例补障碍，否则整片草原太空
+    // 地图放大后按比例补障碍，否则整张地图太空
     while (placed < OBSTACLE_COUNT && guard++ < 2000) {
       const x = rnd.between(120, MAP_SIZE - 120);
       const y = rnd.between(120, MAP_SIZE - 120);
       if (Phaser.Math.Distance.Between(x, y, MAP_SIZE / 2, MAP_SIZE / 2) < 260) continue;
-      const kind = rnd.pick(['rock', 'bush', 'tree', 'tree', 'bush']);
-      const s = this.obstacles.create(x, y, kind);
+      const prop = rnd.pick(st.props);
+      const key = propKey(art, prop.shape);
+      const s = this.obstacles.create(x, y, key) as Phaser.Physics.Arcade.Sprite;
       s.setScale(3);
       s.setDepth(y).refreshBody();
-      // 地面投影：浅色草地上让物体有落地感，边界更清楚
-      this.add
+      // 地面投影：让物体有落地感，边界更清楚
+      const sh = this.add
         .image(x, y + 13, 'shadow')
-        .setScale(kind === 'tree' ? 1.9 : 1.5, 0.9)
+        .setScale(prop.shape === 'tree' || prop.shape === 'pine' ? 1.9 : 1.5, 0.9)
         .setAlpha(0.62)
         .setDepth(y - 1);
+      this.propShadows.push(sh);
       this.obstaclePoints.push({ x, y });
       placed++;
     }
@@ -565,11 +671,32 @@ export class StageBattleScene extends Phaser.Scene {
     if (!prog.bossDead) this.spawnMonster(hi, true);
   }
 
-  /** 记录本关击杀（用于「当天不再刷新」） */
+  /**
+   * 记录本关击杀。**BOSS 死 = 通关**：解锁下一关，同时把本关重置
+   * （普通怪全部回来），这样玩家既可以去新关，也能留在本关继续刷。
+   */
   private recordKill(level: number, isBoss: boolean): void {
     const prog = (this.state.stages[this.stage] ??= { killed: {}, bossDead: false });
-    if (isBoss) prog.bossDead = true;
-    else prog.killed[level] = (prog.killed[level] ?? 0) + 1;
+    if (isBoss) {
+      prog.bossDead = true;
+      prog.killed = {};
+      return;
+    }
+    prog.killed[level] = (prog.killed[level] ?? 0) + 1;
+  }
+
+  /** BOSS 倒下后的通关结算：重置本关怪物 + 提示解锁 */
+  private onStageCleared(): void {
+    const next = this.stage + 1;
+    this.time.delayedCall(900, () => {
+      this.clearMonsters();
+      this.spawnStageMonsters();
+      saveState(this.state);
+      this.ui.toast(
+        `第 ${this.stage} 关通关！已解锁第 ${next} 关 · ${stageLabel(next)}`,
+        '#ffd93d',
+      );
+    });
   }
 
   /** 切换关卡：不自动跳关，玩家在小地图上手动选 */
@@ -582,12 +709,15 @@ export class StageBattleScene extends Phaser.Scene {
     this.clearGroundDrops();
     this.attackTarget = null;
     this.moveTarget = null;
+    // 换关 = 换地形：地面砖与障碍都要按新关卡重铺
+    this.layGround();
+    this.buildObstacles();
     this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
     this.spawnStageMonsters();
     saveState(this.state);
     const { lo, hi } = this.stageRange();
     this.ui.toast(
-      `进入第 ${this.stage} 关 · ${STAGE_NAMES[(this.stage - 1) % STAGE_NAMES.length]}（怪 Lv${lo}-${hi}）`,
+      `进入第 ${this.stage} 关 · ${stageLabel(this.stage)}（${stageDef(this.stage).monsterName} Lv${lo}-${hi}）`,
       '#ffd93d',
     );
     audio.play('click');
@@ -616,7 +746,7 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   private spawnMonster(level: number, isBoss = false) {
-    const skin = skinForLevel(level);
+    const skin = skinForStage(artStageOf(this.stage));
     // 全图随机分布（留 120px 边距，避免怪卡在地图边缘）
     const lo = 120;
     const hi = MAP_SIZE - 120;
@@ -881,6 +1011,7 @@ export class StageBattleScene extends Phaser.Scene {
       now: () => this.time.now,
       minimap: () => this.minimapData(),
       moveTo: (x, y) => this.moveToWorld(x, y),
+      stageThumbs: () => this.stageThumbs,
       gotoStage: (n) => this.gotoStage(n),
       settings: this.settingsApi(),
       sfx: (n) => audio.play(n),
@@ -1025,6 +1156,8 @@ export class StageBattleScene extends Phaser.Scene {
     this.clearMonsters();
     this.clearGroundDrops();
     this.clearFireballs();
+    this.layGround();
+    this.buildObstacles();
     this.spawnStageMonsters();
     this.attackTarget = null;
     this.moveTarget = null;
@@ -1057,7 +1190,7 @@ export class StageBattleScene extends Phaser.Scene {
       drops: this.groundDrops.map((g) => ({ x: g.x, y: g.y })),
       view: { x: cam.x, y: cam.y, w: cam.width, h: cam.height },
       stage: this.stage,
-      stageName: STAGE_NAMES[(this.stage - 1) % STAGE_NAMES.length],
+      stageName: stageLabel(this.stage),
       maxStage: this.maxStage(),
       monstersLeft: this.monsters.length,
     };
@@ -1619,17 +1752,10 @@ export class StageBattleScene extends Phaser.Scene {
     }
     if (this.state.level > before) this.levelUpFx(before);
 
-    // 本关这只怪今天不再刷新（记录在存档里，跨天才重刷）
+    // 杀掉的怪不再刷新；BOSS 死则整关重置并解锁下一关
     this.recordKill(ml, isBoss);
     saveState(this.state);
-
-    const left = this.monsters.length;
-    if (left === 0) {
-      this.ui.toast(
-        `第 ${this.stage} 关已清空，明天 0 点刷新；可在小地图切换到其它关卡`,
-        '#ffd93d',
-      );
-    }
+    if (isBoss) this.onStageCleared();
   }
 
   /** 掉落物落在死亡点：光环 + 图标 +「等级 · 品质」标签，颜色按品质/技能区分 */

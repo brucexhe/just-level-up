@@ -13,6 +13,7 @@ import type {
   UIView,
 } from './api';
 import { fmtNum, makeDraggable } from './dom';
+import { STAGES } from '../data/stages';
 import { PANEL_BY_ID, PANELS } from './panels';
 import type { SfxName } from '../game/audio';
 
@@ -30,6 +31,8 @@ export interface GameUIOptions {
   minimap(): MinimapData;
   /** 在小地图上点击 → 移动到世界坐标 */
   moveTo(x: number, y: number): void;
+  /** 关卡缩略图（关卡 id → dataURL），由场景用 Phaser 纹理现画 */
+  stageThumbs(): Record<number, string>;
   /** 切换关卡（不会自动跳关，由玩家手动选择） */
   gotoStage(stage: number): void;
   /** 设置面板能力（暂停 / 音频 / 存档） */
@@ -64,6 +67,9 @@ export class GameUI {
   private toolBar!: HTMLElement;
   private mapCanvas!: HTMLCanvasElement;
   private mapCtx: CanvasRenderingContext2D | null = null;
+  private modal!: HTMLElement;
+  private stageGrid!: HTMLElement;
+  private modalSig = '';
   private open: Record<DockSide, PanelId | null> = { left: null, right: null };
   private skillEls = new Map<SkillId, { root: HTMLElement; cd: HTMLElement; num: HTMLElement }>();
   private toolEls = new Map<PanelId, { btn: HTMLElement; badge?: HTMLElement }>();
@@ -109,9 +115,8 @@ export class GameUI {
 
       <div class="minimap">
         <div class="mm-head">
-          <button class="mm-nav" data-stage="-1" title="上一关">◀</button>
           <span class="mm-stage" data-live="stage">第 1 关 · 草原</span>
-          <button class="mm-nav" data-stage="1" title="下一关">▶</button>
+          <button class="mm-switch" data-act="open-stages" title="切换关卡">切换</button>
         </div>
         <canvas class="mm-canvas" width="256" height="256" title="点击查看/移动：点地图任意位置自动前往"></canvas>
         <div class="mm-foot">
@@ -127,6 +132,16 @@ export class GameUI {
         <div class="skillbar"></div>
         <div class="bb-sep"></div>
         <div class="toolbar"></div>
+      </div>
+      <div class="modal" data-modal="stages" hidden>
+        <div class="modal-box">
+          <div class="modal-head">
+            <h3>选择关卡</h3>
+            <button class="close" data-act="close-modal">✕</button>
+          </div>
+          <div class="stage-grid" data-stage-grid></div>
+          <div class="modal-foot">打过本关 BOSS 才能解锁下一关</div>
+        </div>
       </div>
       <div class="toasts"></div>
       <div class="pause-veil" hidden>
@@ -148,15 +163,33 @@ export class GameUI {
     this.mapCanvas = this.root.querySelector('.mm-canvas') as HTMLCanvasElement;
     this.mapCtx = this.mapCanvas.getContext('2d');
 
-    // 小地图上的关卡切换（上一关 / 下一关）
-    this.root.querySelectorAll<HTMLElement>('[data-stage]').forEach((btn) => {
+    // 关卡入口：点小地图关卡名后面的「切换」弹出选关弹窗
+    this.root.querySelectorAll<HTMLElement>('[data-act="open-stages"]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const delta = Number(btn.dataset.stage ?? '0');
-        const d = this.opts.minimap();
-        const next = clampRange(d.stage + delta, 1, d.maxStage);
-        if (next !== d.stage) this.opts.gotoStage(next);
+        this.openStageModal();
       });
+    });
+    this.modal = this.root.querySelector('.modal[data-modal="stages"]') as HTMLElement;
+    this.stageGrid = this.root.querySelector('[data-stage-grid]') as HTMLElement;
+    this.modal.addEventListener('click', (e) => {
+      const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
+      if (!t) return;
+      const act = t.dataset.act;
+      if (act === 'close-modal') {
+        this.closeStageModal();
+        return;
+      }
+      if (act === 'goto-stage') {
+        const n = Number(t.dataset.stage ?? '1');
+        const d = this.opts.minimap();
+        if (n >= 1 && n <= d.maxStage) this.opts.gotoStage(n);
+        this.closeStageModal();
+      }
+    });
+    // 点遮罩空白处关闭
+    this.modal.addEventListener('pointerdown', (e) => {
+      if (e.target === this.modal) this.closeStageModal();
     });
 
     this.buildSkillBar();
@@ -166,6 +199,41 @@ export class GameUI {
     this.bindScale();
 
     this.root.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  // ---------------- 关卡选择弹窗 ----------------
+
+  private openStageModal(): void {
+    this.renderStageGrid(true);
+    this.modal.hidden = false;
+  }
+
+  private closeStageModal(): void {
+    this.modal.hidden = true;
+  }
+
+  /** 关卡网格：缩略图 + 名称 + 等级段 + 怪物名；未解锁的置灰 */
+  private renderStageGrid(force = false): void {
+    const d = this.opts.minimap();
+    const sig = `${d.stage}/${d.maxStage}`;
+    if (!force && sig === this.modalSig) return;
+    this.modalSig = sig;
+    const thumbs = this.opts.stageThumbs();
+    const cards = STAGES.map((st) => {
+      const locked = st.id > d.maxStage;
+      const cur = st.id === d.stage;
+      const thumb = thumbs[st.id] ?? '';
+      return `<button class="stage-card${locked ? ' locked' : ''}${cur ? ' cur' : ''}"
+          ${locked ? 'disabled' : ''} data-act="goto-stage" data-stage="${st.id}">
+        <span class="sc-thumb"${thumb ? ` style="background-image:url(${thumb})"` : ''}></span>
+        <span class="sc-body">
+          <span class="sc-nm">${st.id}. ${st.name}${cur ? ' ·当前' : ''}</span>
+          <span class="sc-sub">Lv${st.band[0]}-${st.band[1]} · ${st.monsterName}</span>
+        </span>
+        ${locked ? '<span class="sc-lock">🔒</span>' : ''}
+      </button>`;
+    }).join('');
+    this.stageGrid.innerHTML = cards;
   }
 
   // ---------------- 构建 ----------------
@@ -628,6 +696,8 @@ export class GameUI {
     ctx.shadowBlur = 0;
 
     setTxt(this.root.querySelector('[data-live="stage"]'), `第 ${d.stage} 关 · ${d.stageName}`);
+    // 弹窗开着时同步解锁状态（BOSS 打过就会多解锁一关）
+    if (!this.modal.hidden) this.renderStageGrid();
     // 小地图只标「你 / 怪 / BOSS」三类点：怪物等级和掉落数量不在这里显示
     setTxt(this.root.querySelector('[data-live="mobcount"]'), fmtNum(mobs));
     setTxt(this.root.querySelector('[data-live="bosscount"]'), fmtNum(bosses));
