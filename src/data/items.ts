@@ -7,7 +7,8 @@ export interface SlotMeta {
 
 export const SLOT_META: Record<EquipSlot, SlotMeta> = {
   weapon: { name: '武器', icon: '🗡' },
-  head: { name: '头盔', icon: '🪖' },
+  // ⛑（U+26D1 救援头盔）：原来的 🪖 是 Emoji 13.0，Win10 没有这个字形会显示成空方框
+  head: { name: '头盔', icon: '⛑' },
   chest: { name: '胸甲', icon: '🥋' },
   legs: { name: '护腿', icon: '🩳' },
   boots: { name: '靴子', icon: '🥾' },
