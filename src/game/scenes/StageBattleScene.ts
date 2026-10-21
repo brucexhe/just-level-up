@@ -29,8 +29,6 @@ import {
   FIREBALL_MULT,
   FIREBALL_RADIUS,
   FIREBALL_SPEED,
-  FRENZY_DURATION_MS,
-  FRENZY_INTERVAL_MULT,
   SKILLS,
 } from '../skills';
 import type { BaseAttr } from '../../core/types';
@@ -86,12 +84,15 @@ export class StageBattleScene extends Phaser.Scene {
   private state!: GameState;
   private monsterLevel = 1;
   private playerNextAttackAt = 0;
-  private frenzyUntil = 0;
   private monsters: MonsterView[] = [];
   private monsterGroup!: Phaser.Physics.Arcade.Group;
   private obstacles!: Phaser.Physics.Arcade.StaticGroup;
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
+  private moveTarget: { x: number; y: number } | null = null;
+  private attackTarget: MonsterView | null = null;
+  private targetRing!: Phaser.GameObjects.Image;
+  private steerSince = 0;
+  private stuckX = 0;
+  private stuckY = 0;
   private regenAt = 0;
   private toastList: { text: Phaser.GameObjects.Text }[] = [];
 
@@ -134,6 +135,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.buildObstacles();
 
     this.shadow = this.add.image(0, 0, 'shadow').setScale(1.4, 1).setDepth(4);
+    this.targetRing = this.add.image(0, 0, 'ring').setTint(0xe05656).setScale(0.9).setAlpha(0.8).setDepth(3).setVisible(false);
     this.player = this.physics.add.sprite(MAP_SIZE / 2, MAP_SIZE / 2, 'player-a');
     this.player.setScale(3).setCollideWorldBounds(true).setDepth(5);
     this.player.play('walk-player');
@@ -154,6 +156,8 @@ export class StageBattleScene extends Phaser.Scene {
 
     (window as unknown as Record<string, unknown>).__demo = {
       snapshot: () => this.snapshot(),
+      state: () => this.state,
+      panelVisible: () => this.statsPanel.visible,
       pos: () => ({ x: Math.round(this.player.x), y: Math.round(this.player.y) }),
       tp: (x: number, y: number) => this.player.setPosition(x, y),
       step: (n: number) => {
@@ -238,20 +242,27 @@ export class StageBattleScene extends Phaser.Scene {
   // ---------- 输入 ----------
 
   private setupInput() {
-    this.cursors = this.input.keyboard!.createCursorKeys();
-    this.wasd = this.input.keyboard!.addKeys('W,A,S,D') as unknown as Record<
-      string,
-      Phaser.Input.Keyboard.Key
-    >;
     this.input.keyboard!.addCapture('TAB,Q,E,SPACE');
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.rightButtonDown()) this.castFireball(p);
-      else this.tryMelee();
+      if (p.rightButtonDown()) {
+        // 右键：向点击处移动
+        this.attackTarget = null;
+        this.moveTarget = { x: p.worldX, y: p.worldY };
+        this.moveMark(p.worldX, p.worldY);
+      } else {
+        // 左键：加点面板 [+] 优先；点到怪物 → 锁定为攻击目标，自动走近攻击
+        if (!this.statsPanelClick(p.x, p.y)) {
+          const hit = this.monsterAt(p.worldX, p.worldY);
+          if (hit) {
+            this.moveTarget = null;
+            this.attackTarget = hit;
+          }
+        }
+      }
     });
     this.input.keyboard!.on('keydown-SPACE', () => this.tryMelee());
     this.input.keyboard!.on('keydown-Q', () => this.castFireball(this.input.activePointer));
-    this.input.keyboard!.on('keydown-E', () => this.castFrenzy());
     this.input.keyboard!.on('keydown-TAB', () => {
       this.statsPanel.setVisible(!this.statsPanel.visible);
     });
@@ -276,6 +287,76 @@ export class StageBattleScene extends Phaser.Scene {
         }
       });
     });
+  }
+
+  /** 左键点击加点面板：命中 [+] 列时加点；返回 true 表示点击已被面板消费（面板坐标=屏幕坐标） */
+  private statsPanelClick(x: number, y: number): boolean {
+    if (!this.statsPanel.visible) return false;
+    const lx = x - this.statsPanel.x;
+    const ly = y - this.statsPanel.y;
+    if (lx < 0 || lx > 290 || ly < 0 || ly > 350) return false;
+    const idx = Math.floor((ly - 60) / 26);
+    if (lx >= 232 && lx <= 278 && idx >= 0 && idx < ATTR_KEYS.length) {
+      const attr = ATTR_KEYS[idx];
+      if (allocateAttrPoint(this.state, attr)) {
+        this.addToast(`+1 ${ATTR_ZH[attr]}`, '#7ee787');
+        this.refreshStatsPanel();
+      } else {
+        this.addToast('属性点不足', '#ff8a8a');
+      }
+    }
+    return true;
+  }
+
+  /** 世界坐标 (x, y) 附近可点选的怪物（取最近一只） */
+  private monsterAt(x: number, y: number): MonsterView | null {
+    let best: MonsterView | null = null;
+    let bestD = Infinity;
+    for (const m of this.monsters) {
+      if (!m.sprite.active) continue;
+      const d = Phaser.Math.Distance.Between(x, y, m.sprite.x, m.sprite.y);
+      if (d <= 48 && d < bestD) {
+        bestD = d;
+        best = m;
+      }
+    }
+    return best;
+  }
+
+  /** 右键落点标记 */
+  private moveMark(x: number, y: number) {
+    const mark = this.add.image(x, y, 'ring').setTint(0x7ee787).setScale(0.3).setAlpha(0.9).setDepth(3);
+    this.tweens.add({
+      targets: mark,
+      scale: 0.7,
+      alpha: 0,
+      duration: 300,
+      onComplete: () => mark.destroy(),
+    });
+  }
+
+  /** 本帧移动方向（弧度）；无目标或已到达时返回 null */
+  private steerVelocity(): number | null {
+    const t = this.attackTarget;
+    if (t && !t.sprite.active) this.attackTarget = null; // 目标已死/被移除
+    const focus = this.attackTarget;
+    if (focus) {
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, focus.sprite.x, focus.sprite.y);
+      if (d > ATTACK_RANGE * 0.8) {
+        return Phaser.Math.Angle.Between(this.player.x, this.player.y, focus.sprite.x, focus.sprite.y);
+      }
+      return null; // 进入攻击距离，站定输出
+    }
+    const mv = this.moveTarget;
+    if (mv) {
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, mv.x, mv.y);
+      if (d <= 8) {
+        this.moveTarget = null; // 已到达
+        return null;
+      }
+      return Phaser.Math.Angle.Between(this.player.x, this.player.y, mv.x, mv.y);
+    }
+    return null;
   }
 
   // ---------- HUD ----------
@@ -312,10 +393,10 @@ export class StageBattleScene extends Phaser.Scene {
       const cdText = this.text(0, 0, '', '#ffffff', 13);
       root.add([bg, icon, key, cost, cdOverlay, cdText]);
       root.setSize(48, 48).setInteractive({ useHandCursor: true });
-      root.on('pointerdown', () => {
+      root.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        if (p.rightButtonDown()) return; // 右键留给移动
         if (def.id === 'attack') this.tryMelee();
-        else if (def.id === 'fireball') this.castFireball(this.input.activePointer);
-        else this.castFrenzy();
+        else this.castFireball(this.input.activePointer);
       });
       this.skillSlots.push({ def, readyAt: 0, cdOverlay, cdText, root });
     });
@@ -326,7 +407,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.text(W - 160, 10, '第 1 关 · 草原', '#9aa4b2', 12).setScrollFactor(0).setDepth(901);
 
     this.buildStatsPanel();
-    this.text(12, this.scale.height - 18, 'WASD移动 · 左键普攻 · Q/右键火球 · E狂暴 · Tab加点 · F穿装', '#5a6472', 11).setScrollFactor(0).setDepth(900);
+    this.text(12, this.scale.height - 18, '右键点击移动 · 左键点怪攻击 · Q火球 · Tab加点 · F穿装', '#5a6472', 11).setScrollFactor(0).setDepth(900);
   }
 
   private buildStatsPanel() {
@@ -342,15 +423,8 @@ export class StageBattleScene extends Phaser.Scene {
       const y = 60 + i * 26;
       const label = this.text(14, y, ATTR_ZH[attr], '#c8d0e0', 13);
       const value = this.text(110, y, '', '#ffffff', 13);
-      const add = this.text(240, y, '[+]', '#7ee787', 14).setInteractive({ useHandCursor: true });
-      add.on('pointerdown', () => {
-        if (allocateAttrPoint(this.state, attr)) {
-          this.addToast(`+1 ${ATTR_ZH[attr]}`, '#7ee787');
-          this.refreshStatsPanel();
-        } else {
-          this.addToast('属性点不足', '#ff8a8a');
-        }
-      });
+      // [+] 点击由场景级 pointerdown 的 statsPanelClick 统一处理，不依赖容器内 Text 的命中测试
+      const add = this.text(240, y, '[+]', '#7ee787', 14);
       this.statRows[attr] = { value, add };
       this.statsPanel.add([label, value, add]);
     });
@@ -407,13 +481,12 @@ export class StageBattleScene extends Phaser.Scene {
 
   private meleeInterval() {
     const stats = aggregatedStats(this.state);
-    const base = attackIntervalMs(stats.agi ?? 0);
-    return this.time.now < this.frenzyUntil ? base * FRENZY_INTERVAL_MULT : base;
+    return attackIntervalMs(stats.agi ?? 0);
   }
 
   private tryMelee(time: number = this.time.now) {
     if (time < this.playerNextAttackAt) return;
-    const target = this.nearestMonster();
+    const target = this.meleeTarget();
     if (!target) return;
     this.playerNextAttackAt = time + this.meleeInterval();
 
@@ -429,6 +502,7 @@ export class StageBattleScene extends Phaser.Scene {
       target.sprite.x,
       target.sprite.y,
     );
+    this.player.setFlipX(target.sprite.x < this.player.x);
     this.slashEffect(angle);
     this.tweens.add({
       targets: this.player,
@@ -514,27 +588,15 @@ export class StageBattleScene extends Phaser.Scene {
     }
   }
 
-  private castFrenzy() {
-    const slot = this.skillSlots.find((s) => s.def.id === 'frenzy')!;
-    const now = this.time.now;
-    if (now < slot.readyAt) return;
-    if (!spendMp(this.state, slot.def.mpCost)) {
-      this.addToast('法力不足', '#6ab0f3');
-      return;
-    }
-    slot.readyAt = now + slot.def.cdMs;
-    this.frenzyUntil = now + FRENZY_DURATION_MS;
-    this.player.setTint(0xffb060);
-    this.time.delayedCall(FRENZY_DURATION_MS, () => this.player.clearTint());
-    const ring = this.add.image(this.player.x, this.player.y, 'ring').setTint(0xffb060).setScale(0.6).setAlpha(0.9).setDepth(6);
-    this.tweens.add({
-      targets: ring,
-      scale: 2.4,
-      alpha: 0,
-      duration: 400,
-      onComplete: () => ring.destroy(),
-    });
-    this.addToast('狂暴！攻速提升', '#ffb060');
+  /** 优先攻击左键锁定的目标（需在攻击距离内），否则就近攻击 */
+  private meleeTarget(): MonsterView | null {
+    const t = this.attackTarget;
+    if (t && t.sprite.active && this.inAttackRange(t)) return t;
+    return this.nearestMonster();
+  }
+
+  private inAttackRange(m: MonsterView): boolean {
+    return Phaser.Math.Distance.Between(this.player.x, this.player.y, m.sprite.x, m.sprite.y) <= ATTACK_RANGE;
   }
 
   private nearestMonster(): MonsterView | null {
@@ -723,16 +785,10 @@ export class StageBattleScene extends Phaser.Scene {
   update(time: number) {
     const stats = aggregatedStats(this.state);
     const speed = moveSpeed(stats.speed ?? 0);
-    const vx =
-      (this.cursors.right.isDown || this.wasd.D.isDown ? 1 : 0) -
-      (this.cursors.left.isDown || this.wasd.A.isDown ? 1 : 0);
-    const vy =
-      (this.cursors.down.isDown || this.wasd.S.isDown ? 1 : 0) -
-      (this.cursors.up.isDown || this.wasd.W.isDown ? 1 : 0);
-    this.player.setVelocity(vx * speed, vy * speed);
-    if (vx !== 0 && vy !== 0) {
-      (this.player.body!.velocity as Phaser.Math.Vector2).scale(0.7071);
-    }
+    const dir = this.steerVelocity();
+    const vx = dir === null ? 0 : Math.cos(dir) * speed;
+    const vy = dir === null ? 0 : Math.sin(dir) * speed;
+    this.player.setVelocity(vx, vy);
     if (vx !== 0) this.player.setFlipX(vx < 0);
     if (vx !== 0 || vy !== 0) {
       if (!this.player.anims.isPlaying) this.player.play('walk-player');
@@ -743,6 +799,34 @@ export class StageBattleScene extends Phaser.Scene {
     this.shadow.setPosition(this.player.x, this.player.y + 26);
     this.player.setDepth(this.player.y);
     this.shadow.setDepth(this.player.y - 0.1);
+
+    // 点击移动卡住检测：持续朝目标转向却 400ms 内几乎没位移 → 被障碍挡住，放弃目标
+    if (dir !== null) {
+      if (this.steerSince === 0) {
+        this.steerSince = time;
+        this.stuckX = this.player.x;
+        this.stuckY = this.player.y;
+      } else if (time - this.steerSince >= 400) {
+        const moved = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.stuckX, this.stuckY);
+        this.stuckX = this.player.x;
+        this.stuckY = this.player.y;
+        this.steerSince = time;
+        if (moved < 2) {
+          this.moveTarget = null;
+          this.attackTarget = null;
+        }
+      }
+    } else {
+      this.steerSince = 0;
+    }
+
+    // 左键锁定目标的红圈标记
+    const ringOn = this.attackTarget;
+    if (ringOn && ringOn.sprite.active) {
+      this.targetRing.setPosition(ringOn.sprite.x, ringOn.sprite.y + 8).setVisible(true);
+    } else {
+      this.targetRing.setVisible(false);
+    }
 
     if (time >= this.regenAt) {
       this.regenAt = time + 1000;
@@ -861,6 +945,7 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   width: 960,
   height: 600,
   backgroundColor: '#10141a',
+  disableContextMenu: true,
   pixelArt: true,
   roundPixels: true,
   scale: {

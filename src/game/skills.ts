@@ -14,11 +14,11 @@ export const SKILLS: SkillDef[] = [
   {
     id: 'attack',
     name: '普攻',
-    hotkey: '左键',
+    hotkey: '左键点怪',
     mpCost: 0,
     cdMs: 0,
     icon: '⚔',
-    desc: '近战挥砍，物理伤害',
+    desc: '点击怪物锁定目标，自动走近挥砍',
   },
   {
     id: 'fireball',
@@ -28,15 +28,6 @@ export const SKILLS: SkillDef[] = [
     cdMs: 2500,
     icon: '🔥',
     desc: '向准星发射火球，法术 AoE，威力 = 法攻×2',
-  },
-  {
-    id: 'frenzy',
-    name: '狂暴',
-    hotkey: 'E',
-    mpCost: 2,
-    cdMs: 8000,
-    icon: '⚡',
-    desc: '5 秒内攻击速度 +66%',
   },
 ];
 
