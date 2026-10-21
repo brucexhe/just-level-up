@@ -2,28 +2,40 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   AudioEngine,
   LOOP_STEPS,
+  MIN_MUSIC_MIDI,
+  MUSIC_BUS_GAIN,
   MUSIC_THEMES,
+  NOTE_PEAK,
+  SFX_GAIN,
   STEPS_PER_BAR,
+  liftAboveFloor,
   midiToFreq,
   musicThemeForStage,
   stepEvents,
+  type SfxName,
 } from '../src/game/audio';
 
 // ---------------- 极简 AudioContext 替身 ----------------
 
 class FakeParam {
   value = 0;
+  /** 记录包络爬到过的最高值（= 这个音的峰值音量） */
+  peak = 0;
   setValueAtTime(v: number) {
     this.value = v;
     return this;
   }
-  linearRampToValueAtTime() {
+  linearRampToValueAtTime(v: number) {
+    this.value = v;
+    if (v > this.peak) this.peak = v;
     return this;
   }
   exponentialRampToValueAtTime() {
     return this;
   }
-  setTargetAtTime() {
+  /** 近似处理：直接落到目标值，方便断言音量确实被改了 */
+  setTargetAtTime(v: number) {
+    this.value = v;
     return this;
   }
 }
@@ -61,10 +73,14 @@ class FakeCtx {
   noises = 0;
   gains = 0;
   resumed = 0;
+  /** 按创建顺序记录所有 GainNode：0=master 1=musicBus 2=sfxBus */
+  gainNodes: FakeNode[] = [];
 
   createGain() {
     this.gains++;
-    return new FakeNode();
+    const n = new FakeNode();
+    this.gainNodes.push(n);
+    return n;
   }
   createOscillator() {
     this.oscs++;
@@ -109,12 +125,21 @@ afterEach(() => {
 });
 
 describe('BGM 序列（纯函数）', () => {
-  it('第 0 拍有贝斯和琶音（鼓已移除）', () => {
+  it('第 0 拍有琶音，没有贝斯也没有鼓', () => {
     const evs = stepEvents(0);
     const kinds = evs.map((e) => e.kind);
-    expect(kinds).toContain('bass');
     expect(kinds).toContain('arp');
+    expect(kinds).not.toContain('bass');
     expect(kinds).not.toContain('kick');
+  });
+
+  it('贝斯已彻底删除：整段循环（十套主题）一声都不响', () => {
+    for (const t of MUSIC_THEMES) {
+      for (let s = 0; s < LOOP_STEPS; s++) {
+        const kinds = stepEvents(s, t).map((e) => e.kind);
+        expect(kinds, `${t.name} 第 ${s} 步不该有贝斯`).not.toContain('bass');
+      }
+    }
   });
 
   it('背景音乐没有鼓：整段循环里不出现任何打击乐', () => {
@@ -126,21 +151,50 @@ describe('BGM 序列（纯函数）', () => {
     }
   });
 
-  it('贝斯是切分节奏：每小节 4 下，一循环 16 下', () => {
-    let n = 0;
-    for (let s = 0; s < LOOP_STEPS; s++) {
-      n += stepEvents(s).filter((e) => e.kind === 'bass').length;
+  it('去掉贝斯后每小节仍有骨架：每一小节都有琶音', () => {
+    for (const t of MUSIC_THEMES) {
+      for (let bar = 0; bar < 4; bar++) {
+        let n = 0;
+        for (let i = 0; i < STEPS_PER_BAR; i++) {
+          n += stepEvents(bar * STEPS_PER_BAR + i, t).filter((e) => e.kind === 'arp').length;
+        }
+        expect(n, `${t.name} 第 ${bar + 1} 小节`).toBeGreaterThan(0);
+      }
     }
-    expect(n).toBe(16);
   });
 
-  it('一循环内四个小节各用不同和弦根音', () => {
-    const roots = new Set<number>();
-    for (let bar = 0; bar < 4; bar++) {
-      const ev = stepEvents(bar * STEPS_PER_BAR).find((e) => e.kind === 'bass');
-      if (ev) roots.add(ev.midi);
+  it('没有一个音符掉到"心跳"频段：琶音全部 ≥ MIDI 45（≈110Hz）', () => {
+    for (const t of MUSIC_THEMES) {
+      for (let s = 0; s < LOOP_STEPS; s++) {
+        for (const e of stepEvents(s, t)) {
+          if (e.kind === 'arp') {
+            expect(e.midi, `${t.name} 第 ${s} 步`).toBeGreaterThanOrEqual(MIN_MUSIC_MIDI);
+          }
+        }
+      }
     }
-    expect(roots.size).toBe(4);
+  });
+
+  it('liftAboveFloor：低于地板的音逐八度抬上来，够高的不动', () => {
+    expect(liftAboveFloor(36)).toBe(48); // C2 → C3（+2 个八度才够）
+    expect(liftAboveFloor(40)).toBe(52);
+    expect(liftAboveFloor(44)).toBe(56);
+    expect(liftAboveFloor(48)).toBe(48);
+    expect(liftAboveFloor(72)).toBe(72);
+  });
+
+  it('四个小节的和弦确实在走（至少 3 种不同的琶音音组）', () => {
+    const groups = new Set<string>();
+    for (let bar = 0; bar < 4; bar++) {
+      const tones: number[] = [];
+      for (let i = 0; i < STEPS_PER_BAR; i++) {
+        for (const e of stepEvents(bar * STEPS_PER_BAR + i)) {
+          if (e.kind === 'arp') tones.push(e.midi % 12);
+        }
+      }
+      groups.add([...new Set(tones)].sort().join(','));
+    }
+    expect(groups.size).toBeGreaterThanOrEqual(3);
   });
 
   it('步号取模安全（负数 / 超界）', () => {
@@ -262,6 +316,28 @@ describe('AudioEngine 开关与音量', () => {
     expect(e.volume).toBe(0);
   });
 
+  it('背景音乐默认够响：总线 0.75（旧值 0.34 偏小）+ 三个音轨的峰值都提过', () => {
+    const { ctx } = tracked();
+    expect(MUSIC_BUS_GAIN).toBeGreaterThan(0.6);
+    const musicBus = ctx.gainNodes[1]!;
+    expect(musicBus.gain.value).toBeCloseTo(MUSIC_BUS_GAIN, 5);
+  });
+
+  it('只有一个音量滑块：master 跟着 setVolume 走，音乐总线不受影响', () => {
+    const { e, ctx } = tracked();
+    const master = ctx.gainNodes[0]!;
+    const musicBus = ctx.gainNodes[1]!;
+    e.setVolume(0.3);
+    expect(master.gain.value).toBeCloseTo(0.3, 5);
+    expect(musicBus.gain.value).toBeCloseTo(MUSIC_BUS_GAIN, 5);
+  });
+
+  it('只剩琶音和铺底两个声部的峰值（贝斯已删除）', () => {
+    expect(NOTE_PEAK).not.toHaveProperty('bass');
+    expect(NOTE_PEAK.arp).toBeGreaterThan(0.3);
+    expect(NOTE_PEAK.pad).toBeGreaterThan(0.5);
+  });
+
   it('解锁后 BGM 起播，关掉音乐即停', () => {
     const { e, ctx } = tracked();
     e.unlock();
@@ -322,6 +398,38 @@ describe('AudioEngine 开关与音量', () => {
       e.play(n);
       expect(ctx.oscs + ctx.noises).toBeGreaterThan(before);
       e.stopBgm();
+    }
+  });
+
+  /** 播放一个音效，返回它用到的最大峰值音量 */
+  const peakOf = (name: SfxName): number => {
+    const { e, ctx } = tracked();
+    const from = ctx.gainNodes.length;
+    e.play(name);
+    e.stopBgm();
+    return Math.max(...ctx.gainNodes.slice(from).map((n) => n.gain.peak));
+  };
+
+  it('技能音跟着 BGM 一起变响：三个技能音都比原来的基础值大', () => {
+    expect(SFX_GAIN.skill).toBeGreaterThan(1);
+    // 括号里是提升前的基础峰值
+    expect(peakOf('fire')).toBeGreaterThan(0.34);
+    expect(peakOf('frenzy')).toBeGreaterThan(0.24);
+    expect(peakOf('poison')).toBeGreaterThan(0.24);
+  });
+
+  it('普通攻击也提了一档，但幅度比技能小（挥砍太频繁，不能太吵）', () => {
+    expect(SFX_GAIN.swing).toBeGreaterThan(1);
+    expect(SFX_GAIN.swing).toBeLessThan(SFX_GAIN.skill);
+    expect(peakOf('swing')).toBeGreaterThan(0.3);
+  });
+
+  it('技能音不会淹没在变响后的 BGM 里：压得过琶音的最强音', () => {
+    const sfxBus = 0.9;
+    // 贝斯删掉后，BGM 里最响的是小节头那一下琶音（力度 ×1.4）
+    const loudestNote = NOTE_PEAK.arp * MUSIC_THEMES[0]!.arpVel * 1.4 * MUSIC_BUS_GAIN;
+    for (const n of ['fire', 'frenzy', 'poison'] as const) {
+      expect(peakOf(n) * sfxBus, `${n} 相对琶音`).toBeGreaterThan(loudestNote);
     }
   });
 });

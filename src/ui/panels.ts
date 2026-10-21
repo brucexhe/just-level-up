@@ -674,15 +674,15 @@ const settingsPanel: PanelDef = {
       </button>
 
       <div class="sec-title">音频 <em>代码合成</em></div>
-      ${toggleRow('music', '背景音乐', '每关一首：贝斯 + 琶音的实时合成循环', st.music())}
+      ${toggleRow('music', '背景音乐', '每关一首：琶音 + 长音铺底的实时合成循环', st.music())}
       <div class="note">正在播放：<b>${esc(audio.currentTheme.name)}</b> 主题 · ${
         audio.currentTheme.bpm
       } BPM</div>
       ${toggleRow('sfx', '战斗音效', '挥砍 / 命中 / 升级 / 技能', st.sfx())}
       <div class="vol-row">
-        <span class="vr-l">总音量</span>
+        <span class="vr-l">音量</span>
         <input class="vr-range" type="range" min="0" max="100" step="1" value="${vol}"
-               data-act="vol" aria-label="总音量" />
+               data-act="vol" aria-label="音量" />
         <span class="vr-v num">${vol}</span>
       </div>
 

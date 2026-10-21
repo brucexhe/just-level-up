@@ -1,8 +1,8 @@
 /**
  * 纯代码合成的音频引擎（不依赖任何音频资源文件）。
  *
- * - 背景音乐：用调度器按 16 分音符步进，实时合成循环乐句（贝斯 + 琶音 + 长音铺底，
- *   没有鼓），所以音乐是"算出来的"，没有 mp3。
+ * - 背景音乐：用调度器按 16 分音符步进，实时合成循环乐句（琶音 + 长音铺底，
+ *   没有鼓、**也没有贝斯**），所以音乐是"算出来的"，没有 mp3。
  *   **10 个关卡各一首**：速度、和弦进行、节奏密度、波形都不一样（见 `MUSIC_THEMES`），
  *   换关时 `setStage()` 换曲。
  * - 音效：打击 / 挥砍 / 升级 / 技能 / 受击等，全部由振荡器 + 噪声包络合成。
@@ -35,8 +35,13 @@ export const BPM = 116;
 /** 一个 16 分音符的秒数 */
 export const STEP_SEC = 60 / BPM / 4;
 
-/** 打击乐已移除（用户不要鼓声），保留类型仅为兼容旧数据 */
-export type NoteKind = 'bass' | 'arp' | 'pad' | 'kick' | 'snare' | 'hat';
+/**
+ * 音符类型。
+ * - `arp` 琶音、`pad` 长音铺底：现在真正在响的两个声部。
+ * - `kick` / `snare` / `hat`：打击乐，早就不用了（用户不要鼓声），保留仅为兼容旧数据。
+ * - 曾经的 `bass` 已删除：低频根音听着像心跳，已从曲子里彻底移除。
+ */
+export type NoteKind = 'arp' | 'pad' | 'kick' | 'snare' | 'hat';
 
 export interface NoteEvent {
   kind: NoteKind;
@@ -47,17 +52,21 @@ export interface NoteEvent {
 }
 
 export interface Chord {
-  /** 贝斯根音（MIDI） */
+  /** 和弦根音（MIDI），用于铺底长音 */
   root: number;
   /** 琶音用的和弦音（MIDI） */
   tones: number[];
 }
 
 /**
- * 一套 BGM = 一个「曲子配方」：速度 + 4 小节和弦进行 + 贝斯节奏 + 琶音节奏与音色。
+ * 一套 BGM = 一个「曲子配方」：速度 + 4 小节和弦进行 + 琶音节奏与音色 + 长音铺底。
  *
  * 10 个关卡各配一套，风格跟着场景走（草原轻快、雪原空灵、火山躁动…）。
  * 全部是**纯数据**，由 `stepEvents()` 实时算成音符，所以不需要任何音频文件。
+ *
+ * 注意：**贝斯声部已经删掉了**。低音根音每小节"咚"几下，在慢速关卡里听感像心跳，
+ * 体验很差；低声部现在只保留慢起慢落的 `pad` 长音（见 padVel）。
+ * 想再加节奏型低音的话，一定要用长 attack（≥0.03s），别再用 0.003s 的冲击式起音。
  */
 export interface MusicTheme {
   /** 关卡序号 1~10 */
@@ -66,13 +75,10 @@ export interface MusicTheme {
   bpm: number;
   /** 4 小节的和弦进行（不足 4 个就循环取） */
   chords: Chord[];
-  /** 贝斯在小节内的步号（越疏越安静） */
-  bassSteps: number[];
   /** 琶音在小节内的步号（越密越紧张） */
   arpSteps: number[];
   /** 琶音走向：单向循环 / 上下往复（往复更"波浪感"） */
   arpDir: 'up' | 'updown';
-  bassType: OscillatorType;
   arpType: OscillatorType;
   /** 每小节琶音的八度偏移（高八度 = 更飘/更亮） */
   octaves: number[];
@@ -96,10 +102,8 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 48, tones: [52, 55, 60] }, // C
       { root: 43, tones: [50, 55, 59] }, // G
     ],
-    bassSteps: [0, 6, 8, 14],
     arpSteps: ALL_16,
     arpDir: 'up',
-    bassType: 'triangle',
     arpType: 'square',
     octaves: [0, 12],
     arpVel: 0.3,
@@ -116,10 +120,8 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 41, tones: [53, 57, 60] }, // F
       { root: 45, tones: [57, 60, 64] }, // Am
     ],
-    bassSteps: [0, 6, 10],
     arpSteps: [0, 3, 6, 9, 12],
     arpDir: 'updown',
-    bassType: 'triangle',
     arpType: 'triangle',
     octaves: [0, 12, 12, 0],
     arpVel: 0.26,
@@ -136,10 +138,8 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 40, tones: [52, 56, 59] }, // E
       { root: 38, tones: [50, 53, 57] }, // Dm
     ],
-    bassSteps: [0, 4, 8, 12],
     arpSteps: [0, 2, 4, 6, 8, 10, 12, 13, 14, 15],
     arpDir: 'updown',
-    bassType: 'triangle',
     arpType: 'square',
     octaves: [0, 12],
     arpVel: 0.3,
@@ -156,10 +156,8 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 45, tones: [57, 60, 64] }, // Am
       { root: 41, tones: [53, 57, 60] }, // F
     ],
-    bassSteps: [0, 8],
     arpSteps: [0, 4, 8, 12],
     arpDir: 'updown',
-    bassType: 'sine',
     arpType: 'sine',
     octaves: [12, 24],
     arpVel: 0.22,
@@ -176,10 +174,8 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 36, tones: [48, 51, 55] }, // Cm
       { root: 46, tones: [50, 53, 58] }, // Bb
     ],
-    bassSteps: [0, 5, 8, 13],
     arpSteps: [0, 3, 6, 10, 12, 14],
     arpDir: 'updown',
-    bassType: 'sine',
     arpType: 'triangle',
     octaves: [0, 0],
     arpVel: 0.24,
@@ -196,17 +192,16 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 38, tones: [50, 53, 57] }, // Dm
       { root: 45, tones: [57, 61, 64] }, // A（和声小调 V）
     ],
-    bassSteps: [0, 3, 6, 8, 11, 14],
     arpSteps: ALL_16,
     arpDir: 'up',
-    bassType: 'sawtooth',
     arpType: 'sawtooth',
     octaves: [0, 12],
     arpVel: 0.26,
     padVel: 0.08,
   },
   {
-    // 深渊：最慢最低，减五度 + 半音上行制造不安，pad 很重
+    // 深渊：最慢最暗，减五度 + 半音上行制造不安，pad 很重
+    // （原先写了 -12 八度，但低频短音听着像心跳，已去掉；暗色靠调式和重 pad 撑）
     stage: 7,
     name: '深渊',
     bpm: 68,
@@ -216,12 +211,10 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 36, tones: [48, 51, 54] }, // C + b5
       { root: 43, tones: [50, 55, 58] }, // Gm
     ],
-    bassSteps: [0, 8],
     arpSteps: [0, 6, 10],
     arpDir: 'updown',
-    bassType: 'sine',
     arpType: 'triangle',
-    octaves: [0, -12],
+    octaves: [0, 0],
     arpVel: 0.2,
     padVel: 0.16,
   },
@@ -236,10 +229,8 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 45, tones: [57, 60, 64] }, // Am
       { root: 41, tones: [53, 57, 60] }, // F
     ],
-    bassSteps: [0, 4, 8, 12],
     arpSteps: ALL_16,
     arpDir: 'updown',
-    bassType: 'triangle',
     arpType: 'sine',
     octaves: [12, 24],
     arpVel: 0.28,
@@ -256,10 +247,8 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 38, tones: [50, 53, 57] }, // Dm
       { root: 45, tones: [57, 60, 64] }, // Am
     ],
-    bassSteps: [0, 6, 8, 14],
     arpSteps: [0, 2, 4, 6, 8, 10, 12, 14],
     arpDir: 'updown',
-    bassType: 'triangle',
     arpType: 'triangle',
     octaves: [0, 12],
     arpVel: 0.26,
@@ -276,10 +265,8 @@ export const MUSIC_THEMES: MusicTheme[] = [
       { root: 43, tones: [55, 59, 62, 66] }, // Gmaj7（利底亚的 #4）
       { root: 45, tones: [57, 60, 64, 67] }, // Am7
     ],
-    bassSteps: [0, 8],
     arpSteps: ALL_16,
     arpDir: 'updown',
-    bassType: 'sine',
     arpType: 'sine',
     octaves: [12, 24],
     arpVel: 0.24,
@@ -294,6 +281,20 @@ export const CHORDS: Chord[] = MUSIC_THEMES[0]!.chords;
 export function musicThemeForStage(stage: number): MusicTheme {
   const i = Math.min(Math.max(1, Math.floor(stage || 1)), MUSIC_THEMES.length);
   return MUSIC_THEMES[i - 1]!;
+}
+
+/**
+ * 背景音乐允许的最低音（MIDI 45 = A2 ≈ 110Hz）。
+ * 低于这个音就整段升八度：低频短音的听感是"咚、咚"的心跳，非常难受，
+ * 所以连琶音掉到低音区也要抬上来（长音 pad 是慢起慢落的 drone，不受此限制）。
+ */
+export const MIN_MUSIC_MIDI = 45;
+
+/** 把音符抬到不闷的高度：低于 MIN_MUSIC_MIDI 就升八度 */
+export function liftAboveFloor(midi: number): number {
+  let m = midi;
+  while (m < MIN_MUSIC_MIDI) m += 12;
+  return m;
 }
 
 /** 琶音取和弦音的下标：'up' 单向循环，'updown' 上下往复 */
@@ -318,22 +319,37 @@ export function stepEvents(step: number, theme: MusicTheme = MUSIC_THEMES[0]!): 
   if (inBar === 0 && theme.padVel > 0) {
     out.push({ kind: 'pad', midi: chord.tones[0]! - 12, vel: theme.padVel });
   }
-  if (theme.bassSteps.includes(inBar)) {
-    out.push({ kind: 'bass', midi: chord.root, vel: inBar === 0 ? 0.9 : 0.6 });
-  }
   const ai = theme.arpSteps.indexOf(inBar);
   if (ai >= 0) {
     const tone = chord.tones[arpIndex(ai, chord.tones.length, theme.arpDir)]!;
     const oct = theme.octaves[bar % theme.octaves.length]!;
     out.push({
       kind: 'arp',
-      midi: tone + oct,
+      // 抬过低音地板：就算主题写了 -12 八度，也不会掉到"心跳"那个频段
+      midi: liftAboveFloor(tone + oct),
       vel: ai === 0 ? theme.arpVel * 1.4 : theme.arpVel,
     });
   }
-  // 鼓组全部去掉：只要贝斯 + 琶音的铺底，不要打击乐
+  // 鼓和贝斯都不要：背景层只剩琶音 + 长音铺底，避免出现"心跳"一样的低频冲击
   return out;
 }
+
+/**
+ * 音乐总线的基准增益（BGM 相对音效的比例）。
+ *
+ * BGM 是持续不断的背景层，理论上要压在音效之下，但 0.34 压得太狠
+ * （相对音效 -8dB 左右），默认音量下几乎听不见，这里提到 0.75。
+ */
+export const MUSIC_BUS_GAIN = 0.75;
+
+/** 各音轨的峰值增益（乘上音符力度后才是实际音量）；贝斯已删除，只剩琶音与铺底 */
+export const NOTE_PEAK = { arp: 0.4, pad: 0.6 } as const;
+
+/**
+ * 音效的增益倍数。BGM 调响之后，技能音如果还是老音量会被背景盖住，
+ * 所以技能整体抬一档；普通攻击因为每次挥砍都响（太频繁），只小幅提升。
+ */
+export const SFX_GAIN = { skill: 1.7, swing: 1.35 } as const;
 
 export function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
@@ -399,7 +415,7 @@ export class AudioEngine {
     this.master.connect(ctx.destination);
 
     this.musicBus = ctx.createGain();
-    this.musicBus.gain.value = 0.34;
+    this.musicBus.gain.value = MUSIC_BUS_GAIN;
     this.musicBus.connect(this.master);
 
     this.sfxBus = ctx.createGain();
@@ -525,18 +541,7 @@ export class AudioEngine {
     if (!bus || !this.ctx) return;
     for (const e of events) {
       switch (e.kind) {
-        case 'bass':
-          // 短促的拨弦感，让低音更有弹性（波形随主题变）
-          this.tone({
-            type: this.theme.bassType,
-            freq: midiToFreq(e.midi),
-            at,
-            dur: 0.16,
-            peak: 0.52 * e.vel,
-            bus,
-            attack: 0.003,
-          });
-          break;
+        // 'bass' 分支已删除：低音根音听感像心跳，背景层不再出任何低频冲击音
         case 'arp':
           // 波形由主题决定（方波亮、三角/正弦柔和、锯齿躁）
           this.tone({
@@ -544,20 +549,20 @@ export class AudioEngine {
             freq: midiToFreq(e.midi),
             at,
             dur: 0.11,
-            peak: 0.2 * e.vel,
+            peak: NOTE_PEAK.arp * e.vel,
             bus,
             attack: 0.002,
             detune: 6,
           });
           break;
         case 'pad':
-          // 每小节一层的持续和声：起落都慢，垫在贝斯下面当"空气"
+          // 每小节一层的持续和声：起落都慢（attack 0.18s），只做"空气"不做节奏
           this.tone({
             type: 'sine',
             freq: midiToFreq(e.midi),
             at,
             dur: this.stepSec * STEPS_PER_BAR * 0.95,
-            peak: 0.5 * e.vel,
+            peak: NOTE_PEAK.pad * e.vel,
             bus,
             attack: 0.18,
           });
@@ -617,8 +622,25 @@ export class AudioEngine {
     const t = ctx.currentTime + 0.001;
     switch (name) {
       case 'swing':
-        this.noise({ at: t, dur: 0.13, peak: 0.3, bus, filter: 'bandpass', freq: 900, sweepTo: 3000, q: 1.4 });
-        this.tone({ type: 'sine', freq: 320, to: 130, at: t, dur: 0.1, peak: 0.18, bus });
+        this.noise({
+          at: t,
+          dur: 0.13,
+          peak: 0.3 * SFX_GAIN.swing,
+          bus,
+          filter: 'bandpass',
+          freq: 900,
+          sweepTo: 3000,
+          q: 1.4,
+        });
+        this.tone({
+          type: 'sine',
+          freq: 320,
+          to: 130,
+          at: t,
+          dur: 0.1,
+          peak: 0.18 * SFX_GAIN.swing,
+          bus,
+        });
         break;
       case 'hit':
         this.tone({ type: 'sine', freq: 190, to: 55, at: t, dur: 0.16, peak: 0.5, bus, attack: 0.002 });
@@ -653,17 +675,65 @@ export class AudioEngine {
           });
         });
         break;
+      // ↓ 下面三个是技能音：BGM 调响后一起抬一档，免得被背景盖住
       case 'fire':
-        this.noise({ at: t, dur: 0.36, peak: 0.34, bus, filter: 'lowpass', freq: 2600, sweepTo: 320 });
-        this.tone({ type: 'sawtooth', freq: 420, to: 120, at: t, dur: 0.28, peak: 0.14, bus });
+        this.noise({
+          at: t,
+          dur: 0.36,
+          peak: 0.34 * SFX_GAIN.skill,
+          bus,
+          filter: 'lowpass',
+          freq: 2600,
+          sweepTo: 320,
+        });
+        this.tone({
+          type: 'sawtooth',
+          freq: 420,
+          to: 120,
+          at: t,
+          dur: 0.28,
+          peak: 0.14 * SFX_GAIN.skill,
+          bus,
+        });
         break;
       case 'frenzy':
-        this.tone({ type: 'sawtooth', freq: 220, to: 700, at: t, dur: 0.42, peak: 0.24, bus });
-        this.tone({ type: 'square', freq: 330, to: 990, at: t + 0.04, dur: 0.36, peak: 0.1, bus });
+        this.tone({
+          type: 'sawtooth',
+          freq: 220,
+          to: 700,
+          at: t,
+          dur: 0.42,
+          peak: 0.24 * SFX_GAIN.skill,
+          bus,
+        });
+        this.tone({
+          type: 'square',
+          freq: 330,
+          to: 990,
+          at: t + 0.04,
+          dur: 0.36,
+          peak: 0.1 * SFX_GAIN.skill,
+          bus,
+        });
         break;
       case 'poison':
-        this.tone({ type: 'triangle', freq: 165, to: 110, at: t, dur: 0.45, peak: 0.24, bus });
-        this.noise({ at: t, dur: 0.5, peak: 0.12, bus, filter: 'lowpass', freq: 620 });
+        this.tone({
+          type: 'triangle',
+          freq: 165,
+          to: 110,
+          at: t,
+          dur: 0.45,
+          peak: 0.24 * SFX_GAIN.skill,
+          bus,
+        });
+        this.noise({
+          at: t,
+          dur: 0.5,
+          peak: 0.12 * SFX_GAIN.skill,
+          bus,
+          filter: 'lowpass',
+          freq: 620,
+        });
         break;
       case 'coin':
         this.tone({ type: 'square', freq: 988, at: t, dur: 0.07, peak: 0.16, bus });

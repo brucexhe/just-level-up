@@ -459,7 +459,8 @@ export class GameUI {
       const v = Number(target.value);
       if (!Number.isFinite(v)) return;
       this.opts.settings.setVolume(v / 100);
-      const out = body.querySelector('.vr-v') as HTMLElement | null;
+      const row = target.closest('.vol-row');
+      const out = (row ?? body).querySelector('.vr-v') as HTMLElement | null;
       if (out) out.textContent = `${Math.round(v)}`;
     };
     body.oninput = onRange;

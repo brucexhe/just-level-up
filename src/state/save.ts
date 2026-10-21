@@ -16,7 +16,7 @@ export const PREFS_KEY = 'level-up/prefs/v1';
 export interface Prefs {
   music: boolean;
   sfx: boolean;
-  /** 0~1 */
+  /** 0~1（音乐 + 音效共用，设置面板只有一个音量滑块） */
   volume: number;
 }
 
