@@ -71,23 +71,29 @@ const CHASE_RANGE = 300;
 /** 掉落物拾取半径 */
 const PICKUP_RANGE = 36;
 /**
- * 怪物头顶从上到下的排版：**等级 → 血量 → 血条**。
+ * 怪物头顶排版（对齐主流 MMO/ARPG：WoW、原神、暗黑、LOL 都是这个结构）：
  *
- * 血条本身只用来看比例，所以很细；等级和血量各占一行放在条上方——
- * 条内放不下后期的大数值（一万级怪的血量有好几位数）。
+ * ```
+ *        Lv10          ← 等级，血条上方一行
+ *   ┌─────────────┐
+ *   │ ▓▓▓▓▓░░ 74  │    ← 血条 + 血量数值居中在条内
+ *   └─────────────┘
+ *        [怪物]
+ * ```
+ *
+ * 数值放条内是主流做法，前提是**数值要缩写**：一万级怪的血量是好几位数，
+ * `fmtHp` 会压成 `1.2万`（最长 5 字符），条宽就够用了。
  */
 const HP_BAR = {
-  w: 34,
-  h: 2.5,
-  bossW: 60,
-  bossH: 2.5,
+  w: 52,
+  h: 9,
+  bossW: 84,
+  bossH: 11,
   /** 血条中心相对怪物中心的偏移 */
-  offsetY: 34,
-  bossOffsetY: 54,
-  /** 血量文字中心 → 血条中心 */
-  hpGap: 8,
-  /** 等级文字中心 → 血量文字中心 */
-  labelGap: 11,
+  offsetY: 38,
+  bossOffsetY: 60,
+  /** 等级文字 → 血条上边缘的间距 */
+  labelGap: 12,
 };
 
 /** 每关每个等级各刷几只（10 个等级 × 10 只 = 一关 100 只） */
@@ -136,9 +142,10 @@ interface GroundDropView {
 interface MonsterView {
   data: Combatant;
   sprite: Phaser.Physics.Arcade.Sprite;
-  hpBg: Phaser.GameObjects.Image;
-  hpFg: Phaser.GameObjects.Image;
-  /** 血条上方第二行：实时血量 */
+  /** 血条底：直角矩形 + 1px 描边 */
+  hpBg: Phaser.GameObjects.Rectangle;
+  hpFg: Phaser.GameObjects.Rectangle;
+  /** 血条内：剩余血量 */
   hpText: Phaser.GameObjects.Text;
   /** 血条上方第一行：等级 */
   label: Phaser.GameObjects.Text;
@@ -546,19 +553,20 @@ export class StageBattleScene extends Phaser.Scene {
     const barY = isBoss ? HP_BAR.bossOffsetY : HP_BAR.offsetY;
     const barW = isBoss ? HP_BAR.bossW : HP_BAR.w;
     const barH = isBoss ? HP_BAR.bossH : HP_BAR.h;
+    /*
+     * 用直角矩形而不是圆角纹理：
+     * 圆角条缩放到 52×9 后，红条和黑底的圆角半径不同步，
+     * 边缘会露出参差不齐的暗边（就是看起来"重叠不好"的原因）。
+     */
     const hpBg = this.add
-      .image(x, y - barY, 'bar')
-      .setDisplaySize(barW, barH)
-      .setTint(0x000000)
+      .rectangle(x, y - barY, barW + 2, barH + 2, 0x0b1118, 0.92)
+      .setStrokeStyle(1, 0x2a3547, 1)
       .setDepth(y + 1)
-      .setAlpha(0.75)
       .setVisible(false);
     const hpFg = this.add
-      .image(x - barW / 2, y - barY, 'bar')
+      .rectangle(x - barW / 2, y - barY, barW, barH, isBoss ? 0xff3b3b : 0xe05656)
       .setOrigin(0, 0.5)
-      .setDisplaySize(barW, barH)
-      .setTint(isBoss ? 0xff3b3b : 0xe05656)
-      .setDepth(y + 1)
+      .setDepth(y + 1.1)
       .setVisible(false);
 
     const data = createMonster(level);
@@ -567,9 +575,9 @@ export class StageBattleScene extends Phaser.Scene {
       data.hp = data.maxHp;
       data.stats.pAtk = Math.round((data.stats.pAtk ?? 1) * 1.6);
     }
-    // 第一行：等级
+    // 等级：血条上方一行
     const label = this.add
-      .text(x, y - barY - HP_BAR.hpGap - HP_BAR.labelGap, '', {
+      .text(x, y - barY - barH / 2 - HP_BAR.labelGap, '', {
         fontFamily: 'ui-monospace, monospace',
         fontSize: '10px',
         color: isBoss ? '#ff6b6b' : '#ffffff',
@@ -581,14 +589,13 @@ export class StageBattleScene extends Phaser.Scene {
       .setVisible(false)
       .setAlpha(1);
 
-    // 第二行：实时血量（血条正上方，分开两行才不会被条挤住）
+    // 剩余血量：居中压在血条里（主流做法）。
+    // 不加黑描边——描边会把 8px 的字糊成一团，红/黑底上的白字本身已经够清楚。
     const hpText = this.add
-      .text(x, y - barY - HP_BAR.hpGap, '', {
+      .text(x, y - barY, '', {
         fontFamily: 'ui-monospace, monospace',
-        fontSize: '10px',
-        color: '#ffe08a',
-        stroke: '#000000',
-        strokeThickness: 3,
+        fontSize: '8px',
+        color: '#ffffff',
       })
       .setOrigin(0.5)
       .setDepth(y + 2)
@@ -1274,12 +1281,12 @@ export class StageBattleScene extends Phaser.Scene {
     }
   }
 
-  /** 血条宽度按剩余比例缩放 */
+  /** 血条宽度按剩余比例缩放（矩形改尺寸，不用 displaySize，免得描边被拉伸） */
   private refreshMonsterBar(m: MonsterView) {
     const ratio = Phaser.Math.Clamp(m.data.hp / m.data.maxHp, 0, 1);
     const w = m.isBoss ? HP_BAR.bossW : HP_BAR.w;
     const h = m.isBoss ? HP_BAR.bossH : HP_BAR.h;
-    m.hpFg.setDisplaySize(w * ratio, h);
+    m.hpFg.setSize(Math.max(0, w * ratio), h);
   }
 
   /** 等级 + 条内血量：只在数字变化时重写，避免每帧 setText */
@@ -1697,14 +1704,16 @@ export class StageBattleScene extends Phaser.Scene {
       m.sprite.setDepth(m.sprite.y);
       const barY = m.isBoss ? HP_BAR.bossOffsetY : HP_BAR.offsetY;
       const barW = m.isBoss ? HP_BAR.bossW : HP_BAR.w;
+      const barH = m.isBoss ? HP_BAR.bossH : HP_BAR.h;
       m.hpBg.setPosition(m.sprite.x, m.sprite.y - barY);
       m.hpFg.setPosition(m.sprite.x - barW / 2, m.sprite.y - barY);
-      // 从上到下：等级 → 血量 → 血条
+      // 等级在血条上方
       m.label.setPosition(
         m.sprite.x,
-        m.sprite.y - barY - HP_BAR.hpGap - HP_BAR.labelGap,
+        m.sprite.y - barY - barH / 2 - HP_BAR.labelGap,
       );
-      m.hpText.setPosition(m.sprite.x, m.sprite.y - barY - HP_BAR.hpGap);
+      // 血量数字固定居中在血条正中（不跟着红色填充区跑，位置才稳定不跳）
+      m.hpText.setPosition(m.sprite.x, m.sprite.y - barY);
 
       // DoT 结算
       if (m.dots.length > 0) {
