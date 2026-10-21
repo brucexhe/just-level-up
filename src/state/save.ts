@@ -185,17 +185,18 @@ export function normalizeState(raw: unknown): GameState {
       const v = item(eq[slot]);
       if (v && v.slot === slot) s.equipped[slot] = v;
     }
-    // 旧档同时戴着 ring1 + ring2：只留下点数更高的那枚，另一枚退回背包
-    const worn = s.equipped.ring;
-    if (worn) {
-      for (const legacy of ['ring1', 'ring2'] as const) {
-        const other = item(eq[legacy]);
-        if (!other || other.id === worn.id) continue;
-        const better = itemPts(other) > itemPts(worn) ? other : worn;
-        const worse = better === other ? worn : other;
-        s.equipped.ring = better;
-        s.inventory.push(worse);
+    // 旧档把戒指戴在 ring1 / ring2 两个槽里，现在只有一个 ring 槽：
+    // 点数最高的那枚继续戴着，其余退回背包，绝不凭空消失
+    const ringCandidates: EquipmentItem[] = [];
+    for (const v of [s.equipped.ring, item(eq.ring1), item(eq.ring2)]) {
+      if (v && v.slot === 'ring' && !ringCandidates.some((x) => x.id === v.id)) {
+        ringCandidates.push(v);
       }
+    }
+    if (ringCandidates.length > 0) {
+      ringCandidates.sort((a, b) => itemPts(b) - itemPts(a));
+      s.equipped.ring = ringCandidates[0]!;
+      for (const rest of ringCandidates.slice(1)) s.inventory.push(rest);
     }
   }
   if (Array.isArray(r.skillBooks)) {

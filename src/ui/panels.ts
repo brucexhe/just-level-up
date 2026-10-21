@@ -6,7 +6,7 @@ import { expToNext, isBreakthrough } from '../core/progression';
 import {
   describeSkill,
   skillMpCost,
-  skillPower,
+  skillPowerCoef,
   skillValue,
   type SkillBook,
 } from '../core/skills';
@@ -26,7 +26,6 @@ import {
   maxHp,
   maxMp,
   sellAllSkillBooks,
-  sellEquippedItem,
   sellInventoryItem,
   sellSkillBook,
   skillLevel,
@@ -117,7 +116,8 @@ const characterPanel: PanelDef = {
 
     const interval = attackIntervalMs(agg.agi ?? 0);
     const atkLevel = Math.max(1, skillLevel(s, 'attack'));
-    const dps = ((agg.pAtk ?? 1) * skillPower(SKILL_BY_ID.attack, atkLevel)) / (interval / 1000);
+    const dps =
+      ((agg.pAtk ?? 1) * SKILL_BY_ID.attack.power * skillPowerCoef(atkLevel)) / (interval / 1000);
     const toBt = 10 - (s.level % 10);
 
     return `
@@ -203,10 +203,8 @@ function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
         <div class="alloc-grid">${alloc}</div>
       </div>
       <div class="ic-foot">
-        <button class="btn" data-act="unequip">卸下</button>
-        <button class="btn danger" data-act="sell-worn">卖出 +${fmtNum(
-          Math.max(1, Math.floor(totalPoints(item) * BALANCE.SELL_REFUND_RATE)),
-        )}</button>
+        <button class="btn" data-act="unequip">卸下到背包</button>
+        <span class="foot-note">要卖先卸下，在「背包」里卖</span>
       </div>
     </div>`;
 }
@@ -242,7 +240,7 @@ const equipmentPanel: PanelDef = {
           ? `<b>${SLOT_META[sel].name}</b> 部位空着，去「背包」挑一件穿上。`
           : '点击上方任一部位查看 / 强化该装备。'
       }</div>
-      <div class="note" style="margin-top:6px">装备<b>无强化</b>：掉落总点数 ≤ 怪等级；卖掉装备可得 <b>总点数 ×50%</b> 的自由装备点，手动投到已穿戴装备上。</div>`;
+      <div class="note" style="margin-top:6px">装备<b>无强化</b>：掉落总点数 ≤ 怪等级；<b>先卸下</b>再在「背包」里卖掉，可得 <b>总点数 ×50%</b> 的自由装备点，手动投到已穿戴装备上。</div>`;
     }
 
     return `
@@ -273,15 +271,7 @@ const equipmentPanel: PanelDef = {
         if (slot && s.equipped[slot]) {
           const nm = s.equipped[slot]!.name;
           unequipItem(s, slot);
-          api.toast(`卸下 ${nm}`, '#9aa4b2');
-          api.refresh();
-        }
-        break;
-      case 'sell-worn':
-        if (slot && s.equipped[slot]) {
-          const nm = s.equipped[slot]!.name;
-          const got = sellEquippedItem(s, slot);
-          api.toast(`卖出 ${nm}，回收 ${got} 自由装备点`, '#ffd93d');
+          api.toast(`卸下 ${nm}，可在「背包」里卖出`, '#9aa4b2');
           api.refresh();
         }
         break;
@@ -337,7 +327,9 @@ const skillsPanel: PanelDef = {
               <div class="kv"><span>冷却</span><b class="num">${
                 def.cdMs > 0 ? `${(def.cdMs / 1000).toFixed(1)}s` : '无'
               }</b></div>
-              <div class="kv"><span>威力系数</span><b class="num">×${skillPower(def, lv).toFixed(2)}</b></div>
+              <div class="kv"><span>威力系数</span><b class="num">×${skillPowerCoef(lv).toFixed(
+                2,
+              )}</b></div>
               <div class="kv"><span>附加数值</span><b class="num">${
                 def.school === 'magical'
                   ? `${Math.round(skillValue(def, lv))} px`

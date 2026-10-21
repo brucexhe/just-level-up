@@ -3,6 +3,7 @@ import {
   dropSkillBook,
   skillMpCost,
   skillPower,
+  skillPowerCoef,
   skillValue,
   skillUpgradeCost,
 } from '../src/core/skills';
@@ -96,15 +97,21 @@ describe('技能书 / 技能点', () => {
     expect(skillPower(fire, 5)).toBeLessThan(skillPower(fire, 10));
   });
 
-  it('威力系数：每级 +1% 基数，100 级才翻倍', () => {
+  it('威力系数写死为 1 + 等级/100：Lv21 → ×1.21', () => {
     const fire = SKILL_BY_ID.fireball; // base 2
-    expect(skillPower(fire, 1)).toBeCloseTo(2, 5);
-    expect(skillPower(fire, 11)).toBeCloseTo(2.2, 5); // +10%
+    expect(skillPowerCoef(1)).toBeCloseTo(1.01, 5);
+    expect(skillPowerCoef(21)).toBeCloseTo(1.21, 5);
+    expect(skillPowerCoef(100)).toBeCloseTo(2.0, 5);
+    // 系数只取决于等级，与该技能是谁无关
+    expect(skillPower(fire, 21) / fire.power).toBeCloseTo(1.21, 5);
+    expect(skillPower(SKILL_BY_ID.poison, 21) / SKILL_BY_ID.poison.power).toBeCloseTo(1.21, 5);
+    expect(skillPower(fire, 1)).toBeCloseTo(2.02, 5);
+    expect(skillPower(fire, 11)).toBeCloseTo(2.22, 5); // +11%
     // 100 级 ≈ 翻倍，而不是旧公式那种 6 倍
-    expect(skillPower(fire, 100) / skillPower(fire, 1)).toBeCloseTo(1.99, 2);
+    expect(skillPower(fire, 100) / skillPower(fire, 1)).toBeCloseTo(1.98, 2);
     expect(skillPower(fire, 100)).toBeLessThan(skillPower(fire, 1) * 2.1);
     // 200 级 ≈ 3 倍（线性外推，不是指数）
-    expect(skillPower(fire, 200) / skillPower(fire, 1)).toBeCloseTo(2.99, 2);
+    expect(skillPower(fire, 200) / skillPower(fire, 1)).toBeCloseTo(2.97, 2);
   });
 
   it('附加数值：每级 +1', () => {

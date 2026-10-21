@@ -168,6 +168,19 @@ const MONSTER_SHADOW = {
  */
 const PLAYER_SHADOW = { scaleX: 1.5, scaleY: 1, offsetY: 22 };
 
+/**
+ * 怪物待机时也要小幅上下晃动：
+ * 地图上的树/石头/灌木是**完全静止**的，如果怪物站着不动就会和它们混在一起，
+ * 玩家一眼分不清「哪棵是会打我的」。这里按正弦波给一个 2~3px 的呼吸位移，
+ * 幅度刻意压得很小（走路时也是这个量级），看起来像原地踏步而不是在跳。
+ */
+const MONSTER_BOB = {
+  amp: 2,
+  bossAmp: 3,
+  /** 一个完整上下来回的时长（ms） */
+  periodMs: 820,
+};
+
 interface MonsterView {
   data: Combatant;
   sprite: Phaser.Physics.Arcade.Sprite;
@@ -186,6 +199,12 @@ interface MonsterView {
   isBoss: boolean;
   /** BOSS 走进视野时的登场提示只播一次 */
   announced: boolean;
+  /** 本关怪物的名字（「史莱姆」之类），和等级一起显示在血条上方 */
+  name: string;
+  /** 待机晃动的相位（每只错开，免得整屏怪同步上下跳） */
+  bobPhase: number;
+  /** 上一帧已经加上的晃动偏移，用于只叠加增量，不累积 */
+  bobApplied: number;
   /** 等级/血条当前是否处于显示状态（用于淡入淡出，避免每帧 tween） */
   hudOn: boolean;
   /** 标签上已渲染的血量，用于脏检查 */
@@ -843,6 +862,9 @@ export class StageBattleScene extends Phaser.Scene {
       dots: [],
       isBoss,
       announced: false,
+      name: stageDef(this.stage).monsterName,
+      bobPhase: Math.random() * MONSTER_BOB.periodMs,
+      bobApplied: 0,
       hudOn: false,
       shownHp: -1,
     };
@@ -1673,7 +1695,11 @@ export class StageBattleScene extends Phaser.Scene {
     const hp = Math.max(0, Math.ceil(m.data.hp));
     if (m.shownHp === hp) return;
     m.shownHp = hp;
-    m.label.setText(m.isBoss ? `BOSS Lv${m.data.level}` : `Lv${m.data.level}`);
+    m.label.setText(
+      m.isBoss
+        ? `BOSS ${m.name} Lv${m.data.level}`
+        : `${m.name} Lv${m.data.level}`,
+    );
     // 只显示剩余血量：比例看血条就够了，总血量是冗余信息
     m.hpText.setText(fmtHp(hp));
   }
@@ -2060,14 +2086,15 @@ export class StageBattleScene extends Phaser.Scene {
     const ringOn = this.attackTarget;
     if (ringOn && ringOn.sprite.active) {
       // 选中环套在地面投影那一圈上（而不是压在怪身上），读起来才像「锁定脚下」
+      // 选中环也钉在落脚点上，不跟着晃动抖
+      const ringBaseY = ringOn.sprite.y - ringOn.bobApplied;
       const footY =
-        ringOn.sprite.y +
-        (ringOn.isBoss ? MONSTER_SHADOW.bossOffsetY : MONSTER_SHADOW.offsetY);
+        ringBaseY + (ringOn.isBoss ? MONSTER_SHADOW.bossOffsetY : MONSTER_SHADOW.offsetY);
       const pulse = 1 + 0.06 * Math.sin(time / 180);
       this.targetRing
         .setPosition(ringOn.sprite.x, footY)
         // 夹在「投影」与「本体」之间：比阴影高一层，比怪低一层
-        .setDepth(ringOn.sprite.y - 0.1)
+        .setDepth(ringBaseY - 0.1)
         // 横向拉宽、纵向压扁成地面透视的椭圆，看起来才是「躺在地上的一圈」；
         // 而且比阴影大一圈，环套在投影外面，两者都看得见
         .setScale(
@@ -2086,27 +2113,36 @@ export class StageBattleScene extends Phaser.Scene {
 
     for (const m of [...this.monsters]) {
       if (!m.sprite.active) continue;
+      // 待机晃动：只叠加「这一帧相对上一帧的增量」，
+      // 物理是 delta 驱动的（postUpdate 里 gameObject.y += dy），直接每帧加 bob 会越飘越远
+      const bob =
+        Math.sin(((time + m.bobPhase) / MONSTER_BOB.periodMs) * Math.PI * 2) *
+        (m.isBoss ? MONSTER_BOB.bossAmp : MONSTER_BOB.amp);
+      m.sprite.y += bob - m.bobApplied;
+      m.bobApplied = bob;
       m.sprite.setDepth(m.sprite.y);
+      // 只有本体在晃：投影 / 血条 / 名字都钉在「没晃时的落脚点」上，
+      // 这样看起来才是怪在原地踏步，而不是整只怪连影子一起平移
+      const baseY = m.sprite.y - m.bobApplied;
       // 阴影跟着怪走，并压在本体下面一层
       m.shadow
         .setPosition(
           m.sprite.x,
-          m.sprite.y +
-            (m.isBoss ? MONSTER_SHADOW.bossOffsetY : MONSTER_SHADOW.offsetY),
+          baseY + (m.isBoss ? MONSTER_SHADOW.bossOffsetY : MONSTER_SHADOW.offsetY),
         )
-        .setDepth(m.sprite.y - 0.2);
+        .setDepth(baseY - 0.2);
       const barY = m.isBoss ? HP_BAR.bossOffsetY : HP_BAR.offsetY;
       const barW = m.isBoss ? HP_BAR.bossW : HP_BAR.w;
       const barH = m.isBoss ? HP_BAR.bossH : HP_BAR.h;
-      m.hpBg.setPosition(m.sprite.x, m.sprite.y - barY);
-      m.hpFg.setPosition(m.sprite.x - barW / 2, m.sprite.y - barY);
-      // 等级在血条上方
+      m.hpBg.setPosition(m.sprite.x, baseY - barY);
+      m.hpFg.setPosition(m.sprite.x - barW / 2, baseY - barY);
+      // 名字 + 等级在血条上方
       m.label.setPosition(
         m.sprite.x,
-        m.sprite.y - barY - barH / 2 - HP_BAR.labelGap,
+        baseY - barY - barH / 2 - HP_BAR.labelGap,
       );
       // 血量数字固定居中在血条正中（不跟着红色填充区跑，位置才稳定不跳）
-      m.hpText.setPosition(m.sprite.x, m.sprite.y - barY);
+      m.hpText.setPosition(m.sprite.x, baseY - barY);
 
       // DoT 结算
       if (m.dots.length > 0) {
@@ -2135,7 +2171,10 @@ export class StageBattleScene extends Phaser.Scene {
       // BOSS 走到眼前才播登场提示
       if (m.isBoss && !m.announced && d <= CHASE_RANGE) {
         m.announced = true;
-        this.ui.toast(`第 ${this.stage} 关 BOSS 出现了！Lv${m.data.level}`, '#ff6b6b');
+        this.ui.toast(
+          `第 ${this.stage} 关 BOSS 出现了！${m.name} Lv${m.data.level}`,
+          '#ff6b6b',
+        );
         this.cameras.main.shake(200, 0.006);
         audio.play('boss');
       }
@@ -2196,7 +2235,10 @@ export class StageBattleScene extends Phaser.Scene {
       this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
       this.cameras.main.shake(160, 0.006);
       audio.play('die');
-      this.ui.toast(`被 Lv${m.data.level} ${m.isBoss ? 'BOSS ' : ''}击杀，已回城复活`, '#ff6b6b');
+      this.ui.toast(
+        `被 ${m.name} Lv${m.data.level} ${m.isBoss ? 'BOSS ' : ''}击杀，已回城复活`,
+        '#ff6b6b',
+      );
     }
   }
 

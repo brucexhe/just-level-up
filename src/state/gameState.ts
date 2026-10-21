@@ -265,17 +265,6 @@ export function sellInventoryItem(s: GameState, item: EquipmentItem): number {
   return refund;
 }
 
-/** 卖出已穿戴装备 → 回收半数自由装备点（含已投入的自由点） */
-export function sellEquippedItem(s: GameState, slot: EquipSlot): number {
-  const it = s.equipped[slot];
-  if (!it) return 0;
-  delete s.equipped[slot];
-  const refund = Math.max(1, Math.floor(totalPts(it) * BALANCE.SELL_REFUND_RATE));
-  s.equipPoints += refund;
-  s.hp = Math.min(maxHp(s), s.hp);
-  return refund;
-}
-
 // ---------------- 技能 ----------------
 
 export function skillLevel(s: GameState, id: SkillId): number {

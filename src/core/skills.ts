@@ -35,14 +35,22 @@ export function makeSkillBook(skillId: SkillDef['id'], points: number): SkillBoo
 }
 
 /**
- * 技能当前等级的威力系数。
+ * 技能威力系数**写死**为 `1 + 技能等级 / 100`（不随任何其它数值浮动）。
  *
- * 成长刻意压得很慢：**每级 +1% 基数**，也就是 100 级才翻倍。
+ * 例：Lv1 → ×1.01，Lv21 → ×1.21，Lv100 → ×2.00。也就是每级 +1% 基数，100 级才翻倍。
  * 技能书等级可以轻易到几十上百（书等级 ≤ 怪等级），
  * 如果按「每级 +0.5」那种线性涨，后期一个技能就能秒一片，装备和加点都失去意义。
  */
+export const SKILL_POWER_BASE = 1;
+export const SKILL_POWER_PER_LEVEL = 0.01;
+
+/** 技能当前等级的威力系数（只与技能等级有关） */
+export function skillPowerCoef(level: number): number {
+  return SKILL_POWER_BASE + SKILL_POWER_PER_LEVEL * Math.max(0, level);
+}
+
 export function skillPower(def: SkillDef, level: number): number {
-  return def.power * (1 + Math.max(0, level - 1) / 100);
+  return def.power * skillPowerCoef(level);
 }
 
 /** 技能当前等级的附加数值（半径 / 时长）：每级 +1 */
