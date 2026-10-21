@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   AudioEngine,
+  DUCK,
   LOOP_STEPS,
   MIN_MUSIC_MIDI,
   MUSIC_BUS_GAIN,
@@ -21,6 +22,8 @@ class FakeParam {
   value = 0;
   /** 记录包络爬到过的最高值（= 这个音的峰值音量） */
   peak = 0;
+  /** 记录所有 setTargetAtTime 的目标值（用来断言 ducking 真的压低过） */
+  targets: number[] = [];
   setValueAtTime(v: number) {
     this.value = v;
     return this;
@@ -33,9 +36,13 @@ class FakeParam {
   exponentialRampToValueAtTime() {
     return this;
   }
+  cancelScheduledValues() {
+    return this;
+  }
   /** 近似处理：直接落到目标值，方便断言音量确实被改了 */
   setTargetAtTime(v: number) {
     this.value = v;
+    this.targets.push(v);
     return this;
   }
 }
@@ -163,12 +170,12 @@ describe('BGM 序列（纯函数）', () => {
     }
   });
 
-  it('没有一个音符掉到"心跳"频段：琶音全部 ≥ MIDI 45（≈110Hz）', () => {
+  it('没有一个音符掉到"心跳"频段：琶音和长音全部 ≥ MIDI 45（≈110Hz）', () => {
     for (const t of MUSIC_THEMES) {
       for (let s = 0; s < LOOP_STEPS; s++) {
         for (const e of stepEvents(s, t)) {
-          if (e.kind === 'arp') {
-            expect(e.midi, `${t.name} 第 ${s} 步`).toBeGreaterThanOrEqual(MIN_MUSIC_MIDI);
+          if (e.kind === 'arp' || e.kind === 'pad') {
+            expect(e.midi, `${t.name} 第 ${s} 步的 ${e.kind}`).toBeGreaterThanOrEqual(MIN_MUSIC_MIDI);
           }
         }
       }
@@ -316,9 +323,10 @@ describe('AudioEngine 开关与音量', () => {
     expect(e.volume).toBe(0);
   });
 
-  it('背景音乐默认够响：总线 0.75（旧值 0.34 偏小）+ 三个音轨的峰值都提过', () => {
+  it('背景音乐压回背景该有的位置：总线 0.5（比听不见的 0.34 响，比盖住技能的 0.75 小）', () => {
     const { ctx } = tracked();
-    expect(MUSIC_BUS_GAIN).toBeGreaterThan(0.6);
+    expect(MUSIC_BUS_GAIN).toBeGreaterThan(0.34);
+    expect(MUSIC_BUS_GAIN).toBeLessThan(0.75);
     const musicBus = ctx.gainNodes[1]!;
     expect(musicBus.gain.value).toBeCloseTo(MUSIC_BUS_GAIN, 5);
   });
@@ -424,12 +432,60 @@ describe('AudioEngine 开关与音量', () => {
     expect(peakOf('swing')).toBeGreaterThan(0.3);
   });
 
-  it('技能音不会淹没在变响后的 BGM 里：压得过琶音的最强音', () => {
+  it('技能音压得过背景：就算 BGM 调响过，技能峰值仍然大于琶音最响的一下', () => {
     const sfxBus = 0.9;
     // 贝斯删掉后，BGM 里最响的是小节头那一下琶音（力度 ×1.4）
     const loudestNote = NOTE_PEAK.arp * MUSIC_THEMES[0]!.arpVel * 1.4 * MUSIC_BUS_GAIN;
     for (const n of ['fire', 'frenzy', 'poison'] as const) {
       expect(peakOf(n) * sfxBus, `${n} 相对琶音`).toBeGreaterThan(loudestNote);
     }
+  });
+});
+
+describe('闪避（ducking）：技能响时给背景让路', () => {
+  it('放技能会把音乐总线压下去再放回原音量', () => {
+    const { e, ctx } = tracked();
+    e.unlock(); // 起播 BGM
+    const musicBus = ctx.gainNodes[1]!;
+    musicBus.gain.targets.length = 0;
+
+    e.play('fire');
+    const ducked = Math.min(...musicBus.gain.targets);
+    expect(ducked).toBeCloseTo(MUSIC_BUS_GAIN * DUCK.factor, 5);
+    expect(ducked).toBeLessThan(MUSIC_BUS_GAIN);
+    // 最后是放回原音量，不是压着不放
+    expect(musicBus.gain.targets.at(-1)).toBeCloseTo(MUSIC_BUS_GAIN, 5);
+  });
+
+  it('普攻命中不去压背景（一秒好几下，压了会抽水）', () => {
+    const { e, ctx } = tracked();
+    e.unlock();
+    const musicBus = ctx.gainNodes[1]!;
+    musicBus.gain.targets.length = 0;
+
+    e.play('hit');
+    expect(musicBus.gain.targets).toHaveLength(0);
+    e.play('swing');
+    expect(musicBus.gain.targets).toHaveLength(0);
+  });
+
+  it('重要提示音也闪避：升级 / BOSS / 死亡', () => {
+    for (const n of ['levelup', 'boss', 'die'] as const) {
+      const { e, ctx } = tracked();
+      e.unlock();
+      const musicBus = ctx.gainNodes[1]!;
+      musicBus.gain.targets.length = 0;
+      e.play(n);
+      expect(Math.min(...musicBus.gain.targets), n).toBeLessThan(MUSIC_BUS_GAIN);
+    }
+  });
+
+  it('音乐关掉时不闪避（没有背景可让）', () => {
+    const { e, ctx } = tracked();
+    e.setMusic(false);
+    const musicBus = ctx.gainNodes[1]!;
+    musicBus.gain.targets.length = 0;
+    e.play('fire');
+    expect(musicBus.gain.targets).toHaveLength(0);
   });
 });

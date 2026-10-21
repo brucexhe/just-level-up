@@ -285,8 +285,13 @@ export function musicThemeForStage(stage: number): MusicTheme {
 
 /**
  * 背景音乐允许的最低音（MIDI 45 = A2 ≈ 110Hz）。
- * 低于这个音就整段升八度：低频短音的听感是"咚、咚"的心跳，非常难受，
- * 所以连琶音掉到低音区也要抬上来（长音 pad 是慢起慢落的 drone，不受此限制）。
+ *
+ * 低于这个音就整段升八度。原因有两个，都很实在：
+ * 1. 低频短音的听感是"咚、咚"的心跳，非常难受（贝斯就是这么被删掉的）；
+ * 2. 笔记本电脑/小音箱基本放不出 100Hz 以下，写那么低只是白白占掉音量余量，
+ *    还会把技能音的低频一起糊住。
+ *
+ * 所以**所有**背景声部（琶音 arp 和长音 pad）都要过这道地板。
  */
 export const MIN_MUSIC_MIDI = 45;
 
@@ -315,9 +320,10 @@ export function stepEvents(step: number, theme: MusicTheme = MUSIC_THEMES[0]!): 
   const chord = theme.chords[bar % theme.chords.length]!;
   const out: NoteEvent[] = [];
 
-  // 持续和声：每小节头上铺一层长音（低八度，只做底）
+  // 持续和声：每小节头上铺一层长音（慢起慢落的 drone，只做"空气"不做节奏）
   if (inBar === 0 && theme.padVel > 0) {
-    out.push({ kind: 'pad', midi: chord.tones[0]! - 12, vel: theme.padVel });
+    // 同样要过音高地板：以前这里写 -12 八度，深渊关会掉到 65Hz 变成低频轰鸣
+    out.push({ kind: 'pad', midi: liftAboveFloor(chord.tones[0]!), vel: theme.padVel });
   }
   const ai = theme.arpSteps.indexOf(inBar);
   if (ai >= 0) {
@@ -337,10 +343,12 @@ export function stepEvents(step: number, theme: MusicTheme = MUSIC_THEMES[0]!): 
 /**
  * 音乐总线的基准增益（BGM 相对音效的比例）。
  *
- * BGM 是持续不断的背景层，理论上要压在音效之下，但 0.34 压得太狠
- * （相对音效 -8dB 左右），默认音量下几乎听不见，这里提到 0.75。
+ * 这个值来回改过两轮，定在 0.5 是踩出来的平衡点：
+ * - 0.34：相对音效低约 8dB，默认音量下**几乎听不见**（第一轮的问题）；
+ * - 0.75：听得见了，但轮到**技能音被背景盖住**（第二轮的问题）；
+ * - 0.5：还能当背景听，同时把余量让给音效，配合下面的 ducking 足够清晰。
  */
-export const MUSIC_BUS_GAIN = 0.75;
+export const MUSIC_BUS_GAIN = 0.5;
 
 /** 各音轨的峰值增益（乘上音符力度后才是实际音量）；贝斯已删除，只剩琶音与铺底 */
 export const NOTE_PEAK = { arp: 0.4, pad: 0.6 } as const;
@@ -349,7 +357,31 @@ export const NOTE_PEAK = { arp: 0.4, pad: 0.6 } as const;
  * 音效的增益倍数。BGM 调响之后，技能音如果还是老音量会被背景盖住，
  * 所以技能整体抬一档；普通攻击因为每次挥砍都响（太频繁），只小幅提升。
  */
-export const SFX_GAIN = { skill: 1.7, swing: 1.35 } as const;
+export const SFX_GAIN = { skill: 2.0, swing: 1.35 } as const;
+
+/**
+ * 闪避（ducking）：技能这类**不能漏听**的音效一响，就把音乐短暂压低再放回来。
+ *
+ * 光靠调音量解决不了"技能被背景盖住"——背景是连着的十六分音符流，
+ * 频段又和技能音撞在一起，属于听觉掩蔽，不是谁声音大的问题。
+ * 让背景在关键时刻让路，才是真的听得清。
+ *
+ * - factor：压到原来的多少（0.3 = 三成）
+ * - attack：压下去的快慢（太长就压了个寂寞）
+ * - hold：压住不动的时间，盖住技能音最响的那一截
+ * - release：放回原音量，慢一点才没有"一跳一跳"的抽水感
+ */
+export const DUCK = { factor: 0.3, attack: 0.02, hold: 0.18, release: 0.32 } as const;
+
+/** 会触发闪避的音效：三个技能音，外加不能漏掉的提示音 */
+const DUCK_SFX: ReadonlySet<SfxName> = new Set<SfxName>([
+  'fire',
+  'frenzy',
+  'poison',
+  'levelup',
+  'boss',
+  'die',
+]);
 
 export function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
@@ -603,6 +635,29 @@ export class AudioEngine {
     }
   }
 
+  /** 上次闪避全部走完的时刻（用来做冷却，避免连续触发把音乐压死） */
+  private duckUntil = 0;
+
+  /**
+   * 把背景音乐短暂压低再放回原音量。
+   *
+   * 全程用 setTargetAtTime（指数平滑）而不是硬跳，否则会有咔哒声。
+   */
+  private duck(): void {
+    const ctx = this.ctx;
+    const bus = this.musicBus;
+    if (!ctx || !bus) return;
+    const t = ctx.currentTime;
+    // 冷却：上一次还没放回来就别重排了，不然密集放技能时音乐会一直趴着
+    if (t < this.duckUntil - DUCK.hold) return;
+    this.duckUntil = t + DUCK.attack + DUCK.hold + DUCK.release;
+
+    const g = bus.gain;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(MUSIC_BUS_GAIN * DUCK.factor, t, DUCK.attack);
+    g.setTargetAtTime(MUSIC_BUS_GAIN, t + DUCK.hold, DUCK.release);
+  }
+
   // ---------------- 音效 ----------------
 
   /**
@@ -612,6 +667,9 @@ export class AudioEngine {
   play(name: SfxName, gain = 1): void {
     const ctx = this.ensure();
     if (!ctx || !this.sfxBus || !this.sfxOn) return;
+    // 技能音开嗓前先把背景让开。只对「不能漏听」的那几个生效：
+    // 普攻的 hit 一秒好几下，也去压背景的话音乐会变成一抽一抽的，很难受。
+    if (this.bgmRunning && DUCK_SFX.has(name)) this.duck();
     let bus: GainNode = this.sfxBus;
     if (gain < 1) {
       const g = ctx.createGain();
