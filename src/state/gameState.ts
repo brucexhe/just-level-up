@@ -212,7 +212,10 @@ export function unequipItem(s: GameState, slot: EquipSlot): void {
   s.hp = Math.min(maxHp(s), s.hp);
 }
 
-/** 把 1 点自由装备点分配到某件已穿戴装备 */
+/**
+ * 把 1 点自由装备点分配到某件已穿戴装备上。
+ * 只能加该装备**自带的词条**（普通 1 条就只能加那 1 条），不能凭空造新词条。
+ */
 export function allocateEquipPoint(
   s: GameState,
   slot: EquipSlot,
@@ -220,6 +223,7 @@ export function allocateEquipPoint(
 ): boolean {
   const it = s.equipped[slot];
   if (!it || s.equipPoints <= 0) return false;
+  if (!((it.stats[key] ?? 0) > 0)) return false;
   s.equipPoints -= 1;
   it.freeAllocated[key] = (it.freeAllocated[key] ?? 0) + 1;
   s.hp = Math.min(maxHp(s), s.hp);

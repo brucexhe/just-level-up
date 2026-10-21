@@ -94,11 +94,14 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(html).toContain(it.name);
     expect(html).toContain('自由装备点');
 
-    // 投入自由装备点绑定到该物品
+    // 投入自由装备点：只能投到该装备已有的词条上（面板只渲染那些按钮）
     s.equipPoints = 3;
-    PANEL_BY_ID.equipment.action('alloc', 'pAtk', s, api);
+    const html2 = PANEL_BY_ID.equipment.render(s, api);
+    const key = Object.keys(it.stats)[0]!;
+    expect(html2).toContain(`data-act="alloc" data-arg="${key}"`);
+    PANEL_BY_ID.equipment.action('alloc', key, s, api);
     expect(s.equipPoints).toBe(2);
-    expect(it.freeAllocated.pAtk).toBe(1);
+    expect(it.freeAllocated[key]).toBe(1);
   });
 
   it('技能面板：三个主动技能默认已学会，可花技能点升级', () => {

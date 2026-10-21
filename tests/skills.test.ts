@@ -105,15 +105,15 @@ describe('技能书 / 技能点', () => {
   });
 
   it('威力系数写死为 1 + 等级/100：Lv21 → ×1.21', () => {
-    const fire = SKILL_BY_ID.fireball; // base 2
+    const fire = SKILL_BY_ID.fireball;
     expect(skillPowerCoef(1)).toBeCloseTo(1.01, 5);
     expect(skillPowerCoef(21)).toBeCloseTo(1.21, 5);
     expect(skillPowerCoef(100)).toBeCloseTo(2.0, 5);
-    // 系数只取决于等级，与该技能是谁无关
+    // 系数只取决于等级，与该技能是谁无关（不写死 power，基础威力随时可调）
     expect(skillPower(fire, 21) / fire.power).toBeCloseTo(1.21, 5);
     expect(skillPower(SKILL_BY_ID.poison, 21) / SKILL_BY_ID.poison.power).toBeCloseTo(1.21, 5);
-    expect(skillPower(fire, 1)).toBeCloseTo(2.02, 5);
-    expect(skillPower(fire, 11)).toBeCloseTo(2.22, 5); // +11%
+    expect(skillPower(fire, 1)).toBeCloseTo(fire.power * 1.01, 5);
+    expect(skillPower(fire, 11)).toBeCloseTo(fire.power * 1.11, 5); // +11%
     // 100 级 ≈ 翻倍，而不是旧公式那种 6 倍
     expect(skillPower(fire, 100) / skillPower(fire, 1)).toBeCloseTo(1.98, 2);
     expect(skillPower(fire, 100)).toBeLessThan(skillPower(fire, 1) * 2.1);

@@ -16,6 +16,7 @@ import {
   totalPoints,
 } from '../src/core/equipment';
 import { expToNext } from '../src/core/progression';
+import type { BaseAttr } from '../src/core/types';
 
 const fixed = (v: number) => () => v;
 
@@ -82,14 +83,21 @@ describe('equipment loop', () => {
     expect(s.equipped.weapon).toBe(it2);
   });
 
-  it('free equip point binds to the worn item', () => {
+  it('free equip point binds to the worn item, and only on its own lines', () => {
     const s = createInitialState();
     const it = dropEquipment(10, fixed(0.5));
     it.slot = 'weapon';
     equipItem(s, it);
     s.equipPoints = 3;
     const before = totalPoints(it);
-    expect(allocateEquipPoint(s, 'weapon', 'pAtk')).toBe(true);
+    const own = Object.keys(it.stats)[0] as BaseAttr;
+    const alien = (['hp', 'mp', 'pAtk', 'mAtk', 'pDef', 'mDef', 'speed', 'agi', 'luck'] as const).find(
+      (k) => !((it.stats[k] ?? 0) > 0),
+    )!;
+    // 装备没有的词条：拒绝加点，也不扣点
+    expect(allocateEquipPoint(s, 'weapon', alien)).toBe(false);
+    expect(s.equipPoints).toBe(3);
+    expect(allocateEquipPoint(s, 'weapon', own)).toBe(true);
     expect(totalPoints(it)).toBe(before + 1);
     expect(s.equipPoints).toBe(2);
   });

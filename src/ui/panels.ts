@@ -184,12 +184,19 @@ const characterPanel: PanelDef = {
 
 function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
   const r = RARITY_META[item.rarity];
-  const alloc = BASE_ATTRS.map(
-    (k) =>
-      `<button data-act="alloc" data-arg="${k}" ${
-        s.equipPoints > 0 ? '' : 'disabled'
-      }>+${ATTR_META[k].name}</button>`,
-  ).join('');
+  // 只能往这件装备已有的词条上加点：普通 1 条就只有那 1 个按钮
+  const allocable = BASE_ATTRS.filter((k) => (item.stats[k] ?? 0) > 0);
+  const alloc =
+    allocable.length > 0
+      ? allocable
+          .map(
+            (k) =>
+              `<button data-act="alloc" data-arg="${k}" ${
+                s.equipPoints > 0 ? '' : 'disabled'
+              }>+${ATTR_META[k].name}</button>`,
+          )
+          .join('')
+      : `<div class="note">这件装备没有任何词条，自由装备点投不进来</div>`;
   return `
     <div class="item-card" style="border-color:${r.color}55">
       <div class="ic-head">
@@ -205,7 +212,7 @@ function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
       <div class="alloc-box">
         <div class="ab-title">投入自由装备点（<b style="color:#7ee787">${fmtNum(
           s.equipPoints,
-        )}</b> 可用，绑定此装备，换装不退）</div>
+        )}</b> 可用，只能投到已有词条，绑定此装备，换装不退）</div>
         <div class="alloc-grid">${alloc}</div>
       </div>
       <div class="ic-foot">
