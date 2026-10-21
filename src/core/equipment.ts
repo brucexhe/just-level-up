@@ -10,8 +10,8 @@ export type EquipSlot =
   | 'legs'
   | 'boots'
   | 'necklace'
-  | 'ring1'
-  | 'ring2';
+  | 'ring'
+  | 'gloves';
 
 export const EQUIP_SLOTS: EquipSlot[] = [
   'weapon',
@@ -20,8 +20,8 @@ export const EQUIP_SLOTS: EquipSlot[] = [
   'legs',
   'boots',
   'necklace',
-  'ring1',
-  'ring2',
+  'ring',
+  'gloves',
 ];
 
 export type RarityKey =
@@ -62,8 +62,8 @@ const SLOT_BASE: Record<EquipSlot, string> = {
   legs: '护腿',
   boots: '靴子',
   necklace: '项链',
-  ring1: '戒指',
-  ring2: '戒指',
+  ring: '戒指',
+  gloves: '手套',
 };
 
 function sumValues(s: AttrSet): number {

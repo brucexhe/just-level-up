@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { dropEquipment } from '../src/core/equipment';
+import { EQUIP_SLOTS, dropEquipment } from '../src/core/equipment';
 import { dropSkillBook } from '../src/core/skills';
 import { createInitialState, gainExp, maxHp, maxMp } from '../src/state/gameState';
 import {
@@ -181,4 +181,26 @@ describe('偏好设置（音乐 / 音效 / 音量）', () => {
     savePrefs({ music: true, sfx: false, volume: -3 });
     expect(loadPrefs().volume).toBe(0);
   });
+  it('装备槽：戒指只有一个，另有手套', () => {
+    expect(EQUIP_SLOTS).toContain('ring');
+    expect(EQUIP_SLOTS).toContain('gloves');
+    expect(EQUIP_SLOTS).not.toContain('ring1');
+    expect(EQUIP_SLOTS).not.toContain('ring2');
+  });
+
+  it('旧存档的两个戒指槽会迁移成一个，点数高的那枚留在身上', () => {
+    const s = normalizeState({
+      equipped: {
+        ring1: { id: 'r1', slot: 'ring1', name: '20级戒指', stats: { pAtk: 5 }, freeAllocated: {} },
+        ring2: { id: 'r2', slot: 'ring2', name: '30级戒指', stats: { pAtk: 30 }, freeAllocated: {} },
+      },
+      inventory: [{ id: 'r3', slot: 'ring2', name: '备用戒指', stats: { hp: 3 }, freeAllocated: {} }],
+    });
+    expect(s.equipped.ring!.id).toBe('r2'); // 30 点的胜出
+    // 输的那一枚退回背包，而不是凭空消失
+    expect(s.inventory.some((x) => x.id === 'r1')).toBe(true);
+    // 背包里的旧槽位也被改成 ring，不会被判为非法丢弃
+    expect(s.inventory.find((x) => x.id === 'r3')!.slot).toBe('ring');
+  });
+
 });

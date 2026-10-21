@@ -112,15 +112,34 @@ function stats(raw: unknown): AttrSet {
   return out;
 }
 
+/** 一件装备的总点数（含玩家追加的自由点），迁移旧戒指时用来挑更好的那枚 */
+function itemPts(it: EquipmentItem): number {
+  let t = 0;
+  for (const v of Object.values(it.stats)) t += v ?? 0;
+  for (const v of Object.values(it.freeAllocated)) t += v ?? 0;
+  return t;
+}
+
+/**
+ * 旧存档有两个戒指槽（ring1 / ring2），现在已经合并成一个 `ring`。
+ * 这里把旧槽位映射过来，否则旧档里的戒指会在读档时被当成非法数据丢掉。
+ */
+const LEGACY_SLOT: Record<string, EquipSlot> = {
+  ring1: 'ring',
+  ring2: 'ring',
+};
+
 function item(raw: unknown): EquipmentItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  const slot = r.slot;
-  if (typeof slot !== 'string' || !EQUIP_SLOTS.includes(slot as EquipSlot)) return null;
+  const rawSlot = r.slot;
+  if (typeof rawSlot !== 'string') return null;
+  const slot = (LEGACY_SLOT[rawSlot] ?? rawSlot) as EquipSlot;
+  if (!EQUIP_SLOTS.includes(slot)) return null;
   if (typeof r.id !== 'string') return null;
   return {
     id: r.id,
-    slot: slot as EquipSlot,
+    slot,
     name: typeof r.name === 'string' ? r.name : '未知装备',
     stats: stats(r.stats),
     freeAllocated: stats(r.freeAllocated),
@@ -161,9 +180,22 @@ export function normalizeState(raw: unknown): GameState {
     }
   }
   if (r.equipped && typeof r.equipped === 'object') {
+    const eq = r.equipped as Record<string, unknown>;
     for (const slot of EQUIP_SLOTS) {
-      const v = item((r.equipped as Record<string, unknown>)[slot]);
+      const v = item(eq[slot]);
       if (v && v.slot === slot) s.equipped[slot] = v;
+    }
+    // 旧档同时戴着 ring1 + ring2：只留下点数更高的那枚，另一枚退回背包
+    const worn = s.equipped.ring;
+    if (worn) {
+      for (const legacy of ['ring1', 'ring2'] as const) {
+        const other = item(eq[legacy]);
+        if (!other || other.id === worn.id) continue;
+        const better = itemPts(other) > itemPts(worn) ? other : worn;
+        const worse = better === other ? worn : other;
+        s.equipped.ring = better;
+        s.inventory.push(worse);
+      }
     }
   }
   if (Array.isArray(r.skillBooks)) {

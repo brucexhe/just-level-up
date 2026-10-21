@@ -324,6 +324,11 @@ export class GameUI {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
       if (e.code === 'Escape') {
+        // 选关弹窗开着时，Esc 先关弹窗（它是一个覆盖层，优先级最高）
+        if (!this.modal.hidden) {
+          this.closeStageModal();
+          return;
+        }
         this.closeAll();
         return;
       }

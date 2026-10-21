@@ -13,8 +13,8 @@ export const SLOT_META: Record<EquipSlot, SlotMeta> = {
   legs: { name: '护腿', icon: '🩳' },
   boots: { name: '靴子', icon: '🥾' },
   necklace: { name: '项链', icon: '📿' },
-  ring1: { name: '戒指', icon: '💍' },
-  ring2: { name: '戒指', icon: '💍' },
+  ring: { name: '戒指', icon: '💍' },
+  gloves: { name: '手套', icon: '🧤' },
 };
 
 export interface RarityMeta {

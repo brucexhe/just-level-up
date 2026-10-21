@@ -1575,6 +1575,9 @@
 .modal {
   position: absolute;
   inset: 0;
+  /* #ui-root 整体是 pointer-events:none，弹窗必须显式打开，
+     否则关闭按钮 / 关卡卡片 / 遮罩的点击都会穿透到下面的 canvas 上（表现就是「关不掉」） */
+  pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;
