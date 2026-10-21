@@ -8,6 +8,7 @@ import {
 } from '../core/equipment';
 import { expToNext } from '../core/progression';
 import {
+  makeSkillBook,
   skillUpgradeCost,
   type SkillBook,
 } from '../core/skills';
@@ -294,23 +295,26 @@ export function isSkillLearned(s: GameState, id: SkillId): boolean {
   return skillLevel(s, id) > 0;
 }
 
-export type UseBookResult =
-  | { kind: 'learn'; skill: SkillId }
-  | { kind: 'convert'; points: number };
+export type EquipBookResult =
+  | { kind: 'equip', skill: SkillId, from: number, to: number }
+  | { kind: 'learn', skill: SkillId, to: number };
 
 /**
- * 使用技能书：未学会 → 学会该技能（Lv1）；已学会 → 转为技能点（半数）
+ * 穿戴技能书：和穿装备一样 —— 技能书自带等级，穿上就把该技能的等级**替换**成书的点数。
+ *
+ * 被换下来的等级不会凭空消失：按原等级生成一本新书退回背包
+ * （和「换装备时旧装备回到背包」是同一条规则），玩家可以再把它卖掉换技能点。
  */
-export function useSkillBook(s: GameState, book: SkillBook): UseBookResult {
+export function equipSkillBook(s: GameState, book: SkillBook): EquipBookResult {
   const idx = s.skillBooks.indexOf(book);
   if (idx >= 0) s.skillBooks.splice(idx, 1);
-  if (!isSkillLearned(s, book.skillId)) {
-    s.skills[book.skillId] = 1;
-    return { kind: 'learn', skill: book.skillId };
-  }
-  const points = bookPoints(book);
-  s.skillPoints += points;
-  return { kind: 'convert', points };
+
+  const from = skillLevel(s, book.skillId);
+  if (from > 0) s.skillBooks.push(makeSkillBook(book.skillId, from));
+  s.skills[book.skillId] = book.points;
+  return from > 0
+    ? { kind: 'equip', skill: book.skillId, from, to: book.points }
+    : { kind: 'learn', skill: book.skillId, to: book.points };
 }
 
 /** 卖出技能书 → 技能点（半数），不给金币 */

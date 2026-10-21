@@ -138,6 +138,28 @@ interface GroundDropView {
   label: Phaser.GameObjects.Text;
 }
 
+/** 怪物脚下的地面投影：普通怪 / BOSS 尺寸不同 */
+const MONSTER_SHADOW = {
+  // 'shadow' 贴图本身就是 24×12、0.35 透明度的软椭圆，
+  // 所以这里 scale 要放到和怪一样宽（36px），alpha 保持 1（和人物一致），
+  // 再乘一次 0.5 就几乎看不见了。
+  scaleX: 1.5,
+  scaleY: 1,
+  bossScaleX: 2.8,
+  bossScaleY: 1.5,
+  alpha: 1,
+  /** 投影中心相对怪物中心的偏移（贴在脚下，看起来才像踩在地上） */
+  offsetY: 20,
+  bossOffsetY: 30,
+};
+
+/**
+ * 人物脚下的地面投影。
+ * 贴图 16 行、scale 3 → 显示高 48，中心在 sprite.y，脚底 ≈ y+21，
+ * 所以投影要落在 y+22（脚踩在椭圆里），原来写 +26 会空出 5px 像浮在空中。
+ */
+const PLAYER_SHADOW = { scaleX: 1.5, scaleY: 1, offsetY: 22 };
+
 interface MonsterView {
   data: Combatant;
   sprite: Phaser.Physics.Arcade.Sprite;
@@ -148,6 +170,8 @@ interface MonsterView {
   hpText: Phaser.GameObjects.Text;
   /** 血条上方第一行：等级 */
   label: Phaser.GameObjects.Text;
+  /** 脚下的地面投影（和人物、树一样，让怪有落地感） */
+  shadow: Phaser.GameObjects.Image;
   nextAttackAt: number;
   knockUntil: number;
   dots: Dot[];
@@ -236,7 +260,10 @@ export class StageBattleScene extends Phaser.Scene {
 
     this.buildObstacles();
 
-    this.shadow = this.add.image(0, 0, 'shadow').setScale(1.4, 1).setDepth(4);
+    this.shadow = this.add
+      .image(0, 0, 'shadow')
+      .setScale(PLAYER_SHADOW.scaleX, PLAYER_SHADOW.scaleY)
+      .setDepth(4);
     this.aura = this.add
       .image(0, 0, 'ring')
       .setTint(0xff7bd5)
@@ -572,6 +599,7 @@ export class StageBattleScene extends Phaser.Scene {
       m.hpFg.destroy();
       m.hpText.destroy();
       m.label.destroy();
+      m.shadow.destroy();
       m.sprite.destroy();
     }
     this.monsters = [];
@@ -610,6 +638,16 @@ export class StageBattleScene extends Phaser.Scene {
     const sprite = this.monsterGroup.create(x, y, `${skin}-a`) as Phaser.Physics.Arcade.Sprite;
     sprite.setScale(isBoss ? 5.5 : 3).setDepth(y).play(`walk-${skin}`);
     if (isBoss) sprite.setTint(0xff9a9a);
+
+    // 地面投影：和人物/树同一套做法，浅草地上才不会像"贴上去的纸片"
+    const shadow = this.add
+      .image(x, y + (isBoss ? MONSTER_SHADOW.bossOffsetY : MONSTER_SHADOW.offsetY), 'shadow')
+      .setScale(
+        isBoss ? MONSTER_SHADOW.bossScaleX : MONSTER_SHADOW.scaleX,
+        isBoss ? MONSTER_SHADOW.bossScaleY : MONSTER_SHADOW.scaleY,
+      )
+      .setAlpha(MONSTER_SHADOW.alpha)
+      .setDepth(y - 0.2);
 
     const barY = isBoss ? HP_BAR.bossOffsetY : HP_BAR.offsetY;
     const barW = isBoss ? HP_BAR.bossW : HP_BAR.w;
@@ -669,6 +707,7 @@ export class StageBattleScene extends Phaser.Scene {
       hpFg,
       hpText,
       label,
+      shadow,
       nextAttackAt: 0,
       knockUntil: 0,
       dots: [],
@@ -1516,6 +1555,7 @@ export class StageBattleScene extends Phaser.Scene {
     m.hpFg.destroy();
     m.hpText.destroy();
     m.label.destroy();
+    m.shadow.destroy();
     m.sprite.destroy();
     this.monsters = this.monsters.filter((x) => x !== m);
 
@@ -1852,7 +1892,8 @@ export class StageBattleScene extends Phaser.Scene {
       this.player.anims.stop();
       this.player.setTexture('player-a');
     }
-    this.shadow.setPosition(this.player.x, this.player.y + 26);
+    // 踩在投影里：位置贴脚底，深度压在人物下面一层（和怪物阴影同一套规则）
+    this.shadow.setPosition(this.player.x, this.player.y + PLAYER_SHADOW.offsetY);
     this.player.setDepth(this.player.y);
     this.shadow.setDepth(this.player.y - 0.1);
     this.playerLabel.setPosition(this.player.x, this.player.y - 44);
@@ -1893,7 +1934,22 @@ export class StageBattleScene extends Phaser.Scene {
 
     const ringOn = this.attackTarget;
     if (ringOn && ringOn.sprite.active) {
-      this.targetRing.setPosition(ringOn.sprite.x, ringOn.sprite.y + 8).setVisible(true);
+      // 选中环套在地面投影那一圈上（而不是压在怪身上），读起来才像「锁定脚下」
+      const footY =
+        ringOn.sprite.y +
+        (ringOn.isBoss ? MONSTER_SHADOW.bossOffsetY : MONSTER_SHADOW.offsetY);
+      const pulse = 1 + 0.06 * Math.sin(time / 180);
+      this.targetRing
+        .setPosition(ringOn.sprite.x, footY)
+        // 夹在「投影」与「本体」之间：比阴影高一层，比怪低一层
+        .setDepth(ringOn.sprite.y - 0.1)
+        // 横向拉宽、纵向压扁成地面透视的椭圆，看起来才是「躺在地上的一圈」；
+        // 而且比阴影大一圈，环套在投影外面，两者都看得见
+        .setScale(
+          (ringOn.isBoss ? 2 : 1.2) * pulse,
+          (ringOn.isBoss ? 1.05 : 0.62) * pulse,
+        )
+        .setVisible(true);
     } else {
       this.targetRing.setVisible(false);
     }
@@ -1906,6 +1962,14 @@ export class StageBattleScene extends Phaser.Scene {
     for (const m of [...this.monsters]) {
       if (!m.sprite.active) continue;
       m.sprite.setDepth(m.sprite.y);
+      // 阴影跟着怪走，并压在本体下面一层
+      m.shadow
+        .setPosition(
+          m.sprite.x,
+          m.sprite.y +
+            (m.isBoss ? MONSTER_SHADOW.bossOffsetY : MONSTER_SHADOW.offsetY),
+        )
+        .setDepth(m.sprite.y - 0.2);
       const barY = m.isBoss ? HP_BAR.bossOffsetY : HP_BAR.offsetY;
       const barW = m.isBoss ? HP_BAR.bossW : HP_BAR.w;
       const barH = m.isBoss ? HP_BAR.bossH : HP_BAR.h;

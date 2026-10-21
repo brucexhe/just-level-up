@@ -33,7 +33,7 @@ import {
   skillUpgradeCostOf,
   unequipItem,
   upgradeSkill,
-  useSkillBook,
+  equipSkillBook,
 } from '../state/gameState';
 import type { DockSide, PanelId, UIApi } from './api';
 import { esc, fmtNum, pct } from './dom';
@@ -432,21 +432,30 @@ function bookRows(s: GameState): string {
   return sorted
     .map((b: SkillBook) => {
       const def = SKILL_BY_ID[b.skillId];
-      const learned = skillLevel(s, b.skillId) > 0;
+      const cur = skillLevel(s, b.skillId);
+      const gain = bookPoints(b);
+      // 换装预览：升 / 降多少级，一眼看得出值不值
+      const delta = b.points - cur;
+      const badge =
+        delta > 0
+          ? `<span class="bi-up">↑${fmtNum(delta)}</span>`
+          : delta < 0
+            ? `<span class="bi-dn">↓${fmtNum(-delta)}</span>`
+            : `<span class="bi-eq">持平</span>`;
       return `<div class="bag-item">
         <div class="bi-top">
           <div class="bi-ico">${def.icon}</div>
           <div style="min-width:0;flex:1">
-            <div class="bi-nm">${def.name} · 技能书</div>
-            <div class="bi-sub">${fmtNum(b.points)} 点 · 卖出 +${fmtNum(
-              bookPoints(b),
-            )} 技能点${learned ? ' · 已学会' : ''}</div>
+            <div class="bi-nm">${def.name} · 技能书 Lv${fmtNum(b.points)}</div>
+            <div class="bi-sub">当前 Lv${fmtNum(cur)} ${badge} · 卖出 +${fmtNum(
+              gain,
+            )} 技能点</div>
           </div>
         </div>
         <div class="bi-acts">
-          <button class="btn gold" data-act="use-book" data-arg="${b.id}">${
-            learned ? '转化为技能点' : '学习'
-          }</button>
+          <button class="btn gold" data-act="use-book" data-arg="${b.id}">穿戴 → Lv${fmtNum(
+            b.points,
+          )}</button>
           <button class="btn danger" data-act="sell-book" data-arg="${b.id}">卖出 +${fmtNum(
             bookPoints(b),
           )}</button>
@@ -520,13 +529,17 @@ const bagPanel: PanelDef = {
       case 'use-book': {
         const b = s.skillBooks.find((x) => x.id === arg);
         if (b) {
-          const r = useSkillBook(s, b);
-          if (r.kind === 'learn') {
-            api.toast(`学会新技能：${SKILL_BY_ID[r.skill].name}！`, '#ffd93d');
-            api.view.skillId = r.skill;
+          const r = equipSkillBook(s, b);
+          const name = SKILL_BY_ID[r.skill].name;
+          if (r.kind === 'equip') {
+            api.toast(
+              `穿戴《${name}》Lv${r.to}：原 Lv${r.from} 已退回背包`,
+              r.to >= r.from ? '#7ee787' : '#ff8a8a',
+            );
           } else {
-            api.toast(`转化为 ${r.points} 技能点`, '#7ee787');
+            api.toast(`学会新技能：${name} Lv${r.to}！`, '#ffd93d');
           }
+          api.view.skillId = r.skill;
           api.refresh();
         }
         break;

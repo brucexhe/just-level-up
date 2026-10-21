@@ -24,6 +24,16 @@ export function dropSkillBook(
   };
 }
 
+/** 直接构造一本指定点数的技能书（换装时把旧等级退回背包用） */
+export function makeSkillBook(skillId: SkillDef['id'], points: number): SkillBook {
+  bookSeq += 1;
+  return {
+    id: `sb-${Date.now().toString(36)}-${bookSeq}`,
+    skillId,
+    points: Math.max(1, Math.floor(points)),
+  };
+}
+
 /** 技能当前等级的威力系数 */
 export function skillPower(def: SkillDef, level: number): number {
   return def.power + def.powerGrowth * Math.max(0, level - 1);
