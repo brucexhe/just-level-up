@@ -20,10 +20,10 @@ import { expToNext } from '../src/core/progression';
 const fixed = (v: number) => () => v;
 
 describe('exp / level up', () => {
-  it('kills at same level advance ~1 level each', () => {
+  it('打同级怪要多杀几只才升一级（不再是 1 只 1 级）', () => {
     const s = createInitialState();
-    // 打 1 级怪得 1 exp，升 1→2 需 2 exp
-    gainExp(s, 1);
+    // 打 1 级怪得 1 exp，升 1→2 需 expToNext(1)=5 exp
+    for (let i = 0; i < 4; i++) gainExp(s, 1);
     expect(s.level).toBe(1);
     gainExp(s, 1);
     expect(s.level).toBe(2);
@@ -32,7 +32,7 @@ describe('exp / level up', () => {
 
   it('exp carries over across multiple levels', () => {
     const s = createInitialState();
-    const ups = gainExp(s, expToNext(1) + expToNext(2)); // 2+3=5
+    const ups = gainExp(s, expToNext(1) + expToNext(2)); // 5+14=19
     expect(ups).toBe(2);
     expect(s.level).toBe(3);
     expect(s.attrPoints).toBe(2);
@@ -41,7 +41,7 @@ describe('exp / level up', () => {
 
   it('allocate point raises stat and consumes pool', () => {
     const s = createInitialState();
-    gainExp(s, 2); // -> Lv2, 1 point
+    gainExp(s, expToNext(1)); // -> Lv2, 1 point
     const before = s.baseStats.pAtk;
     expect(allocateAttrPoint(s, 'pAtk')).toBe(true);
     expect(s.baseStats.pAtk).toBe(before + 1);
@@ -51,7 +51,7 @@ describe('exp / level up', () => {
 
   it('hp point increases max hp and current hp', () => {
     const s = createInitialState();
-    gainExp(s, 2);
+    gainExp(s, expToNext(1));
     const before = maxHp(s);
     allocateAttrPoint(s, 'hp');
     expect(maxHp(s)).toBe(before + 1);

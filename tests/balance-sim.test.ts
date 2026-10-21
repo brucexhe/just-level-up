@@ -1,6 +1,7 @@
 import { describe, it } from 'vitest';
 import { createMonster } from '../src/game/combat';
-import { computeDamage, mitigationRate } from '../src/core/formulas';
+import { attackIntervalMs, computeDamage, mitigationRate } from '../src/core/formulas';
+import { expToNext, killExp } from '../src/core/progression';
 import {
   BASE_ATTR_START,
   aggregatedStats,
@@ -109,6 +110,61 @@ describe('成型后的平衡模拟', () => {
           bare.killHits / Math.max(1, geared.killHits)
         ).toFixed(1)}`,
       );
+    }
+  });
+
+  /**
+   * 练级节奏表：用真实的伤害/攻速公式，算出"升一级要杀几只同级怪、累计要花多久"。
+   * 改 BALANCE.EXP_BASE / EXP_POW 后跑 `vitest tests/balance-sim.test.ts` 就能看到新节奏。
+   */
+  it('练级节奏：每级所需击杀数与累计耗时', () => {
+    const MARKS = [1, 5, 10, 20, 50, 100, 300, 1000, 3000, 10000];
+
+    /** 角色敏捷（点数全投物攻，敏捷只吃等级自带的成长） */
+    const agiAt = (L: number) => BASE_ATTR_START + BALANCE.ATTR_PER_LEVEL * (L - 1);
+
+    /** 杀一只同级怪要多久（毫秒） */
+    const killMs = (L: number, geared: boolean) => {
+      const m = createMonster(L);
+      const pAtk = geared
+        ? BASE_ATTR_START + (L - 1) + (L - 1) + L * 10
+        : BASE_ATTR_START + (L - 1) + (L - 1);
+      const dmg = computeDamage(
+        { attack: pAtk, defense: m.stats.pDef ?? 0, attackerLevel: L },
+        () => 0.5,
+      );
+      const hits = Math.ceil(m.maxHp / Math.max(1, dmg));
+      // 攻速受帧率限制，最快约 60 刀/秒
+      return hits * Math.max(16.7, attackIntervalMs(agiAt(L)));
+    };
+
+    const fmt = (ms: number) => {
+      const s = ms / 1000;
+      if (s < 90) return `${s.toFixed(0)} 秒`;
+      if (s < 5400) return `${(s / 60).toFixed(1)} 分`;
+      if (s < 172800) return `${(s / 3600).toFixed(1)} 小时`;
+      return `${(s / 86400).toFixed(1)} 天`;
+    };
+
+    for (const geared of [false, true]) {
+      console.log(`\n===== 练级节奏（${geared ? '满装' : '裸装'}，打同级怪）=====`);
+      console.log(
+        '等级      ' + MARKS.map((m) => `Lv${m}`.padStart(16)).join(''),
+      );
+      const killsAt: string[] = [];
+      const totalAt: string[] = [];
+      const max = MARKS[MARKS.length - 1]!;
+      let total = 0;
+      for (let L = 1; L <= max; L++) {
+        const kills = Math.ceil(expToNext(L) / killExp(L));
+        total += kills * killMs(L, geared);
+        if (MARKS.includes(L)) {
+          killsAt.push(`${kills} 只`);
+          totalAt.push(fmt(total));
+        }
+      }
+      console.log('每级击杀  ' + killsAt.map((c) => c.padStart(16)).join(''));
+      console.log('累计耗时  ' + totalAt.map((c) => c.padStart(16)).join(''));
     }
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PANEL_BY_ID } from '../src/ui/panels';
 import { dropEquipment } from '../src/core/equipment';
 import { dropSkillBook } from '../src/core/skills';
+import { expToNext } from '../src/core/progression';
 import {
   createInitialState,
   equipItem,
@@ -70,7 +71,7 @@ describe('面板渲染（headless 字符串校验）', () => {
 
   it('人物面板点击 [+] 会真的消耗属性点', () => {
     const s = createInitialState();
-    gainExp(s, 5); // -> Lv2, 2 点
+    gainExp(s, expToNext(1) + expToNext(2)); // 5+14=19 -> Lv3, 2 点
     const { api } = fakeApi(() => s);
     PANEL_BY_ID.character.action('attr', 'pAtk', s, api);
     const auto = BALANCE.ATTR_PER_LEVEL * (s.level - 1); // 升级自带的全属性成长
