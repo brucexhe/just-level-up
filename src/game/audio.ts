@@ -1,8 +1,10 @@
 /**
  * 纯代码合成的音频引擎（不依赖任何音频资源文件）。
  *
- * - 背景音乐：用调度器按 16 分音符步进，实时合成一段循环的小调进行
- *   （贝斯 + 琶音 + 鼓），所以音乐是"算出来的"，没有 mp3。
+ * - 背景音乐：用调度器按 16 分音符步进，实时合成循环乐句（贝斯 + 琶音 + 长音铺底，
+ *   没有鼓），所以音乐是"算出来的"，没有 mp3。
+ *   **10 个关卡各一首**：速度、和弦进行、节奏密度、波形都不一样（见 `MUSIC_THEMES`），
+ *   换关时 `setStage()` 换曲。
  * - 音效：打击 / 挥砍 / 升级 / 技能 / 受击等，全部由振荡器 + 噪声包络合成。
  *
  * 浏览器自动播放策略要求首次发声必须发生在用户手势之后，
@@ -34,7 +36,7 @@ export const BPM = 116;
 export const STEP_SEC = 60 / BPM / 4;
 
 /** 打击乐已移除（用户不要鼓声），保留类型仅为兼容旧数据 */
-export type NoteKind = 'bass' | 'arp' | 'kick' | 'snare' | 'hat';
+export type NoteKind = 'bass' | 'arp' | 'pad' | 'kick' | 'snare' | 'hat';
 
 export interface NoteEvent {
   kind: NoteKind;
@@ -44,38 +46,292 @@ export interface NoteEvent {
   vel: number;
 }
 
-/** Am - F - C - G：根音 + 和弦音（MIDI） */
-export const CHORDS: { root: number; tones: number[] }[] = [
-  { root: 45, tones: [57, 60, 64] },
-  { root: 41, tones: [53, 57, 60] },
-  { root: 48, tones: [52, 55, 60] },
-  { root: 43, tones: [50, 55, 59] },
-];
-
-/** 贝斯的切分节奏（小节内步号） */
-const BASS_STEPS = [0, 6, 8, 14];
+export interface Chord {
+  /** 贝斯根音（MIDI） */
+  root: number;
+  /** 琶音用的和弦音（MIDI） */
+  tones: number[];
+}
 
 /**
- * 纯函数：给定步号返回这一拍要响的音符，便于单测且方便以后换曲子。
+ * 一套 BGM = 一个「曲子配方」：速度 + 4 小节和弦进行 + 贝斯节奏 + 琶音节奏与音色。
+ *
+ * 10 个关卡各配一套，风格跟着场景走（草原轻快、雪原空灵、火山躁动…）。
+ * 全部是**纯数据**，由 `stepEvents()` 实时算成音符，所以不需要任何音频文件。
  */
-export function stepEvents(step: number): NoteEvent[] {
+export interface MusicTheme {
+  /** 关卡序号 1~10 */
+  stage: number;
+  name: string;
+  bpm: number;
+  /** 4 小节的和弦进行（不足 4 个就循环取） */
+  chords: Chord[];
+  /** 贝斯在小节内的步号（越疏越安静） */
+  bassSteps: number[];
+  /** 琶音在小节内的步号（越密越紧张） */
+  arpSteps: number[];
+  /** 琶音走向：单向循环 / 上下往复（往复更"波浪感"） */
+  arpDir: 'up' | 'updown';
+  bassType: OscillatorType;
+  arpType: OscillatorType;
+  /** 每小节琶音的八度偏移（高八度 = 更飘/更亮） */
+  octaves: number[];
+  /** 琶音力度 */
+  arpVel: number;
+  /** 每小节第一拍的持续和声（0 = 不要，用于空灵/阴暗场景的铺底） */
+  padVel: number;
+}
+
+const ALL_16 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+export const MUSIC_THEMES: MusicTheme[] = [
+  {
+    // 草原：明朗的小调流行进行，十六分琶音跑动 = 轻快
+    stage: 1,
+    name: '草原',
+    bpm: 116,
+    chords: [
+      { root: 45, tones: [57, 60, 64] }, // Am
+      { root: 41, tones: [53, 57, 60] }, // F
+      { root: 48, tones: [52, 55, 60] }, // C
+      { root: 43, tones: [50, 55, 59] }, // G
+    ],
+    bassSteps: [0, 6, 8, 14],
+    arpSteps: ALL_16,
+    arpDir: 'up',
+    bassType: 'triangle',
+    arpType: 'square',
+    octaves: [0, 12],
+    arpVel: 0.3,
+    padVel: 0,
+  },
+  {
+    // 森林：慢一档、和声更暗（小调 + 大三度下行），琶音稀疏留白
+    stage: 2,
+    name: '森林',
+    bpm: 96,
+    chords: [
+      { root: 38, tones: [50, 53, 57] }, // Dm
+      { root: 46, tones: [50, 53, 58] }, // Bb
+      { root: 41, tones: [53, 57, 60] }, // F
+      { root: 45, tones: [57, 60, 64] }, // Am
+    ],
+    bassSteps: [0, 6, 10],
+    arpSteps: [0, 3, 6, 9, 12],
+    arpDir: 'updown',
+    bassType: 'triangle',
+    arpType: 'triangle',
+    octaves: [0, 12, 12, 0],
+    arpVel: 0.26,
+    padVel: 0.12,
+  },
+  {
+    // 荒漠：弗里几亚属（E - F 的 b2 音程）做异域感，节奏带切分像蛇笛
+    stage: 3,
+    name: '荒漠',
+    bpm: 104,
+    chords: [
+      { root: 40, tones: [52, 56, 59] }, // E（G# 大三度）
+      { root: 41, tones: [53, 57, 60] }, // F（b2）
+      { root: 40, tones: [52, 56, 59] }, // E
+      { root: 38, tones: [50, 53, 57] }, // Dm
+    ],
+    bassSteps: [0, 4, 8, 12],
+    arpSteps: [0, 2, 4, 6, 8, 10, 12, 13, 14, 15],
+    arpDir: 'updown',
+    bassType: 'triangle',
+    arpType: 'square',
+    octaves: [0, 12],
+    arpVel: 0.3,
+    padVel: 0,
+  },
+  {
+    // 雪原：最慢，纯八分音符的"冰铃"高八度，底下一层暖 pad 撑着
+    stage: 4,
+    name: '雪原',
+    bpm: 78,
+    chords: [
+      { root: 48, tones: [52, 55, 60] }, // C
+      { root: 43, tones: [50, 55, 59] }, // G
+      { root: 45, tones: [57, 60, 64] }, // Am
+      { root: 41, tones: [53, 57, 60] }, // F
+    ],
+    bassSteps: [0, 8],
+    arpSteps: [0, 4, 8, 12],
+    arpDir: 'updown',
+    bassType: 'sine',
+    arpType: 'sine',
+    octaves: [12, 24],
+    arpVel: 0.22,
+    padVel: 0.14,
+  },
+  {
+    // 沼泽：低沉浑浊，半音下行（Cm - Db）加拖沓的附点，像冒泡
+    stage: 5,
+    name: '沼泽',
+    bpm: 84,
+    chords: [
+      { root: 36, tones: [48, 51, 55] }, // Cm
+      { root: 37, tones: [49, 53, 56] }, // Db
+      { root: 36, tones: [48, 51, 55] }, // Cm
+      { root: 46, tones: [50, 53, 58] }, // Bb
+    ],
+    bassSteps: [0, 5, 8, 13],
+    arpSteps: [0, 3, 6, 10, 12, 14],
+    arpDir: 'updown',
+    bassType: 'sine',
+    arpType: 'triangle',
+    octaves: [0, 0],
+    arpVel: 0.24,
+    padVel: 0.1,
+  },
+  {
+    // 火山：最快最躁，锯齿波 + 满十六分，末小节用和声小调的 V（A 大三度）推一把
+    stage: 6,
+    name: '火山',
+    bpm: 132,
+    chords: [
+      { root: 38, tones: [50, 53, 57] }, // Dm
+      { root: 39, tones: [51, 55, 58] }, // Eb（b2，凶）
+      { root: 38, tones: [50, 53, 57] }, // Dm
+      { root: 45, tones: [57, 61, 64] }, // A（和声小调 V）
+    ],
+    bassSteps: [0, 3, 6, 8, 11, 14],
+    arpSteps: ALL_16,
+    arpDir: 'up',
+    bassType: 'sawtooth',
+    arpType: 'sawtooth',
+    octaves: [0, 12],
+    arpVel: 0.26,
+    padVel: 0.08,
+  },
+  {
+    // 深渊：最慢最低，减五度 + 半音上行制造不安，pad 很重
+    stage: 7,
+    name: '深渊',
+    bpm: 68,
+    chords: [
+      { root: 36, tones: [48, 51, 54] }, // C + b5（减五度）
+      { root: 37, tones: [49, 52, 56] }, // C#m
+      { root: 36, tones: [48, 51, 54] }, // C + b5
+      { root: 43, tones: [50, 55, 58] }, // Gm
+    ],
+    bassSteps: [0, 8],
+    arpSteps: [0, 6, 10],
+    arpDir: 'updown',
+    bassType: 'sine',
+    arpType: 'triangle',
+    octaves: [0, -12],
+    arpVel: 0.2,
+    padVel: 0.16,
+  },
+  {
+    // 天空：明亮的大调上行，高两个八度的正弦琶音 = 云海里的闪光
+    stage: 8,
+    name: '天空',
+    bpm: 124,
+    chords: [
+      { root: 48, tones: [52, 55, 60] }, // C
+      { root: 43, tones: [50, 55, 59] }, // G
+      { root: 45, tones: [57, 60, 64] }, // Am
+      { root: 41, tones: [53, 57, 60] }, // F
+    ],
+    bassSteps: [0, 4, 8, 12],
+    arpSteps: ALL_16,
+    arpDir: 'updown',
+    bassType: 'triangle',
+    arpType: 'sine',
+    octaves: [12, 24],
+    arpVel: 0.28,
+    padVel: 0.06,
+  },
+  {
+    // 废墟：多利亚调式（Dm - G 而非 Gm）的苍凉感，中速八分音符
+    stage: 9,
+    name: '废墟',
+    bpm: 88,
+    chords: [
+      { root: 38, tones: [50, 53, 57] }, // Dm
+      { root: 43, tones: [50, 55, 59] }, // G（多利亚的 IV）
+      { root: 38, tones: [50, 53, 57] }, // Dm
+      { root: 45, tones: [57, 60, 64] }, // Am
+    ],
+    bassSteps: [0, 6, 8, 14],
+    arpSteps: [0, 2, 4, 6, 8, 10, 12, 14],
+    arpDir: 'updown',
+    bassType: 'triangle',
+    arpType: 'triangle',
+    octaves: [0, 12],
+    arpVel: 0.26,
+    padVel: 0.12,
+  },
+  {
+    // 星界：一连串大七和弦 + 高八度正弦，往复琶音像星光闪烁
+    stage: 10,
+    name: '星界',
+    bpm: 108,
+    chords: [
+      { root: 36, tones: [60, 64, 67, 71] }, // Cmaj7
+      { root: 41, tones: [53, 57, 60, 64] }, // Fmaj7
+      { root: 43, tones: [55, 59, 62, 66] }, // Gmaj7（利底亚的 #4）
+      { root: 45, tones: [57, 60, 64, 67] }, // Am7
+    ],
+    bassSteps: [0, 8],
+    arpSteps: ALL_16,
+    arpDir: 'updown',
+    bassType: 'sine',
+    arpType: 'sine',
+    octaves: [12, 24],
+    arpVel: 0.24,
+    padVel: 0.12,
+  },
+];
+
+/** Am - F - C - G：根音 + 和弦音（MIDI）——草原主题的进行，保留导出兼容旧调用 */
+export const CHORDS: Chord[] = MUSIC_THEMES[0]!.chords;
+
+/** 按关卡取 BGM 主题；第 11 关及以后沿用第 10 关（星界） */
+export function musicThemeForStage(stage: number): MusicTheme {
+  const i = Math.min(Math.max(1, Math.floor(stage || 1)), MUSIC_THEMES.length);
+  return MUSIC_THEMES[i - 1]!;
+}
+
+/** 琶音取和弦音的下标：'up' 单向循环，'updown' 上下往复 */
+function arpIndex(i: number, len: number, dir: 'up' | 'updown'): number {
+  if (dir === 'up' || len < 2) return i % len;
+  const period = 2 * len - 2;
+  const k = i % period;
+  return k < len ? k : period - k;
+}
+
+/**
+ * 纯函数：给定步号与主题，返回这一拍要响的音符，便于单测且方便以后换曲子。
+ */
+export function stepEvents(step: number, theme: MusicTheme = MUSIC_THEMES[0]!): NoteEvent[] {
   const s = ((step % LOOP_STEPS) + LOOP_STEPS) % LOOP_STEPS;
-  const bar = Math.floor(s / STEPS_PER_BAR) % CHORDS.length;
+  const bar = Math.floor(s / STEPS_PER_BAR);
   const inBar = s % STEPS_PER_BAR;
-  const chord = CHORDS[bar];
+  const chord = theme.chords[bar % theme.chords.length]!;
   const out: NoteEvent[] = [];
 
-  if (BASS_STEPS.includes(inBar)) {
+  // 持续和声：每小节头上铺一层长音（低八度，只做底）
+  if (inBar === 0 && theme.padVel > 0) {
+    out.push({ kind: 'pad', midi: chord.tones[0]! - 12, vel: theme.padVel });
+  }
+  if (theme.bassSteps.includes(inBar)) {
     out.push({ kind: 'bass', midi: chord.root, vel: inBar === 0 ? 0.9 : 0.6 });
   }
-  // 琶音：十六分音符（更密的颗粒感 = 更轻快），走和弦音并隔小节升八度
-  {
-    const i = inBar % chord.tones.length;
-    const oct = bar % 2 === 1 ? 12 : 0;
-    out.push({ kind: 'arp', midi: chord.tones[i] + oct, vel: inBar % 4 === 0 ? 0.42 : 0.3 });
+  const ai = theme.arpSteps.indexOf(inBar);
+  if (ai >= 0) {
+    const tone = chord.tones[arpIndex(ai, chord.tones.length, theme.arpDir)]!;
+    const oct = theme.octaves[bar % theme.octaves.length]!;
+    out.push({
+      kind: 'arp',
+      midi: tone + oct,
+      vel: ai === 0 ? theme.arpVel * 1.4 : theme.arpVel,
+    });
   }
-  // 鼓组全部去掉：只要贝斯 + 琶音的轻快铺底，不要打击乐
-  void inBar;
+  // 鼓组全部去掉：只要贝斯 + 琶音的铺底，不要打击乐
   return out;
 }
 
@@ -100,6 +356,8 @@ export class AudioEngine {
   private sfxOn = true;
   private vol = 0.6;
   private bgmRunning = false;
+  /** 当前 BGM 主题（随关卡切换） */
+  private theme: MusicTheme = MUSIC_THEMES[0]!;
   private createCtx: (() => AudioContext) | null;
 
   constructor(createCtx?: () => AudioContext) {
@@ -123,6 +381,14 @@ export class AudioEngine {
   }
   get playing(): boolean {
     return this.bgmRunning;
+  }
+  /** 当前背景音乐主题（设置面板 / 测试可读） */
+  get currentTheme(): MusicTheme {
+    return this.theme;
+  }
+  /** 一个 16 分音符的秒数（随主题的 BPM 变化） */
+  private get stepSec(): number {
+    return 60 / this.theme.bpm / 4;
   }
 
   private buildGraph(): void {
@@ -194,6 +460,20 @@ export class AudioEngine {
     this.sfxOn = !!on;
   }
 
+  /**
+   * 切换关卡的 BGM。曲子从头开始放，并把调度时间轴重置到"现在"，
+   * 否则上一首按旧 BPM 排下去的音符还会接着响。
+   */
+  setStage(stage: number): void {
+    const next = musicThemeForStage(stage);
+    if (next === this.theme) return;
+    this.theme = next;
+    if (this.bgmRunning && this.ctx) {
+      this.step = 0;
+      this.nextAt = this.ctx.currentTime + 0.06;
+    }
+  }
+
   setVolume(v: number): void {
     this.vol = clamp01(v);
     if (this.master && this.ctx) {
@@ -234,8 +514,8 @@ export class AudioEngine {
     const horizon = ctx.currentTime + 0.2;
     let guard = 0;
     while (this.nextAt < horizon && guard++ < 32) {
-      this.scheduleStep(stepEvents(this.step), this.nextAt);
-      this.nextAt += STEP_SEC;
+      this.scheduleStep(stepEvents(this.step, this.theme), this.nextAt);
+      this.nextAt += this.stepSec;
       this.step = (this.step + 1) % LOOP_STEPS;
     }
   }
@@ -246,9 +526,9 @@ export class AudioEngine {
     for (const e of events) {
       switch (e.kind) {
         case 'bass':
-          // 短促的拨弦感，让低音更有弹性
+          // 短促的拨弦感，让低音更有弹性（波形随主题变）
           this.tone({
-            type: 'triangle',
+            type: this.theme.bassType,
             freq: midiToFreq(e.midi),
             at,
             dur: 0.16,
@@ -258,9 +538,9 @@ export class AudioEngine {
           });
           break;
         case 'arp':
-          // 换成方波 → 更亮的拨弦音色（pluck）
+          // 波形由主题决定（方波亮、三角/正弦柔和、锯齿躁）
           this.tone({
-            type: 'square',
+            type: this.theme.arpType,
             freq: midiToFreq(e.midi),
             at,
             dur: 0.11,
@@ -268,6 +548,18 @@ export class AudioEngine {
             bus,
             attack: 0.002,
             detune: 6,
+          });
+          break;
+        case 'pad':
+          // 每小节一层的持续和声：起落都慢，垫在贝斯下面当"空气"
+          this.tone({
+            type: 'sine',
+            freq: midiToFreq(e.midi),
+            at,
+            dur: this.stepSec * STEPS_PER_BAR * 0.95,
+            peak: 0.5 * e.vel,
+            bus,
+            attack: 0.18,
           });
           break;
         case 'kick':

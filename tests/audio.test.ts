@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   AudioEngine,
   LOOP_STEPS,
+  MUSIC_THEMES,
   STEPS_PER_BAR,
   midiToFreq,
+  musicThemeForStage,
   stepEvents,
 } from '../src/game/audio';
 
@@ -149,6 +151,85 @@ describe('BGM 序列（纯函数）', () => {
   it('MIDI 转频率：A4 = 440Hz', () => {
     expect(midiToFreq(69)).toBeCloseTo(440, 6);
     expect(midiToFreq(57)).toBeCloseTo(220, 1);
+  });
+});
+
+describe('10 个关卡各一首 BGM', () => {
+  /** 把整套循环压成一个字符串指纹，用来判断两首曲子是否真的不同 */
+  const fingerprint = (t: (typeof MUSIC_THEMES)[number]) =>
+    Array.from({ length: LOOP_STEPS }, (_, s) =>
+      stepEvents(s, t)
+        .map((e) => `${e.kind}${e.midi}`)
+        .join(','),
+    ).join('|');
+
+  it('一共 10 套主题，编号 1~10 与关卡一一对应', () => {
+    expect(MUSIC_THEMES).toHaveLength(10);
+    MUSIC_THEMES.forEach((t, i) => expect(t.stage).toBe(i + 1));
+  });
+
+  it('每套曲子都真的会响，且速度都在合理区间', () => {
+    for (const t of MUSIC_THEMES) {
+      let n = 0;
+      for (let s = 0; s < LOOP_STEPS; s++) n += stepEvents(s, t).length;
+      expect(n, `${t.name} 应该有音符`).toBeGreaterThan(8);
+      expect(t.bpm, `${t.name} 的速度`).toBeGreaterThanOrEqual(60);
+      expect(t.bpm).toBeLessThanOrEqual(140);
+    }
+  });
+
+  it('10 首曲子两两不同（指纹互异）', () => {
+    const fps = MUSIC_THEMES.map(fingerprint);
+    expect(new Set(fps).size).toBe(10);
+  });
+
+  it('整段循环里依然没有鼓', () => {
+    for (const t of MUSIC_THEMES) {
+      for (let s = 0; s < LOOP_STEPS; s++) {
+        const kinds = stepEvents(s, t).map((e) => e.kind);
+        expect(kinds).not.toContain('kick');
+        expect(kinds).not.toContain('snare');
+        expect(kinds).not.toContain('hat');
+      }
+    }
+  });
+
+  it('铺底长音：有 pad 的主题每小节 1 下，没有的一下都不响', () => {
+    for (const t of MUSIC_THEMES) {
+      let n = 0;
+      for (let s = 0; s < LOOP_STEPS; s++) n += stepEvents(s, t).filter((e) => e.kind === 'pad').length;
+      expect(n, `${t.name} 的 pad 数`).toBe(t.padVel > 0 ? 4 : 0);
+    }
+  });
+
+  it('按关卡取曲子：第 11 关以后沿用第 10 关（星界）', () => {
+    expect(musicThemeForStage(1).name).toBe('草原');
+    expect(musicThemeForStage(6).name).toBe('火山');
+    expect(musicThemeForStage(10).name).toBe('星界');
+    expect(musicThemeForStage(11)).toBe(musicThemeForStage(10));
+    expect(musicThemeForStage(999)).toBe(musicThemeForStage(10));
+    expect(musicThemeForStage(0).name).toBe('草原');
+  });
+
+  it('引擎切关会换主题，相同关卡不重复触发', () => {
+    const { e } = tracked();
+    expect(e.currentTheme.name).toBe('草原');
+    e.setStage(6);
+    expect(e.currentTheme.name).toBe('火山');
+    e.setStage(6);
+    expect(e.currentTheme.name).toBe('火山');
+    e.setStage(1);
+    expect(e.currentTheme.name).toBe('草原');
+  });
+
+  it('切换主题后调度出来的音符跟着换（雪原有长音铺底，草原没有）', () => {
+    const { e } = tracked();
+    const grass = Array.from({ length: LOOP_STEPS }, (_, s) => stepEvents(s, e.currentTheme));
+    expect(grass.flat().some((x) => x.kind === 'pad')).toBe(false);
+
+    e.setStage(4); // 雪原
+    const snow = Array.from({ length: LOOP_STEPS }, (_, s) => stepEvents(s, e.currentTheme));
+    expect(snow.flat().some((x) => x.kind === 'pad')).toBe(true);
   });
 });
 

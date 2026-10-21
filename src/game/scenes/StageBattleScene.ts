@@ -270,6 +270,8 @@ export class StageBattleScene extends Phaser.Scene {
     audio.setVolume(prefs.volume);
     audio.setSfx(prefs.sfx);
     audio.setMusic(prefs.music);
+    // 每个关卡一首曲子（存档在第几关就放第几首）
+    audio.setStage(this.stage);
     this.physics.world.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
 
     bakeSimple(this);
@@ -734,6 +736,8 @@ export class StageBattleScene extends Phaser.Scene {
     this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
     this.spawnStageMonsters();
     saveState(this.state);
+    // 换关 = 换曲：每个关卡有自己的 BGM
+    audio.setStage(this.stage);
     const { lo, hi } = this.stageRange();
     this.ui.toast(
       `进入第 ${this.stage} 关 · ${stageLabel(this.stage)}（${stageDef(this.stage).monsterName} Lv${lo}-${hi}）`,
@@ -1187,6 +1191,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.aura.setVisible(false);
     this.setPaused(false);
     saveState(this.state);
+    audio.setStage(this.stage);
     this.ui.toast(`已载入 Lv${this.state.level} 的进度`, '#ffd93d');
   }
 
