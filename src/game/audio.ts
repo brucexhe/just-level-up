@@ -22,6 +22,7 @@ export type SfxName =
   | 'fire'
   | 'frenzy'
   | 'poison'
+  | 'magic'
   | 'coin'
   | 'click'
   | 'heal'
@@ -791,6 +792,31 @@ export class AudioEngine {
           bus,
           filter: 'lowpass',
           freq: 620,
+        });
+        break;
+      case 'magic':
+        // BOSS 的法术：下行扫频 + 一点点噪声尾，听感上和近战挨打明显不同，
+        // 让玩家知道"这一下掉血是因为法防不够"
+        this.tone({
+          type: 'sine',
+          freq: 880,
+          to: 180,
+          at: t,
+          dur: 0.34,
+          peak: 0.5,
+          bus,
+          attack: 0.004,
+          detune: 12,
+        });
+        this.noise({
+          at: t,
+          dur: 0.42,
+          peak: 0.34,
+          bus,
+          filter: 'bandpass',
+          freq: 1800,
+          sweepTo: 400,
+          q: 2.2,
         });
         break;
       case 'coin':

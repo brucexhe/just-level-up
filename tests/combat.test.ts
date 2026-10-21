@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE } from '../src/core/balance';
-import { createMonster } from '../src/game/combat';
+import { createMonster, isMagicHit } from '../src/game/combat';
 import { computeDamage, mitigationRate } from '../src/core/formulas';
+import { BALANCE } from '../src/core/balance';
 
 const fixed = (v: number) => () => v;
 
@@ -57,6 +57,32 @@ describe('怪物攻击力（前期不该几下被打死）', () => {
     // 减伤率本身是严格单调的
     expect(mitigationRate(80, 10)).toBeGreaterThan(mitigationRate(40, 10));
     expect(mitigationRate(40, 10)).toBeGreaterThan(mitigationRate(10, 10));
+  });
+
+  it('普通怪只有物理，不会掺法术', () => {
+    const m = createMonster(10);
+    expect(m.atkType).toBe('physical');
+    expect(m.magicEvery).toBe(0);
+    // 就算手滑传了 index，普通怪也不该冒出法术
+    for (let i = 0; i < 9; i++) expect(isMagicHit(i, m.magicEvery)).toBe(false);
+  });
+
+  it('BOSS 有法术伤害与法防（都高于同级普通怪）', () => {
+    const n = createMonster(10);
+    const b = createMonster(10, true);
+    expect(b.stats.mAtk).toBeGreaterThan(n.stats.mAtk);
+    expect(b.stats.mDef).toBeGreaterThan(n.stats.mDef);
+    // 法术那一发要明显比它自己的物攻疼，否则堆法防没有动机
+    expect(b.stats.mAtk).toBeGreaterThan(b.stats.pAtk);
+  });
+
+  it('BOSS 混伤节奏：每 3 下里第 3 下是法术，其余物理', () => {
+    const every = BALANCE.BOSS_MAGIC_EVERY;
+    expect(every).toBe(3);
+    const seq = Array.from({ length: 9 }, (_, i) =>
+      isMagicHit(i, every) ? 'M' : 'P',
+    );
+    expect(seq.join('')).toBe('PPMPPMPPM');
   });
 
   it('怪物血量与防御超线性成长：越到后期同级怪越难打', () => {

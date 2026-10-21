@@ -22,7 +22,7 @@ import { rollDrops, type GroundDrop } from '../../core/drops';
 import { goldDrop } from '../../core/economy';
 import { expToNext, isBreakthrough, killExp } from '../../core/progression';
 import { skillMpCost, skillPower, skillValue } from '../../core/skills';
-import { createMonster, type Combatant } from '../combat';
+import { createMonster, isMagicHit, type Combatant } from '../combat';
 import {
   bakeGround,
   bakeProp,
@@ -205,6 +205,11 @@ interface MonsterView {
   bobPhase: number;
   /** 上一帧已经加上的晃动偏移，用于只叠加增量，不累积 */
   bobApplied: number;
+  /**
+   * 出手计数，用来决定 BOSS 这一下是物理还是法术。
+   * 普通怪 magicEvery = 0，永远走物理这一档。
+   */
+  atkIndex: number;
   /** 等级/血条当前是否处于显示状态（用于淡入淡出，避免每帧 tween） */
   hudOn: boolean;
   /** 标签上已渲染的血量，用于脏检查 */
@@ -821,12 +826,9 @@ export class StageBattleScene extends Phaser.Scene {
       .setDepth(y + 1.1)
       .setVisible(false);
 
-    const data = createMonster(level);
-    if (isBoss) {
-      data.maxHp = Math.round(data.maxHp * 8);
-      data.hp = data.maxHp;
-      data.stats.pAtk = Math.round((data.stats.pAtk ?? 1) * 1.6);
-    }
+    // BOSS 的血量 / 物攻 / 法攻 / 法防加成统一由 createMonster 处理，
+    // 这里不要再乘一遍（曾经这里 ×1.6、monsterAttack 里又 ×1.4，实际变成 2.24 倍）
+    const data = createMonster(level, isBoss);
     // 等级：血条上方一行
     const label = this.add
       .text(x, y - barY - barH / 2 - HP_BAR.labelGap, '', {
@@ -869,6 +871,7 @@ export class StageBattleScene extends Phaser.Scene {
       name: stageDef(this.stage).monsterName,
       bobPhase: Math.random() * MONSTER_BOB.periodMs,
       bobApplied: 0,
+      atkIndex: 0,
       hudOn: false,
       shownHp: -1,
     };
@@ -1702,7 +1705,7 @@ export class StageBattleScene extends Phaser.Scene {
     m.shownHp = hp;
     m.label.setText(
       m.isBoss
-        ? `BOSS ${m.name} Lv${m.data.level}`
+        ? `BOSS ${m.name} Lv${m.data.level} · 法术`
         : `${m.name} Lv${m.data.level}`,
     );
     // 只显示剩余血量：比例看血条就够了，总血量是冗余信息
@@ -2220,20 +2223,32 @@ export class StageBattleScene extends Phaser.Scene {
 
   private monsterAttack(m: MonsterView) {
     const stats = aggregatedStats(this.state);
+    // BOSS 是混伤：连着两下物理，第三下改成法术（走玩家的法防）。
+    // 这样"只堆物防"在后期扛不住 —— 法防变成硬性要求，而不是可选加成。
+    const magic = isMagicHit(m.atkIndex, m.data.magicEvery);
+    m.atkIndex += 1;
+      // 施法预警：BOSS 身上闪一下紫光，给玩家一个"这发是法术"的信号
+      if (magic) {
+        m.sprite.setTintFill(0xc08cff);
+        this.time.delayedCall(140, () => {
+          if (m.sprite.active) m.sprite.clearTint();
+        });
+      }
     const dmg = computeDamage({
-      attack: (m.data.stats.pAtk ?? 1) * (m.isBoss ? 1.4 : 1),
-      defense: stats.pDef ?? 0,
+      attack: magic ? (m.data.stats.mAtk ?? 1) : (m.data.stats.pAtk ?? 1),
+      defense: magic ? (stats.mDef ?? 0) : (stats.pDef ?? 0),
       attackerLevel: m.data.level,
     });
     this.state.hp -= dmg;
-    this.floatText(this.player.x, this.player.y - 40, `-${dmg}`, '#ff6b6b', 16);
+    const tint = magic ? 0xc08cff : 0xff6b6b;
+    this.floatText(this.player.x, this.player.y - 40, `-${dmg}`, tint === 0xff6b6b ? '#ff6b6b' : '#c08cff', 16);
     this.cameras.main.shake(60, 0.003);
     // 受伤反馈只作用在角色身上：闪红 + 抖动，不再整屏泛红
-    this.player.setTintFill(0xff6b6b);
+    this.player.setTintFill(tint);
     this.time.delayedCall(110, () => {
       if (this.player.active) this.player.clearTint();
     });
-    audio.play('hurt');
+    audio.play(magic ? 'magic' : 'hurt');
     if (this.state.hp <= 0) {
       this.state.hp = maxHp(this.state);
       this.state.mp = maxMp(this.state);
