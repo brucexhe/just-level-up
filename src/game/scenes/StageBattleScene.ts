@@ -73,7 +73,7 @@ const PICKUP_RANGE = 36;
 /** 每关每个等级各刷几只（10 个等级 × 10 只 = 一关 100 只） */
 const STAGE_MONSTERS_PER_LEVEL = 10;
 /** 场景装饰物（树/石头/灌木）数量 */
-const OBSTACLE_COUNT = 110;
+const OBSTACLE_COUNT = 180;
 const REGEN_PER_SEC = 1;
 const STAGE_NAMES = ['草原', '森林', '荒漠', '雪原', '沼泽', '火山', '深渊', '天空'];
 
@@ -1442,10 +1442,10 @@ export class StageBattleScene extends Phaser.Scene {
     );
     // depth 必须压在角色之上：角色是按 y 排序的（上千层），写死 6 会被自己挡住
     arc
-      .setRotation(angle - 0.35)
-      .setScale(2.6)
+      .setRotation(angle - 0.25)
+      .setScale(2.1)
       .setTint(0xfff2c8)
-      .setAlpha(0.9)
+      .setAlpha(0.95)
       .setDepth(this.player.y + 4);
     this.tweens.add({
       targets: arc,

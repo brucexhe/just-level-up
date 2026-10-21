@@ -30,6 +30,37 @@ function rowWidth(grid: Grid): number {
   return grid.reduce((m, r) => Math.max(m, r.length), 0);
 }
 
+/**
+ * 挥砍用的月牙刀光：真正的弧形，中间厚、两端收尖。
+ * 用极坐标逐点填像素，比手写字符网格更容易调形状。
+ */
+function bakeCrescent(
+  scene: Phaser.Scene,
+  key: string,
+  size: number,
+  radius: number,
+  maxThick: number,
+): void {
+  if (scene.textures.exists(key)) return;
+  const g = scene.make.graphics({ x: 0, y: 0 });
+  const c = size / 2;
+  const span = 1.22; // 半角（弧度）→ 总弧约 140°
+  const step = 0.018;
+  for (let a = -span; a <= span + 1e-6; a += step) {
+    // 两端细、中间厚
+    const t = 1 - Math.abs(a) / span;
+    const thick = 0.8 + maxThick * t * t;
+    for (let k = 0; k < thick; k += 0.45) {
+      const r = radius - k;
+      const x = Math.round(c + Math.cos(a) * r);
+      const y = Math.round(c + Math.sin(a) * r);
+      g.fillStyle(0xffffff, 1).fillRect(x, y, 1, 1);
+    }
+  }
+  g.generateTexture(key, size, size);
+  g.destroy();
+}
+
 /** 简单贴图（阴影/粒子/条/面板等） */
 export function bakeSimple(scene: Phaser.Scene): void {
   if (!scene.textures.exists('dot')) {
@@ -292,30 +323,7 @@ export function bakeProps(scene: Phaser.Scene): void {
     '....TTTT....',
   ], { G: 0x1e6433, D: 0x0e3d1e, W: 0x3f9a52, T: 0x4e3620 });
 
-  // 挥砍轨迹：一弯月牙（比原来的圆弧好看，也更像刀风）
-  bakeGrid(
-    scene,
-    'slash',
-    [
-      '.....WWW........',
-      '...WWWWW........',
-      '..WWWW.WW.......',
-      '..WWW...WW......',
-      '.WWW.....WW.....',
-      '.WW......WW.....',
-      '.WW.......WW....',
-      'WW.........WW...',
-      'WW.........WW...',
-      '.WW.......WW....',
-      '.WW......WW.....',
-      '.WWW.....WW.....',
-      '..WWW...WW......',
-      '..WWWW.WW.......',
-      '...WWWWW........',
-      '.....WWW........',
-    ],
-    { W: 0xffffff },
-  );
+  bakeCrescent(scene, 'slash', 28, 11.5, 2.4);
 
   // 挥砍时绕角色旋转的刀（水平朝向，靠 rotation 对准目标）
   bakeGrid(
