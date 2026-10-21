@@ -9,6 +9,7 @@ import {
   type GameState,
 } from '../src/state/gameState';
 import { BASE_ATTR_START } from '../src/state/gameState';
+import { BALANCE } from '../src/core/balance';
 import type { UIApi, UIView } from '../src/ui/api';
 
 function fakeApi(state: () => GameState) {
@@ -72,11 +73,12 @@ describe('面板渲染（headless 字符串校验）', () => {
     gainExp(s, 5); // -> Lv2, 2 点
     const { api } = fakeApi(() => s);
     PANEL_BY_ID.character.action('attr', 'pAtk', s, api);
-    expect(s.baseStats.pAtk).toBe(BASE_ATTR_START + 1);
+    const auto = BALANCE.ATTR_PER_LEVEL * (s.level - 1); // 升级自带的全属性成长
+    expect(s.baseStats.pAtk).toBe(BASE_ATTR_START + auto + 1);
     expect(s.attrPoints).toBe(1);
     PANEL_BY_ID.character.action('attrmax', 'hp', s, api);
     expect(s.attrPoints).toBe(0);
-    expect(s.baseStats.hp).toBe(BASE_ATTR_START + 1);
+    expect(s.baseStats.hp).toBe(BASE_ATTR_START + auto + 1);
   });
 
   it('装备面板展示 8 个槽位与选中装备详情', () => {

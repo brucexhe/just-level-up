@@ -55,8 +55,17 @@ describe('怪物攻击力（前期不该几下被打死）', () => {
     expect(at(20)).toBeLessThan(at(10));
   });
 
-  it('怪物血量不受攻击力调整影响（玩家打怪速度不变）', () => {
-    expect(createMonster(10).maxHp).toBe(10);
-    expect(createMonster(50).maxHp).toBe(50);
+  it('怪物血量与防御超线性成长：越到后期同级怪越难打', () => {
+    const hp = (lv: number) => createMonster(lv).maxHp;
+    const def = (lv: number) => createMonster(lv).stats.pDef ?? 0;
+    // 高于线性（等级 ×1）
+    expect(hp(100)).toBeGreaterThan(100);
+    expect(def(100)).toBeGreaterThan(100);
+    // 等级翻 10 倍，血量涨得比 10 倍还多
+    expect(hp(1000) / hp(100)).toBeGreaterThan(10);
+    expect(def(1000) / def(100)).toBeGreaterThan(10);
+    // 低等级时基本不影响手感
+    expect(hp(1)).toBe(1);
+    expect(hp(10)).toBeLessThan(30);
   });
 });

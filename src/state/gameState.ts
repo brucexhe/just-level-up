@@ -12,7 +12,7 @@ import {
   type SkillBook,
 } from '../core/skills';
 import { SKILL_BY_ID, type SkillId } from '../data/skills';
-import type { AttrSet, BaseAttr } from '../core/types';
+import { BASE_ATTRS, type AttrSet, type BaseAttr } from '../core/types';
 
 /** 某一关的击杀进度（当天清零，次日刷新） */
 export interface StageProgress {
@@ -164,12 +164,16 @@ export function gainExp(s: GameState, amount: number): number {
     s.exp -= expToNext(s.level);
     s.level += 1;
     s.attrPoints += BALANCE.POINTS_PER_LEVEL;
+    // 等级自带的体质成长：九项属性各 +1（自由点数另外分配）
+    for (const k of BASE_ATTRS) {
+      s.baseStats[k] = (s.baseStats[k] ?? 0) + BALANCE.ATTR_PER_LEVEL;
+    }
     ups += 1;
   }
   if (ups > 0) {
-    // 升级只给未分配的属性点，最大血量要到加点后才变化；这里仅做上限钳制
-    const m = maxHp(s);
-    if (s.hp > m) s.hp = m;
+    // 升级回满血蓝：等级自带的属性成长已经抬高上限，顺便补满才不会「升级了还是残血」
+    s.hp = maxHp(s);
+    s.mp = maxMp(s);
   }
   return ups;
 }

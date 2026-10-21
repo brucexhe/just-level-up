@@ -9,6 +9,7 @@ import {
   maxHp,
 } from '../src/state/gameState';
 import { BASE_ATTR_START } from '../src/state/gameState';
+import { BALANCE } from '../src/core/balance';
 import { createMonster } from '../src/game/combat';
 
 const fixed = (v: number) => () => v;
@@ -45,12 +46,16 @@ describe('P2 growth loop closes at locked starting values', () => {
     expect(s.level).toBe(2);
     expect(s.attrPoints).toBe(1);
 
+    // 升级本身带九项属性各 ATTR_PER_LEVEL，再手动 +1 点血量
     allocateAttrPoint(s, 'hp');
     expect(s.attrPoints).toBe(0);
-    expect(maxHp(s)).toBe(BASE_ATTR_START + 1);
+    const auto = BALANCE.ATTR_PER_LEVEL * (s.level - 1);
+    expect(maxHp(s)).toBe(BASE_ATTR_START + auto + 1);
+    // 升级回满血蓝
+    expect(s.hp).toBe(maxHp(s));
     // 没有点了，再加失败
     expect(allocateAttrPoint(s, 'pAtk')).toBe(false);
-    expect(aggregatedStats(s).pAtk).toBe(BASE_ATTR_START);
+    expect(aggregatedStats(s).pAtk).toBe(BASE_ATTR_START + auto);
   });
 
   it('player out-scales a rising monster once points are invested', () => {

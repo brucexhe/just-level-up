@@ -17,19 +17,22 @@ export interface Combatant {
 }
 
 /**
- * 原型怪：与玩家同曲线（1点=1属性），随等级线性成长。
+ * 原型怪。**血量 / 防御按超线性增长**（等级^MONSTER_HP_EXP / ^MONSTER_DEF_EXP），
+ * 而角色是线性成长（每级全属性 +1）——所以越到后期，同级怪越硬、越难打，
+ * 属性缺口只能靠装备补（装备点数 ≈ 怪等级 × 10 个部位）。
  *
- * 唯一例外是**物攻**：不再 1:1 跟随等级，而是 `1 + 等级 × MONSTER_ATK_SCALE`。
- * 因为人物血量不会随等级自动增长，1:1 的攻击力会让前期几下就被打死。
+ * 物攻是例外，保持线性 `1 + 等级 × MONSTER_ATK_SCALE`：
+ * 若攻击也超线性，高等级的怪会一击秒人，生存曲线就崩了。
  */
 export function createMonster(level = 1): Combatant {
+  const def = Math.max(1, Math.round(Math.pow(level, BALANCE.MONSTER_DEF_EXP)));
   const stats: AttrSet = {
-    hp: level,
+    hp: Math.max(1, Math.round(Math.pow(level, BALANCE.MONSTER_HP_EXP))),
     mp: level,
     pAtk: 1 + level * BALANCE.MONSTER_ATK_SCALE,
     mAtk: level,
-    pDef: level,
-    mDef: level,
+    pDef: def,
+    mDef: def,
     speed: 1,
     agi: 1,
     luck: 1,
