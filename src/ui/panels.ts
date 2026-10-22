@@ -448,14 +448,28 @@ function equipmentRows(s: GameState): string {
     .slice(0, 60)
     .map((it) => {
       const r = RARITY_META[it.rarity];
+      const cur = s.equipped[it.slot];
+      const curPts = cur ? totalPoints(cur) : 0;
+      const delta = totalPoints(it) - curPts;
+      // 与「技能书换装预览」同一套语义：↑升 / ↓降 / 持平；空位单独标出来
+      const badge = !cur
+        ? `<span class="bi-up">空位</span>`
+        : delta > 0
+          ? `<span class="bi-up">↑${fmtNum(delta)}</span>`
+          : delta < 0
+            ? `<span class="bi-dn">↓${fmtNum(-delta)}</span>`
+            : `<span class="bi-eq">持平</span>`;
+      const tip = cur
+        ? `当前：${esc(cur.name)} · 总点数 ${fmtNum(curPts)}`
+        : '该部位空着';
       return `<div class="bag-item" style="border-color:${r.color}44">
         <div class="bi-top">
           <div class="bi-ico" style="border-color:${r.color}66">${SLOT_META[it.slot].icon}</div>
           <div style="min-width:0;flex:1">
             <div class="bi-nm" style="color:${r.color}">${esc(it.name)}</div>
-            <div class="bi-sub">${SLOT_META[it.slot].name} · ${r.name} · 总点数 ${fmtNum(
-              totalPoints(it),
-            )}</div>
+            <div class="bi-sub" title="${tip}">${SLOT_META[it.slot].name} · ${
+              r.name
+            } · 总点数 ${fmtNum(totalPoints(it))} ${badge}</div>
           </div>
         </div>
         <div class="chips" style="padding:7px 0 0">${attrChips(it.stats)}${attrChips(

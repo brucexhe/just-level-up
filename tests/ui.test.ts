@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PANEL_BY_ID } from '../src/ui/panels';
-import { dropEquipment } from '../src/core/equipment';
+import { dropEquipment, totalPoints } from '../src/core/equipment';
 import { dropSkillBook } from '../src/core/skills';
 import { expToNext } from '../src/core/progression';
 import {
@@ -202,6 +202,44 @@ describe('面板渲染（headless 字符串校验）', () => {
     PANEL_BY_ID.skills.action('upgrade', '', s, api);
     expect(s.skills.attack).toBe(1);
     expect(s.skillPoints).toBe(10);
+  });
+
+  it('背包装备行显示与已穿戴装备的点数对比（↑升 / ↓降 / 持平 / 空位）', () => {
+    const s = createInitialState();
+    const { api, view } = fakeApi(() => s);
+    view.bagTab = 'equip';
+
+    // 1) 部位空着 → 空位
+    const weak = dropEquipment(20, () => 0.5);
+    weak.slot = 'weapon';
+    s.inventory.push(weak);
+    expect(PANEL_BY_ID.bag.render(s, api)).toContain('空位');
+
+    // 2) 穿上一件更强的 → 背包里那件显示 ↓
+    equipItem(s, weak);
+    const strong = dropEquipment(30, () => 0.5);
+    strong.slot = 'helmet';
+    const worse = dropEquipment(10, () => 0.5);
+    worse.slot = 'weapon';
+    s.inventory = [worse];
+    const html = PANEL_BY_ID.bag.render(s, api);
+    expect(html).toMatch(/bi-dn">↓/);
+
+    // 3) 换一件点数更高的武器 → ↑
+    const better = dropEquipment(40, () => 0.5);
+    better.slot = 'weapon';
+    // 保证点数确实高于已穿戴
+    if (totalPoints(better) <= totalPoints(weak)) better.freeAllocated.pAtk = 999;
+    s.inventory = [better];
+    expect(PANEL_BY_ID.bag.render(s, api)).toMatch(/bi-up">↑/);
+
+    // 4) 点数完全相同 → 持平
+    const same = dropEquipment(40, () => 0.5);
+    same.slot = 'weapon';
+    same.stats = { ...weak.stats };
+    same.freeAllocated = { ...weak.freeAllocated };
+    s.inventory = [same];
+    expect(PANEL_BY_ID.bag.render(s, api)).toContain('持平');
   });
 
   it('背包面板可切换装备 / 技能书，技能书穿戴即替换等级（旧等级回包）', () => {
