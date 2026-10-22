@@ -3,6 +3,7 @@ import { attackIntervalMs, computeDamage, moveSpeed } from '../../core/formulas'
 import {
   aggregatedStats,
   allocateAttrPoint,
+  canEquip,
   createInitialState,
   equipBest,
   gainExp,
@@ -2227,9 +2228,10 @@ export class StageBattleScene extends Phaser.Scene {
       return;
     }
     const n = equipBest(this.state);
+    const locked = this.state.inventory.filter((x) => !canEquip(this.state, x)).length;
     this.ui.toast(
-      n > 0 ? `穿戴 ${n} 件更优装备` : '当前装备已是最优',
-      '#7ee787',
+      `${n > 0 ? `穿戴 ${n} 件更优装备` : '当前装备已是最优'}${locked ? `（${locked} 件等级不足）` : ''}`,
+      n > 0 ? '#7ee787' : '#9aa4b2',
     );
   }
 

@@ -21,6 +21,7 @@ import {
   allocateEquipPoints,
   bookPoints,
   buyPotion,
+  canEquip,
   equipAllocCap,
   equipAllocLeft,
   equipBest,
@@ -289,7 +290,11 @@ const equipmentPanel: PanelDef = {
         break;
       case 'auto': {
         const n = equipBest(s);
-        api.toast(n > 0 ? `已穿戴 ${n} 件更优装备` : '当前装备已是最优', '#7ee787');
+        const locked = s.inventory.filter((x) => !canEquip(s, x)).length;
+        api.toast(
+          `${n > 0 ? `已穿戴 ${n} 件更优装备` : '当前装备已是最优'}${locked ? `（${locked} 件等级不足）` : ''}`,
+          n > 0 ? '#7ee787' : '#9aa4b2',
+        );
         api.refresh();
         break;
       }
@@ -442,7 +447,11 @@ function equipmentRows(s: GameState): string {
   if (s.inventory.length === 0) {
     return `<div class="bag-empty">背包里还没有装备，去打怪吧</div>`;
   }
-  const sorted = [...s.inventory].sort((a, b) => totalPoints(b) - totalPoints(a));
+  const sorted = [...s.inventory].sort((a, b) => {
+    // 等级不够穿的沉到底部，别挡住能直接换装的那几件
+    const lock = (x: typeof a) => (canEquip(s, x) ? 0 : 1);
+    return lock(a) - lock(b) || totalPoints(b) - totalPoints(a);
+  });
   return sorted
     .slice(0, 60)
     .map((it) => {
@@ -450,14 +459,17 @@ function equipmentRows(s: GameState): string {
       const cur = s.equipped[it.slot];
       const curPts = cur ? totalPoints(cur) : 0;
       const delta = totalPoints(it) - curPts;
+      const blocked = !canEquip(s, it);
       // 与「技能书换装预览」同一套语义：↑升 / ↓降 / 持平；空位单独标出来
-      const badge = !cur
-        ? `<span class="bi-up">空位</span>`
-        : delta > 0
-          ? `<span class="bi-up">↑${fmtNum(delta)}</span>`
-          : delta < 0
-            ? `<span class="bi-dn">↓${fmtNum(-delta)}</span>`
-            : `<span class="bi-eq">持平</span>`;
+      const badge = blocked
+        ? `<span class="bi-dn">需 Lv${fmtNum(it.level)}</span>`
+        : !cur
+          ? `<span class="bi-up">空位</span>`
+          : delta > 0
+            ? `<span class="bi-up">↑${fmtNum(delta)}</span>`
+            : delta < 0
+              ? `<span class="bi-dn">↓${fmtNum(-delta)}</span>`
+              : `<span class="bi-eq">持平</span>`;
       const tip = cur
         ? `当前：${esc(cur.name)} · 总点数 ${fmtNum(curPts)}`
         : '该部位空着';
@@ -466,7 +478,7 @@ function equipmentRows(s: GameState): string {
           <div class="bi-ico" style="border-color:${r.color}66">${SLOT_META[it.slot].icon}</div>
           <div style="min-width:0;flex:1">
             <div class="bi-nm" style="color:${r.color}">${esc(it.name)}</div>
-            <div class="bi-sub" title="${tip}">${SLOT_META[it.slot].name} · ${
+            <div class="bi-sub" title="${tip}">Lv${fmtNum(it.level)} · ${SLOT_META[it.slot].name} · ${
               r.name
             } · 总点数 ${fmtNum(totalPoints(it))} ${badge}</div>
           </div>
@@ -476,7 +488,9 @@ function equipmentRows(s: GameState): string {
           true,
         )}</div>
         <div class="bi-acts">
-          <button class="btn gold" data-act="equip" data-arg="${it.id}">穿戴</button>
+          <button class="btn gold" data-act="equip" data-arg="${it.id}"${
+            blocked ? ' disabled' : ''
+          }>${blocked ? '等级不足' : '穿戴'}</button>
           <button class="btn danger" data-act="sell-item" data-arg="${it.id}">卖出 +${fmtNum(
             Math.max(1, Math.floor(totalPoints(it) * BALANCE.SELL_REFUND_RATE)),
           )}</button>
@@ -564,14 +578,21 @@ const bagPanel: PanelDef = {
         break;
       case 'auto': {
         const n = equipBest(s);
-        api.toast(n > 0 ? `已穿戴 ${n} 件更优装备` : '当前装备已是最优', '#7ee787');
+        const locked = s.inventory.filter((x) => !canEquip(s, x)).length;
+        api.toast(
+          `${n > 0 ? `已穿戴 ${n} 件更优装备` : '当前装备已是最优'}${locked ? `（${locked} 件等级不足）` : ''}`,
+          n > 0 ? '#7ee787' : '#9aa4b2',
+        );
         api.refresh();
         break;
       }
       case 'equip': {
         const it = s.inventory.find((x) => x.id === arg);
         if (it) {
-          equipItem(s, it);
+          if (!equipItem(s, it)) {
+            api.toast(`等级不足：${it.name} 需要 Lv${fmtNum(it.level)}`, '#ff8a8a');
+            break;
+          }
           api.toast(`穿戴 ${it.name}`, '#7ee787');
           api.refresh();
         }

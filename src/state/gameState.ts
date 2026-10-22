@@ -258,14 +258,21 @@ export function allocateAttrPoints(s: GameState, key: BaseAttr, n: number): numb
   return done;
 }
 
-/** 穿戴装备；替换时旧装备回到背包（已分配的自由点不退回） */
-export function equipItem(s: GameState, item: EquipmentItem): void {
+/** 装备等级必须 ≤ 人物等级才能穿（越级穿装会让装备点数预算脱离等级线） */
+export function canEquip(s: GameState, item: EquipmentItem): boolean {
+  return item.level <= Math.floor(s.level);
+}
+
+/** 穿戴装备；等级不足直接拒绝。替换时旧装备回到背包（已分配的自由点不退回） */
+export function equipItem(s: GameState, item: EquipmentItem): boolean {
+  if (!canEquip(s, item)) return false;
   const idx = s.inventory.indexOf(item);
   if (idx >= 0) s.inventory.splice(idx, 1);
   const old = s.equipped[item.slot];
   s.equipped[item.slot] = item;
   if (old) s.inventory.push(old);
   s.hp = Math.min(maxHp(s), s.hp);
+  return true;
 }
 
 /** 卸下装备放回背包 */
@@ -326,9 +333,11 @@ export function allocateEquipPoints(
   return done;
 }
 
-/** 每槽位穿上背包里点数最高的装备，返回换上的件数 */
+/** 每槽位穿上背包里点数最高的**可穿**装备，返回换上的件数 */
 export function equipBest(s: GameState): number {
-  const pool = [...s.inventory].sort((a, b) => totalPts(b) - totalPts(a));
+  const pool = s.inventory
+    .filter((item) => canEquip(s, item))
+    .sort((a, b) => totalPts(b) - totalPts(a));
   let n = 0;
   for (const item of pool) {
     const cur = s.equipped[item.slot];
