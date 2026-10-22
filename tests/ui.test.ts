@@ -93,6 +93,7 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(html).toContain('data-act="attr"');
     expect(html).toContain('data-act="attr10"');
     expect(html).toContain('data-act="attrmax"');
+    expect(html).toContain('>+MAX</button>'); // 三档统一带加号
     expect(html).not.toContain('data-act="attr5"'); // 旧 +5 档已移除
 
     // +10 只有 4 点 → 投 4
@@ -218,7 +219,7 @@ describe('面板渲染（headless 字符串校验）', () => {
     // 2) 穿上一件更强的 → 背包里那件显示 ↓
     equipItem(s, weak);
     const strong = dropEquipment(30, () => 0.5);
-    strong.slot = 'helmet';
+    strong.slot = 'head';
     const worse = dropEquipment(10, () => 0.5);
     worse.slot = 'weapon';
     s.inventory = [worse];

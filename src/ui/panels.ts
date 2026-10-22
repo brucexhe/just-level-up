@@ -15,7 +15,6 @@ import { BASE_ATTRS, type BaseAttr } from '../core/types';
 import { ATTR_META } from '../data/attrs';
 import { RARITY_META, SLOT_META } from '../data/items';
 import { SKILLS, SKILL_BY_ID, type SkillId } from '../data/skills';
-import { audio } from '../game/audio';
 import type { GameState } from '../state/gameState';
 import {
   allocateAttrPoints,
@@ -115,7 +114,7 @@ const characterPanel: PanelDef = {
           <button data-act="attr10" data-arg="${k}" ${can ? '' : 'disabled'}>+10</button>
           <button class="max" data-act="attrmax" data-arg="${k}" ${
             can ? '' : 'disabled'
-          }>MAX</button>
+          }>+MAX</button>
         </span>
       </div>`;
     }).join('');
@@ -212,7 +211,7 @@ function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
                 <button data-act="alloc10" data-arg="${k}" ${can ? '' : 'disabled'}>+10</button>
                 <button class="max" data-act="allocmax" data-arg="${k}" ${
                   can ? '' : 'disabled'
-                }>MAX</button>
+                }>+MAX</button>
               </span>
             </div>`;
           })
@@ -265,9 +264,9 @@ const equipmentPanel: PanelDef = {
       detail = `<div class="note" style="margin-top:10px">${
         sel
           ? `<b>${SLOT_META[sel].name}</b> 部位空着，去「背包」挑一件穿上。`
-          : '点击上方任一部位查看 / 强化该装备。'
+          : '点击上方任一部位查看 / 加点该装备。'
       }</div>
-      <div class="note" style="margin-top:6px">装备<b>无强化</b>：总点数 = 等级 × 品质倍率（品质越高词条越多、倍率越高）；<b>先卸下</b>再在「背包」里卖掉，可得 <b>总点数 ×50%</b> 的自由装备点，手动投到已穿戴装备上。</div>`;
+      <div class="note" style="margin-top:6px">总点数 = 等级 × 品质倍率（品质越高词条越多、倍率越高）；<b>先卸下</b>再在「背包」里卖掉，可得 <b>总点数 ×50%</b> 的自由装备点，手动投到已穿戴装备上。</div>`;
     }
 
     return `
@@ -745,9 +744,6 @@ const settingsPanel: PanelDef = {
 
       <div class="sec-title">音频 <em>代码合成</em></div>
       ${toggleRow('music', '背景音乐', '每关一首：琶音 + 长音铺底的实时合成循环', st.music())}
-      <div class="note">正在播放：<b>${esc(audio.currentTheme.name)}</b> 主题 · ${
-        audio.currentTheme.bpm
-      } BPM</div>
       ${toggleRow('sfx', '战斗音效', '挥砍 / 命中 / 升级 / 技能', st.sfx())}
       <div class="vol-row">
         <span class="vr-l">音量</span>
