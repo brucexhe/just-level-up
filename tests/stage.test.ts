@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   STAGE_BAND,
+  dayKeyOf,
+  isSameLocalDay,
   levelBandOfStage,
   maxStageFromProgress,
   maxUnlockedStage,
   remainingOfLevel,
+  resetDailyStages,
   stageCapacity,
   stageIndexForLevel,
 } from '../src/core/stage';
@@ -96,6 +99,84 @@ describe('关卡与怪物刷新', () => {
     expect(levelBandOfStage(11)).toEqual([101, 110]);
     expect(levelBandOfStage(12)).toEqual([111, 120]);
     expect(stageName(11)).toBe(stageName(10));
+  });
+
+  it('每日 0 点刷新：击杀进度与 BOSS 归属日清零，永久通关标记保留', () => {
+    const s = createInitialState();
+    s.stages[1] = { killed: { 3: 4, 7: 10 }, bossDead: true, bossDay: '2026-10-21' };
+    s.stages[2] = { killed: { 15: 2 }, bossDead: false };
+
+    const wiped = resetDailyStages(s);
+    expect(wiped).toBe(true);
+    // 击杀进度全部清空 → 怪物满员回归（每级 10 只）
+    expect(s.stages[1]!.killed).toEqual({});
+    expect(s.stages[2]!.killed).toEqual({});
+    // BOSS 归属日也清空 → 第二天 BOSS 回归
+    expect(s.stages[1]!.bossDay).toBeUndefined();
+    // 解锁进度不动：打过 BOSS 的关还是通关状态
+    expect(s.stages[1]!.bossDead).toBe(true);
+    expect(s.stages[2]!.bossDead).toBe(false);
+    expect(maxStageFromProgress(s.stages)).toBe(2);
+    // 再刷一次（同一天幂等）：没有东西可清，返回 false
+    expect(resetDailyStages(s)).toBe(false);
+  });
+
+  it('BOSS 刷新看 bossDay 不看 bossDead：通关过的关第二天 BOSS 也回归', () => {
+    const s = createInitialState();
+    // 只剩通关标记 + 今天的 BOSS 归属日（今天刚杀）
+    s.stages[1] = { killed: {}, bossDead: true, bossDay: dayKeyOf(Date.now()) };
+    expect(resetDailyStages(s)).toBe(true); // bossDay 被清 → 明天 BOSS 回归
+    expect(s.stages[1]!.bossDead).toBe(true); // 但通关标记还在，下一关保持解锁
+
+    // 纯通关标记（旧档：杀 BOSS 时还没有 bossDay 机制）
+    const old = createInitialState();
+    old.stages[1] = { killed: {}, bossDead: true };
+    old.stages[2] = { killed: { 12: 1 }, bossDead: true };
+    expect(resetDailyStages(old)).toBe(true);
+    expect(old.stages[2]!.bossDay).toBeUndefined();
+    expect(maxStageFromProgress(old.stages)).toBe(3);
+  });
+
+  it('dayKeyOf：每天 0 点变一次（本地时区）', () => {
+    // 2026-10-21 23:59 与 10-22 00:00 只差 1 分钟，却不是同一天
+    const beforeMidnight = new Date(2026, 9, 21, 23, 59, 59).getTime();
+    const afterMidnight = new Date(2026, 9, 22, 0, 0, 1).getTime();
+    expect(dayKeyOf(beforeMidnight)).toBe('2026-10-21');
+    expect(dayKeyOf(afterMidnight)).toBe('2026-10-22');
+    expect(isSameLocalDay(beforeMidnight, afterMidnight)).toBe(false);
+    // 同一天内任何时刻都是同一个键
+    const morning = new Date(2026, 9, 22, 8, 0, 0).getTime();
+    const night = new Date(2026, 9, 22, 23, 0, 0).getTime();
+    expect(isSameLocalDay(morning, night)).toBe(true);
+  });
+
+  it('旧存档没有 stageDay 字段：读档后为空串，视为过期以便触发一次刷新', () => {
+    const s = normalizeState({
+      stage: 2,
+      stages: { 1: { killed: { 5: 3 }, bossDead: true } },
+    });
+    expect(s.stageDay).toBe('');
+    // 有击杀记录的旧档，刷新应真的清掉残局
+    expect(resetDailyStages(s)).toBe(true);
+    expect(s.stages[1]!.killed).toEqual({});
+    expect(s.stages[1]!.bossDead).toBe(true);
+    // 旧档没有 bossDay → BOSS 回归条件成立（bossDay !== 今天）
+    expect(s.stages[1]!.bossDay).toBeUndefined();
+  });
+
+  it('bossDay 随存档往返保留', () => {
+    const s = normalizeState({
+      stages: { 1: { killed: {}, bossDead: true, bossDay: '2026-10-22' } },
+    });
+    expect(s.stages[1]!.bossDay).toBe('2026-10-22');
+  });
+
+  it('存档读写保留 stageDay，读回一致', () => {
+    const s = createInitialState();
+    s.stageDay = '2026-10-22';
+    // 直接复用 normalizeState 走一遍序列化语义
+    const back = normalizeState(JSON.parse(JSON.stringify(s)));
+    expect(back.stageDay).toBe('2026-10-22');
   });
 
 });

@@ -44,3 +44,36 @@ export function maxStageFromProgress(
   while (stages[s]?.bossDead) s += 1;
   return s;
 }
+
+/**
+ * 本地日期键：每天 0 点变一次（Y-M-D）。
+ * 用本地时间而非 UTC —— 「每天凌晨刷新」按玩家自己说的算。
+ */
+export function dayKeyOf(t: number): string {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** 两个时间戳是否同一天（本地时区） */
+export function isSameLocalDay(a: number, b: number): boolean {
+  return dayKeyOf(a) === dayKeyOf(b);
+}
+
+/**
+ * 每日 0 点刷新：已解锁关卡中的普通怪全部回来（killed 清零），BOSS 也回归（bossDay 清空）。
+ * `bossDead` 保留 —— 「打过 BOSS」是永久通关进度，管的是解锁，刷的是怪不是解锁。
+ * 返回是否真的清掉了东西（全空说明本来就满员，不算刷新）。
+ */
+export function resetDailyStages(
+  s: { stages: Record<number, { killed: Record<number, number>; bossDead: boolean; bossDay?: string }> },
+): boolean {
+  let wiped = false;
+  for (const prog of Object.values(s.stages)) {
+    if (Object.keys(prog.killed).length > 0 || prog.bossDay) {
+      prog.killed = {};
+      prog.bossDay = undefined;
+      wiped = true;
+    }
+  }
+  return wiped;
+}

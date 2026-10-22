@@ -226,6 +226,8 @@ export function normalizeState(raw: unknown): GameState {
   }
 
   s.stage = Math.max(1, Math.floor(num(r.stage, 1)));
+  // 日期键原样保留；旧档没有该字段 → ''，读档时会判为跨天而触发一次刷新
+  s.stageDay = typeof r.stageDay === 'string' ? r.stageDay : '';
   s.stages = {};
   if (r.stages && typeof r.stages === 'object') {
     for (const [k, v] of Object.entries(r.stages as Record<string, unknown>)) {
@@ -240,7 +242,13 @@ export function normalizeState(raw: unknown): GameState {
           if (Number.isFinite(l) && l > 0 && c > 0) killed[l] = c;
         }
       }
-      s.stages[Math.floor(stageNo)] = { killed, bossDead: raw.bossDead === true };
+      s.stages[Math.floor(stageNo)] = {
+        killed,
+        bossDead: raw.bossDead === true,
+        // 旧档没有 bossDay：BOSS 已通关但没记录日期 → 视为「非今天」，
+        // 下次铺怪会让 BOSS 回归（和每日刷新语义一致）
+        bossDay: typeof raw.bossDay === 'string' ? raw.bossDay : undefined,
+      };
     }
   }
 

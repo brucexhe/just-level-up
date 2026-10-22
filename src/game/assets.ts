@@ -38,8 +38,18 @@ function rowWidth(grid: Grid): number {
 }
 
 /**
+ * 月牙刀光贴图的基础尺寸：以前是 28，现在按 4 倍超采样烘焙。
+ * 显示尺寸不变（scale 同比缩小 4 倍，见场景里的 SLASH_TEX_SCALE），
+ * 换来的好处是放大成大刀光时弧线是光滑的，而不是一格一格的方块。
+ */
+export const SLASH_TEX_SIZE = 112;
+
+/**
  * 挥砍用的月牙刀光：真正的弧形，中间厚、两端收尖。
- * 用极坐标逐点填像素，比手写字符网格更容易调形状。
+ *
+ * 走「超采样 + 距离场抗锯齿」：对每个像素算它到月牙轮廓的带符号距离，
+ * 边界处按覆盖率给 alpha（硬锯齿 → 平滑过渡），轮廓外再拖一小段递减柔光。
+ * 形状参数和原来那版（28 / 11.5 / 2.4）在显示尺寸上完全等价，只是分辨率高了 4 倍。
  */
 function bakeCrescent(
   scene: Phaser.Scene,
@@ -49,23 +59,49 @@ function bakeCrescent(
   maxThick: number,
 ): void {
   if (scene.textures.exists(key)) return;
-  const g = scene.make.graphics({ x: 0, y: 0 });
+  const tex = scene.textures.createCanvas(key, size, size);
+  if (!tex) return;
+  const ctx = tex.getContext();
+  const img = ctx.createImageData(size, size);
+  const px = img.data;
   const c = size / 2;
   const span = 1.22; // 半角（弧度）→ 总弧约 140°
-  const step = 0.018;
-  for (let a = -span; a <= span + 1e-6; a += step) {
-    // 两端细、中间厚
-    const t = 1 - Math.abs(a) / span;
-    const thick = 0.8 + maxThick * t * t;
-    for (let k = 0; k < thick; k += 0.45) {
-      const r = radius - k;
-      const x = Math.round(c + Math.cos(a) * r);
-      const y = Math.round(c + Math.sin(a) * r);
-      g.fillStyle(0xffffff, 1).fillRect(x, y, 1, 1);
+  const endFade = 0.18; // 两端最后这段角度内把厚度收尖，避免被切平
+  const soft = 3.5; // 轮廓外的柔光宽度（超采样像素）
+  const softAlpha = 0.3; // 柔光最内侧的 alpha，往外递减到 0
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x + 0.5 - c;
+      const dy = y + 0.5 - c;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      const t = 1 - Math.abs(Math.atan2(dy, dx)) / span;
+      if (t <= 0) continue; // 角度在弧之外
+      const taper = smoothstep(Math.min(1, t / endFade));
+      const thick = maxThick * (0.333 + t * t) * taper;
+      if (thick <= 0) continue;
+      const d = Math.abs(r - (radius - thick / 2)) - thick / 2; // <0 表示在月牙内
+      let alpha: number;
+      if (d <= -0.5) alpha = 1; // 实心部分
+      else if (d <= 0.5) alpha = smoothstep(0.5 - d); // 边界：按覆盖率抗锯齿
+      else alpha = Math.max(0, 1 - d / soft) * softAlpha; // 轮廓外的柔光
+      if (alpha <= 0) continue;
+      const i = (y * size + x) * 4;
+      px[i] = 255;
+      px[i + 1] = 255;
+      px[i + 2] = 255;
+      px[i + 3] = Math.round(alpha * 255);
     }
   }
-  g.generateTexture(key, size, size);
-  g.destroy();
+  ctx.putImageData(img, 0, 0);
+  tex.refresh();
+  // 全局 pixelArt 会把全部纹理锁成 NEAREST（保像素硬边），
+  // 但月牙是「放大显示的特效」，单独开 LINEAR 才能吃到超采样的光滑边。
+  tex.setFilter(Phaser.Textures.FilterMode.LINEAR);
+}
+
+function smoothstep(x: number): number {
+  const t = x < 0 ? 0 : x > 1 ? 1 : x;
+  return t * t * (3 - 2 * t);
 }
 
 /** 简单贴图（阴影/粒子/条/面板等） */
@@ -329,47 +365,91 @@ export function propKey(stageId: number, shape: PropShape): string {
   return `prop-${stageId}-${shape}`;
 }
 
+/**
+ * 主角配色（24×24 网格专用，单字符 key 直接喂给 bakeGrid）。
+ *
+ * 沿用「左上亮 / 右下暗」的三段式，和怪物、场景一致：**没有黑色描边**。
+ * E（深色）只用在五官上，避免到处出现黑边破坏像素统一感。
+ */
 const PLAYER_PALETTE: Palette = {
-  H: 0xc8d0e0,
-  D: 0x6a7488,
-  S: 0xe8b890,
-  A: 0x8892a8,
-  G: 0xe8c84a,
-  B: 0x5a4a3a,
-  L: 0x4a5164,
-  C: 0xa83240,
+  H: 0xc8d0e0, // 头盔亮面
+  D: 0x6a7488, // 通用暗面（头盔边/护甲边/手臂内侧/颈甲边/腰带边/靴子）
+  S: 0xe8b890, // 面部皮肤
+  A: 0x8892a8, // 护甲主色
+  G: 0xe8c84a, // 金饰（盔带/胸甲条/肩甲外缘/剑格/剑柄头/腰带扣）
+  B: 0x5a4a3a, // 腰带皮带 + 剑柄缠皮
+  L: 0x4a5164, // 双腿
+  C: 0xa83240, // 披风主色
+  R: 0x6e1e2c, // 披风暗面 / 褶皱
+  P: 0xe85a6a, // 盔缨亮红
+  W: 0xf2f6ff, // 剑刃高光
+  M: 0x9aa6b8, // 剑刃主色
+  E: 0x2a303c, // 眼睛 + 嘴（唯一深色，只用于五官）
 };
 
-const PLAYER_BODY = [
-  '................',
-  '.....HHHHHH.....',
-  '....HHHHHHHH....',
-  '....HDDDDDHH....',
-  '....DSSSSSSD....',
-  '.....SSSSSS.....',
-  '....CAAAAAAC....',
-  '...CAGAAAAGAC...',
-  '...CAAAAAAAAC...',
-  '....BBBBBBBB....',
+/**
+ * 主角 24×24 像素网格：严格 24 列 × 24 行。
+ * 脚底在第 22 行（索引 22 的靴子行），所以人物站立的"地面线"在 y+22 附近，
+ * 场景里的 PLAYER_SHADOW.offsetY 按这个来配。
+ */
+const PLAYER_GRID_A = [
+  '........................',
+  '...........PP...........',
+  '..........PPCC..........',
+  '..........HHHH.....WM...',
+  '.........HHHHHH....WM...',
+  '........DGHHHHGD...WM...',
+  '.......DSSSSSSSSD..WM...',
+  '.......DSEESSEESD..WM...',
+  '.......DSEESSEESD..WM...',
+  '.......DSSSEESSSD..WM...',
+  '........DAAAAAAD...WM...',
+  '...CC.GADAAGGAADAG.WM...',
+  '..CCC.AADAAGGAADAA.WM...',
+  '.CCCC.AD.AAGGAA.ADGGGG..',
+  '.CCCR.AD.AAGGAD.ADABB...',
+  'CCCRR.AD.AAGGAD.ADDBB...',
+  'CCRRR.DD.AAGGDD.DD.GG...',
+  'CCRRR...DBBGGBBD........',
+  '.CCRR...LL...LD.........',
+  '..CCR...LL...LD.........',
+  '...CR...LL...LD.........',
+  '........LL...LD.........',
+  '.......DDD...DDD........',
+  '........................',
+];
+
+/** 走路第二帧：手臂换另一侧、披风收拢、双腿并步 */
+const PLAYER_GRID_B = [
+  '........................',
+  '...........PP...........',
+  '..........PPCC..........',
+  '..........HHHH.....WM...',
+  '.........HHHHHH....WM...',
+  '........DGHHHHGD...WM...',
+  '.......DSSSSSSSSD..WM...',
+  '.......DSEESSEESD..WM...',
+  '.......DSEESSEESD..WM...',
+  '.......DSSSEESSSD..WM...',
+  '........DAAAAAAD...WM...',
+  '...CC.GADAAGGAADAG.WM...',
+  '..CCC.AADAAGGAADAA.WM...',
+  '..CCC.AD.AAGGAA.ADGGGG..',
+  '..CCR.AD.AAGGAD.ADABB...',
+  '..CCR.AD.AAGGAD.ADDBB...',
+  '...CR.DD.AAGGDD.DD.GG...',
+  '...CR...DBBGGBBD........',
+  '...CR.....LLLD..........',
+  '..........LLLD..........',
+  '..........LLLD..........',
+  '..........LLLD..........',
+  '.........DDDDDD.........',
+  '........................',
 ];
 
 export function bakePlayer(scene: Phaser.Scene): void {
-  bakeGrid(scene, 'player-a', [...PLAYER_BODY,
-    '....DD....DD....',
-    '....LL....LL....',
-    '....LL....LL....',
-    '...LLL....LLL...',
-    '................',
-    '................',
-  ], PLAYER_PALETTE);
-  bakeGrid(scene, 'player-b', [...PLAYER_BODY,
-    '.....DDDDDD.....',
-    '.....LL..LL.....',
-    '.....LL..LL.....',
-    '....LLL..LLL....',
-    '................',
-    '................',
-  ], PLAYER_PALETTE);
+  bakeGrid(scene, 'player-a', PLAYER_GRID_A, PLAYER_PALETTE);
+  bakeGrid(scene, 'player-b', PLAYER_GRID_B, PLAYER_PALETTE);
 }
 
 /**
@@ -699,7 +779,8 @@ export function bakeProps(scene: Phaser.Scene): void {
     '....TTTT....',
   ], { G: 0x1e6433, D: 0x0e3d1e, W: 0x3f9a52, T: 0x4e3620 });
 
-  bakeCrescent(scene, 'slash', 28, 11.5, 2.4);
+  // 28/11.5/2.4 的 4 倍超采样版（显示尺寸不变，弧线更光滑）
+  bakeCrescent(scene, 'slash', SLASH_TEX_SIZE, 46, 9.6);
 
   // 挥砍时绕角色旋转的刀（水平朝向，靠 rotation 对准目标）
   bakeGrid(

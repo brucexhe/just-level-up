@@ -19,8 +19,10 @@ import { BASE_ATTRS, type AttrSet, type BaseAttr } from '../core/types';
 export interface StageProgress {
   /** 已击杀的普通怪：等级 → 只数 */
   killed: Record<number, number>;
-  /** 本关 BOSS 是否已击杀 */
+  /** 永久通关标记：打死过本关 BOSS（解锁下一关用，**不**随每日刷新清掉） */
   bossDead: boolean;
+  /** BOSS 最近一次被击杀的日期（dayKeyOf 格式）：等于今天 → 今天不再刷；跨天清空 → BOSS 回归 */
+  bossDay?: string;
 }
 
 /** 人物初始每项属性的点数 */
@@ -48,6 +50,8 @@ export interface GameState {
   stage: number;
   /** 每关的击杀记录：BOSS 死后整关重置并解锁下一关 */
   stages: Record<number, StageProgress>;
+  /** 上次游玩的日期（dayKeyOf 格式）；跨天时所有已解锁关卡怪物重刷 */
+  stageDay: string;
 }
 
 export function createInitialState(): GameState {
@@ -85,6 +89,7 @@ export function createInitialState(): GameState {
     highestMonsterLevel: 1,
     stage: 1,
     stages: {},
+    stageDay: '',
   };
   s.hp = maxHp(s);
   s.mp = maxMp(s);
