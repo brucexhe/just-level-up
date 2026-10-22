@@ -222,9 +222,6 @@ function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
         </div>
       </div>
       <div class="alloc-box">
-        <div class="ab-title">投入自由装备点（<b style="color:#7ee787">${fmtNum(
-          s.equipPoints,
-        )}</b> 可用，只能投到已有词条，绑定此装备，换装不退）</div>
         ${alloc}
       </div>
       <div class="ic-foot">
