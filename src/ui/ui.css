@@ -862,27 +862,15 @@
   color: #8d9ab0;
   margin-bottom: 5px;
 }
-.alloc-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
+.alloc-box .attr-row .nm {
+  width: 40px;
 }
-.alloc-grid button {
-  padding: 5px 0;
-  border-radius: 7px;
+.alloc-box .attr-row .vl {
+  font-size: 13px;
+}
+.alloc-box .note {
   font-size: 10px;
-  background: linear-gradient(180deg, #2f3a26, #1e2517);
-  border: 1px solid #4a6039;
-  color: #bdeeb4;
-  transition: 0.14s;
-}
-.alloc-grid button:hover:not([disabled]) {
-  border-color: #7ee787;
-  background: linear-gradient(180deg, #3d5236, #26321f);
-}
-.alloc-grid button[disabled] {
-  opacity: 0.35;
-  cursor: not-allowed;
+  color: #8d9ab0;
 }
 
 /* ============================ 技能 ============================ */

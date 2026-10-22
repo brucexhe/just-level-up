@@ -108,7 +108,7 @@ const characterPanel: PanelDef = {
         }</span>
         <span class="ops">
           <button data-act="attr" data-arg="${k}" ${can ? '' : 'disabled'}>+1</button>
-          <button data-act="attr5" data-arg="${k}" ${can ? '' : 'disabled'}>+5</button>
+          <button data-act="attr10" data-arg="${k}" ${can ? '' : 'disabled'}>+10</button>
           <button class="max" data-act="attrmax" data-arg="${k}" ${
             can ? '' : 'disabled'
           }>MAX</button>
@@ -170,10 +170,10 @@ const characterPanel: PanelDef = {
   },
   action(act, arg, s, api) {
     const key = arg as BaseAttr;
-    if (act === 'attr' || act === 'attr5' || act === 'attrmax') {
-      const n = act === 'attr' ? 1 : act === 'attr5' ? 5 : s.attrPoints;
+    if (act === 'attr' || act === 'attr10' || act === 'attrmax') {
+      const n = act === 'attr' ? 1 : act === 'attr10' ? 10 : s.attrPoints;
       const got = allocateAttrPoints(s, key, n);
-      if (got > 0) api.toast(`+${got} ${ATTR_META[key].name}`, '#7ee787');
+      if (got > 0) api.toast(`+${fmtNum(got)} ${ATTR_META[key].name}`, '#7ee787');
       else api.toast('属性点不足', '#ff8a8a');
       api.refresh();
     }
@@ -184,18 +184,31 @@ const characterPanel: PanelDef = {
 
 function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
   const r = RARITY_META[item.rarity];
-  // 只能往这件装备已有的词条上加点：普通 1 条就只有那 1 个按钮
+  // 只能往这件装备已有的词条上加点：与人物属性面板同款的行样式，+1 / +10 / MAX 三档
   const allocable = BASE_ATTRS.filter((k) => (item.stats[k] ?? 0) > 0);
+  const can = s.equipPoints > 0;
   const alloc =
     allocable.length > 0
-      ? allocable
-          .map(
-            (k) =>
-              `<button data-act="alloc" data-arg="${k}" ${
-                s.equipPoints > 0 ? '' : 'disabled'
-              }>+${ATTR_META[k].name}</button>`,
-          )
-          .join('')
+      ? `<div class="attr-list">${allocable
+          .map((k) => {
+            const base = item.stats[k] ?? 0;
+            const free = item.freeAllocated[k] ?? 0;
+            return `<div class="attr-row" title="${esc(ATTR_META[k].hint)}">
+              <span class="ic" style="color:${ATTR_META[k].color}">${ATTR_META[k].icon}</span>
+              <span class="nm">${ATTR_META[k].name}</span>
+              <span class="vl num">${fmtNum(base)}${
+                free > 0 ? `<i>+${fmtNum(free)}</i>` : ''
+              }</span>
+              <span class="ops">
+                <button data-act="alloc1" data-arg="${k}" ${can ? '' : 'disabled'}>+1</button>
+                <button data-act="alloc10" data-arg="${k}" ${can ? '' : 'disabled'}>+10</button>
+                <button class="max" data-act="allocmax" data-arg="${k}" ${
+                  can ? '' : 'disabled'
+                }>MAX</button>
+              </span>
+            </div>`;
+          })
+          .join('')}</div>`
       : `<div class="note">这件装备没有任何词条，自由装备点投不进来</div>`;
   return `
     <div class="item-card" style="border-color:${r.color}55">
@@ -208,12 +221,11 @@ function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
           }</span> · 总点数 <b class="num">${fmtNum(totalPoints(item))}</b></div>
         </div>
       </div>
-      <div class="chips">${attrChips(item.stats)}${attrChips(item.freeAllocated, true)}</div>
       <div class="alloc-box">
         <div class="ab-title">投入自由装备点（<b style="color:#7ee787">${fmtNum(
           s.equipPoints,
         )}</b> 可用，只能投到已有词条，绑定此装备，换装不退）</div>
-        <div class="alloc-grid">${alloc}</div>
+        ${alloc}
       </div>
       <div class="ic-foot">
         <button class="btn" data-act="unequip">卸下到背包</button>
@@ -287,12 +299,16 @@ const equipmentPanel: PanelDef = {
           api.refresh();
         }
         break;
-      case 'alloc': {
-        // 这里 arg 是属性键，部位取自当前选中的槽位
+      case 'alloc1':
+      case 'alloc10':
+      case 'allocmax': {
+        // arg 是属性键，部位取自当前选中的槽位；档位：+1 / +10 / 全部
         const target = api.view.equipSlot;
         if (!target) break;
-        const got = allocateEquipPoints(s, target, arg as BaseAttr, 1);
-        if (got > 0) api.toast(`+1 ${ATTR_META[arg as BaseAttr].name}`, '#7ee787');
+        const key = arg as BaseAttr;
+        const n = act === 'alloc1' ? 1 : act === 'alloc10' ? 10 : s.equipPoints;
+        const got = allocateEquipPoints(s, target, key, n);
+        if (got > 0) api.toast(`+${fmtNum(got)} ${ATTR_META[key].name}`, '#7ee787');
         else api.toast('自由装备点不足', '#ff8a8a');
         api.refresh();
         break;

@@ -82,6 +82,23 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(s.baseStats.hp).toBe(BASE_ATTR_START + auto + 1);
   });
 
+  it('人物面板三档按钮：+1 / +10 / MAX（+10 不足时投剩余）', () => {
+    const s = createInitialState();
+    gainExp(s, expToNext(1) + expToNext(2) + expToNext(3) + expToNext(4)); // -> Lv5, 4 点
+    const { api } = fakeApi(() => s);
+    const html = PANEL_BY_ID.character.render(s, api);
+    expect(html).toContain('data-act="attr"');
+    expect(html).toContain('data-act="attr10"');
+    expect(html).toContain('data-act="attrmax"');
+    expect(html).not.toContain('data-act="attr5"'); // 旧 +5 档已移除
+
+    // +10 只有 4 点 → 投 4
+    PANEL_BY_ID.character.action('attr10', 'pAtk', s, api);
+    expect(s.attrPoints).toBe(0);
+    const auto = BALANCE.ATTR_PER_LEVEL * (s.level - 1);
+    expect(s.baseStats.pAtk).toBe(BASE_ATTR_START + auto + 4);
+  });
+
   it('装备面板展示 8 个槽位与选中装备详情', () => {
     const s = createInitialState();
     const it = dropEquipment(12, () => 0.5);
@@ -94,14 +111,48 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(html).toContain(it.name);
     expect(html).toContain('自由装备点');
 
-    // 投入自由装备点：只能投到该装备已有的词条上（面板只渲染那些按钮）
+    // 投入自由装备点：只能投到该装备已有的词条上（面板只渲染那些行）
     s.equipPoints = 3;
     const html2 = PANEL_BY_ID.equipment.render(s, api);
     const key = Object.keys(it.stats)[0]!;
-    expect(html2).toContain(`data-act="alloc" data-arg="${key}"`);
-    PANEL_BY_ID.equipment.action('alloc', key, s, api);
+    // 与人物属性面板同款的行样式 + 三档按钮
+    expect(html2).toContain('attr-row');
+    expect(html2).toContain(`data-act="alloc1" data-arg="${key}"`);
+    expect(html2).toContain('data-act="alloc10"');
+    expect(html2).toContain('data-act="allocmax"');
+    PANEL_BY_ID.equipment.action('alloc1', key, s, api);
     expect(s.equipPoints).toBe(2);
     expect(it.freeAllocated[key]).toBe(1);
+    // 已投的点以绿字 +N 显示在数值列
+    const html3 = PANEL_BY_ID.equipment.render(s, api);
+    expect(html3).toContain(`+1</i>`);
+  });
+
+  it('装备加点三档：+1 / +10 / MAX（后期点数多也能一次投完）', () => {
+    const s = createInitialState();
+    const it = dropEquipment(20, () => 0.5);
+    it.slot = 'weapon';
+    equipItem(s, it);
+    const { api, view } = fakeApi(() => s);
+    view.equipSlot = 'weapon';
+    const key = Object.keys(it.stats)[0]!;
+
+    // +10：点数够就投 10
+    s.equipPoints = 55;
+    PANEL_BY_ID.equipment.action('alloc10', key, s, api);
+    expect(s.equipPoints).toBe(45);
+    expect(it.freeAllocated[key]).toBe(10);
+
+    // MAX：把剩下的全部投进去
+    PANEL_BY_ID.equipment.action('allocmax', key, s, api);
+    expect(s.equipPoints).toBe(0);
+    expect(it.freeAllocated[key]).toBe(55);
+
+    // 点数不足时 +10 只投剩余的（allocateEquipPoints 循环到不够为止）
+    s.equipPoints = 3;
+    PANEL_BY_ID.equipment.action('alloc10', key, s, api);
+    expect(s.equipPoints).toBe(0);
+    expect(it.freeAllocated[key]).toBe(58);
   });
 
   it('技能面板：三个主动技能默认已学会，可花技能点升级', () => {
