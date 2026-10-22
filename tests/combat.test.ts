@@ -17,17 +17,18 @@ describe('怪物攻击力（前期不该几下被打死）', () => {
     expect(m10.stats.pAtk!).toBeLessThan(10);
   });
 
-  it('40 血 / 10 防的角色面对 Lv10 怪能扛 8 下以上', () => {
+  it('40 血 / 10 防的角色面对 Lv10 怪能扛 5 下以上', () => {
     const m = createMonster(10);
     const dmg = computeDamage(
       { attack: m.stats.pAtk ?? 1, defense: 10, attackerLevel: 10 },
       fixed(0.5),
     );
     const mit = mitigationRate(10, 10);
-    expect(mit).toBeGreaterThan(0.1); // 10 点防御要真的有用（约 11%）
+    // 减伤曲线改成「Lv1000 + 3000 防才封顶」后，前期防御只值个位数百分比，
+    // 前期坦度靠血量，不靠减伤（10 级怪攻 8.5，一刀见肉）
+    expect(mit).toBeCloseTo(10 / 620, 3);
     expect(dmg).toBeGreaterThanOrEqual(1);
-    expect(dmg).toBeLessThanOrEqual(5);
-    expect(Math.ceil(40 / dmg)).toBeGreaterThanOrEqual(8);
+    expect(Math.ceil(40 / dmg)).toBeGreaterThanOrEqual(5);
   });
 
   it('BOSS 仍然明显更疼（×1.4）但不至于一击秒人', () => {
@@ -41,7 +42,8 @@ describe('怪物攻击力（前期不该几下被打死）', () => {
       fixed(0.5),
     );
     expect(boss).toBeGreaterThan(normal);
-    expect(boss).toBeLessThanOrEqual(7);
+    // 40 血至少能扛 4 下，不会被 BOSS 一发带走
+    expect(Math.ceil(40 / boss)).toBeGreaterThanOrEqual(4);
   });
 
   it('防御的成长是有收益的：防御越高挨的伤害越低', () => {
@@ -51,12 +53,13 @@ describe('怪物攻击力（前期不该几下被打死）', () => {
         { attack: m.stats.pAtk ?? 1, defense: def, attackerLevel: 10 },
         fixed(0.5),
       );
-    // 10 级怪只打 6 点，取整后相邻档位差别会被抹平，所以取跨度大一点的档位
-    expect(at(40)).toBeLessThan(at(10));
-    expect(at(80)).toBeLessThan(at(40));
+    // 前期 K ≈ 610，防御要堆到远高于等级的量级才看得出差别；
+    // 10 级怪只打 6 点，取整又会吃掉零头，所以取跨度大一点的档位
+    expect(at(400)).toBeLessThan(at(10));
+    expect(at(800)).toBeLessThan(at(400));
     // 减伤率本身是严格单调的
-    expect(mitigationRate(80, 10)).toBeGreaterThan(mitigationRate(40, 10));
-    expect(mitigationRate(40, 10)).toBeGreaterThan(mitigationRate(10, 10));
+    expect(mitigationRate(800, 10)).toBeGreaterThan(mitigationRate(400, 10));
+    expect(mitigationRate(400, 10)).toBeGreaterThan(mitigationRate(10, 10));
   });
 
   it('普通怪只有物理，不会掺法术', () => {

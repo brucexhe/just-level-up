@@ -51,21 +51,36 @@ describe('formulas', () => {
   });
 
   it('mitigationRate: 防御要真的有用，且受上限封顶', () => {
-    // 1 级攻击者：分母 = 72 + 0.9 = 72.9
-    expect(mitigationRate(72.9, 1)).toBeCloseTo(0.5);
-    // 10 级怪打 10 级的人：分母 = 72 + 9 = 81
-    expect(mitigationRate(9, 10)).toBeCloseTo(9 / 90, 2); // 9 点防御 ≈ 10%
-    expect(mitigationRate(19, 10)).toBeCloseTo(19 / 100, 2); // 裸防御 ≈ 19%
+    // 1 级攻击者：K = 600 + 1 = 601，601 点防御正好半伤
+    expect(mitigationRate(601, 1)).toBeCloseTo(0.5);
+    // 10 级怪打 10 级的人：K = 610，防御只能换到很小一截减伤
+    expect(mitigationRate(9, 10)).toBeCloseTo(9 / 619, 2);
+    expect(mitigationRate(19, 10)).toBeCloseTo(19 / 629, 2);
     // 防御成长带来的收益是单调的
     expect(mitigationRate(40, 10)).toBeGreaterThan(mitigationRate(19, 10));
     // 封顶 65%，堆防御不能免伤
     expect(mitigationRate(1e6, 10)).toBeCloseTo(BALANCE.MIT_CAP, 5);
   });
 
-  it('白给的减伤随等级缓慢上升（不能像旧参数那样锁死在 40%）', () => {
+  it('65% 封顶锚点：Lv1000 + 3000 防才到顶，50 级 200 防远不到', () => {
+    // 用户定的锚点：1000 级、3000 防才吃满 65%
+    expect(mitigationRate(2971, 1000)).toBeCloseTo(BALANCE.MIT_CAP, 3);
+    expect(mitigationRate(3000, 1000)).toBeCloseTo(BALANCE.MIT_CAP, 5);
+    // 旧参数下这里已经 50%+；现在约 23.5%
+    expect(mitigationRate(200, 50)).toBeCloseTo(200 / 850, 3);
+    expect(mitigationRate(200, 50)).toBeLessThan(0.25);
+    // 同级 65% 的门槛线 def ≈ 1114 + 1.86×等级：Lv50 要 1207 防、Lv100 要 1300 防
+    // 10 倍等级的防御在低等级远达不到门槛
+    for (const L of [1, 10, 50, 100]) {
+      expect(mitigationRate(L * 10, L)).toBeLessThan(BALANCE.MIT_CAP);
+    }
+    expect(mitigationRate(1207, 50)).toBeCloseTo(BALANCE.MIT_CAP, 3);
+  });
+
+  it('白给的减伤随等级缓慢上升，但早期很低、永不封顶', () => {
     const bare = (L: number) => mitigationRate(L + 9, L);
-    // 起点要低：1 级裸装别一上来就四成减伤
-    expect(bare(1)).toBeLessThan(0.15);
+    // 起点要低：1 级裸装只有个位数减伤
+    expect(bare(1)).toBeLessThan(0.05);
     // 随等级单调上升
     let prev = 0;
     for (const L of [1, 4, 10, 20, 50, 100, 300, 1000, 3000, 10000]) {
@@ -73,9 +88,9 @@ describe('formulas', () => {
       expect(m).toBeGreaterThan(prev);
       prev = m;
     }
-    // 后期明显变硬，但不能早期就撞上封顶
-    expect(bare(100)).toBeGreaterThan(0.35);
-    expect(bare(100)).toBeLessThan(BALANCE.MIT_CAP);
+    // 中期仍然很薄，1000 级才爬到三成多，渐近 50%
+    expect(bare(100)).toBeLessThan(0.2);
+    expect(bare(1000)).toBeGreaterThan(0.35);
     expect(bare(10000)).toBeLessThan(BALANCE.MIT_CAP);
   });
 

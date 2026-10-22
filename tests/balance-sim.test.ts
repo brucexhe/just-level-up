@@ -207,8 +207,12 @@ describe('成型后的平衡模拟', () => {
       // 裸装在后期扛不住：5 下以内必死
       if (lv >= 100) {
         expect(Math.ceil(hp / d1)).toBeLessThanOrEqual(5);
-        // 把自由点全投法防之后，明显能多扛
-        expect(Math.ceil(hp / d2)).toBeGreaterThan(Math.ceil(hp / d1));
+      }
+      // 法防投资的回报要等防御量级追上等级才明显（Lv1000 起）：
+      // 用伤害而不是刀数比较，后期刀数会被 1 刀的下限吃掉
+      if (lv >= 1000) {
+        expect(d2).toBeLessThan(d1);
+        expect(d1 / d2).toBeGreaterThan(1.25);
       }
     }
   });
