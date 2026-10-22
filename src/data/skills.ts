@@ -80,8 +80,8 @@ export const FIREBALL_SPEED = 460;
 /** 毒刃每跳间隔 ms */
 export const POISON_TICK_MS = 500;
 /** 毒刃 AoE 半径：BASE + GROWTH × (技能等级 − 1)。地图很大，半径太小等于单体 */
-export const POISON_RADIUS_BASE = 90;
-export const POISON_RADIUS_GROWTH = 10;
+export const POISON_RADIUS_BASE = 100;
+export const POISON_RADIUS_GROWTH = 1;
 
 export const SKILL_BY_ID: Record<SkillId, SkillDef> = SKILLS.reduce(
   (acc, s) => {

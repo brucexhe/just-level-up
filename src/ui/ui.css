@@ -1255,9 +1255,9 @@
 }
 .skill-slot {
   position: relative;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 11px;
   background: linear-gradient(180deg, #222c3e, #161d29);
   border: 1px solid #3a4761;
   display: flex;
@@ -1271,7 +1271,7 @@
   transform: translateY(-2px);
 }
 .skill-slot .ss-ico {
-  font-size: 18px;
+  font-size: 20px;
   z-index: 2;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
 }
@@ -1279,7 +1279,7 @@
   position: absolute;
   top: 2px;
   left: 4px;
-  font-size: 9px;
+  font-size: 10px;
   color: #8d9ab0;
   z-index: 3;
 }
@@ -1287,7 +1287,7 @@
   position: absolute;
   bottom: 2px;
   right: 4px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: #ffd93d;
   z-index: 3;
@@ -1307,7 +1307,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: #fff;
   text-shadow: 0 2px 4px #000;
@@ -1328,7 +1328,7 @@
 
 .bb-sep {
   width: 1px;
-  height: 34px;
+  height: 38px;
   background: linear-gradient(180deg, transparent, #3a4761, transparent);
 }
 
@@ -1338,9 +1338,9 @@
 }
 .tool {
   position: relative;
-  width: 52px;
-  height: 44px;
-  border-radius: 10px;
+  width: 57px;
+  height: 48px;
+  border-radius: 11px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1364,11 +1364,11 @@
   color: #ffe08a;
 }
 .tool .t-ico {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
 }
 .tool .t-lb {
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 1px;
   color: #a8b4c8;
 }
@@ -1376,7 +1376,7 @@
   position: absolute;
   top: 2px;
   right: 3px;
-  font-size: 8px;
+  font-size: 9px;
   color: #6f7c91;
 }
 .tool .t-badge {
