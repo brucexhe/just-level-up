@@ -30,9 +30,15 @@ export function potionRestore(
   return kind === 'hp' ? { hp: tier, mp: 0 } : { hp: 0, mp: tier };
 }
 
-/** 该档药售价（金币，= 档位；回血/回蓝同价） */
-export function potionPrice(tier: number): number {
-  return tier;
+/**
+ * 该药的**售价** = 实际回复点数 × 10。
+ *
+ * 参数是「这瓶药能回多少」（见 gameState.potionHealNow：max(档位, 上限 25%)），
+ * 所以单位血量的金币成本恒定 = 10 金币/点，前期价格低、后期按比例抬高，
+ * 不会出现「高阶药便宜到白送」或「低阶药贵到买不起」。
+ */
+export function potionPrice(heal: number): number {
+  return Math.max(1, Math.round(heal * BALANCE.POTION_PRICE_MULT));
 }
 
 export function canBuyPotion(playerLevel: number): boolean {

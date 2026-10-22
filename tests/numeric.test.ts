@@ -206,9 +206,11 @@ describe('economy / potions', () => {
     expect(potionTier(900)).toBe(900);
   });
 
-  it('potion heal & price = tier（前期也有药，因为没有自动回复）', () => {
+  it('potion heal & price：售价 = 实际回复点数 × 10', () => {
     expect(potionHeal(90)).toBe(90);
-    expect(potionPrice(90)).toBe(90);
+    expect(potionPrice(90)).toBe(900); // 90 × 10
+    expect(potionPrice(20)).toBe(200);
+    expect(potionPrice(0)).toBe(1); // 保底 1 金币，不会出现免费药
     expect(canBuyPotion(1)).toBe(true);
     expect(canBuyPotion(9)).toBe(true);
     expect(canBuyPotion(10)).toBe(true);
@@ -217,7 +219,7 @@ describe('economy / potions', () => {
   it('two potion kinds: hp vs mp restore separately', () => {
     expect(potionRestore('hp', 90)).toEqual({ hp: 90, mp: 0 });
     expect(potionRestore('mp', 90)).toEqual({ hp: 0, mp: 90 });
-    expect(potionPrice(90)).toBe(potionPrice(90)); // 同价
+    expect(potionPrice(90)).toBe(potionPrice(90)); // 同回复量同价
   });
 
   it('sell refunds half points, no gold', () => {

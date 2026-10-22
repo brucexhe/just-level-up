@@ -1,6 +1,7 @@
 import { EQUIP_SLOTS, totalPoints } from '../core/equipment';
 import { expToNext } from '../core/progression';
 import { skillMpCost } from '../core/skills';
+import type { PotionKind } from '../core/economy';
 import { maxHp, maxMp, type GameState } from '../state/gameState';
 import { SKILLS, type SkillId } from '../data/skills';
 import type {
@@ -25,6 +26,8 @@ export interface GameUIOptions {
   designWidth: number;
   getState(): GameState;
   castSkill(id: SkillId): void;
+  /** 喝一瓶药（工具栏快捷槽 / Z、X 热键） */
+  drinkPotion(kind: PotionKind): void;
   cooldownOf(id: SkillId): Cooldown;
   now(): number;
   /** 每帧取小地图数据 */
@@ -46,7 +49,7 @@ const TOOLS: { id: PanelId; icon: string; label: string; key: string }[] = [
   { id: 'equipment', icon: '🗡', label: '装备', key: 'B' },
   { id: 'skills', icon: '✨', label: '技能', key: 'K' },
   { id: 'bag', icon: '🎒', label: '背包', key: 'I' },
-  { id: 'shop', icon: '🧪', label: '药店', key: 'P' },
+  { id: 'shop', icon: '🏪', label: '商店', key: 'P' },
   { id: 'settings', icon: '⚙', label: '设置', key: 'O' },
 ];
 
@@ -129,6 +132,17 @@ export class GameUI {
       <div class="dock dock-right"></div>
       <div class="bottombar">
         <div class="skillbar"></div>
+        <div class="bb-sep"></div>
+        <div class="potionbar">
+          <button class="potion-slot hp" data-drink="hp" title="回血药：点击使用（快捷键 Z）">
+            <span class="ps-key">Z</span><span class="ps-ico">🧴</span>
+            <span class="ps-num" data-potion="hp">0</span>
+          </button>
+          <button class="potion-slot mp" data-drink="mp" title="回蓝药：点击使用（快捷键 X）">
+            <span class="ps-key">X</span><span class="ps-ico">🔷</span>
+            <span class="ps-num" data-potion="mp">0</span>
+          </button>
+        </div>
         <div class="bb-sep"></div>
         <div class="toolbar"></div>
       </div>
@@ -297,6 +311,13 @@ export class GameUI {
       if (opener) {
         e.stopPropagation();
         this.toggle((opener.dataset.open ?? '') as PanelId);
+        return;
+      }
+      // 底部药槽：点一下喝一瓶
+      const drink = target.closest('[data-drink]') as HTMLElement | null;
+      if (drink) {
+        e.stopPropagation();
+        this.opts.drinkPotion(drink.dataset.drink as PotionKind);
       }
     });
 
@@ -509,6 +530,8 @@ export class GameUI {
       s.gold,
       s.inventory.length,
       s.skillBooks.length,
+      s.potions.hp,
+      s.potions.mp,
       eq,
       sk,
       this.view.equipSlot ?? '-',
@@ -572,6 +595,14 @@ export class GameUI {
         els.num.textContent = '';
         els.num.style.display = 'none';
       }
+    });
+
+    // 底部药槽：数量 + 空槽置灰（每帧同步，喝药/买药后立刻反映）
+    this.root.querySelectorAll<HTMLElement>('[data-potion]').forEach((el) => {
+      const kind = (el.dataset.potion || 'hp') as PotionKind;
+      const n = s.potions[kind];
+      setTxt(el, `${fmtNum(n)}`);
+      el.closest('.potion-slot')?.classList.toggle('empty', n <= 0);
     });
 
     // 工具栏角标

@@ -7,6 +7,9 @@ import {
   createInitialState,
   equipItem,
   gainExp,
+  maxHp,
+  potionHealNow,
+  usePotion,
   type GameState,
 } from '../src/state/gameState';
 import { BASE_ATTR_START } from '../src/state/gameState';
@@ -229,17 +232,97 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(Object.keys(s.equipped).length).toBe(1);
   });
 
-  it('药店：一级就有小药（无自动回复）；有钱后购买回血', () => {
+  it('商店：购买只入库不直接喝；药槽使用才回血；药效按当前档位结算', () => {
     const s = createInitialState();
     const { api } = fakeApi(() => s);
-    expect(PANEL_BY_ID.shop.render(s, api)).not.toContain('等级不足 10 级');
+    const html = PANEL_BY_ID.shop.render(s, api);
+    expect(html).not.toContain('等级不足 10 级');
+    expect(html).toContain('data-act="buy" data-arg="hp:1"');
+    expect(html).toContain('data-act="buy" data-arg="hp:10"');
+    expect(html).toContain('data-act="buy" data-arg="hp:99"');
+    expect(html).toContain('>+1</button>'); // 三档按钮统一带 + 号
+    expect(html).toContain('>+10</button>');
+    expect(html).toContain('>+MAX 99</button>');
+    // 卡片里不再有血条/蓝条与库存文案
+    expect(html).not.toContain('库存');
+    expect(html).not.toContain('data-w="hp"'); // 只有 HUD 有血条，商店卡片没有
 
-    s.level = 20;
-    s.gold = 100;
-    s.baseStats.hp = 50; // 最大生命 = 血量 ×1
+    s.level = 20; // 档位 20：回复 20（max(20, 上限 25%=15)），售价 20×10 = 200
+    s.gold = 1000;
+    s.baseStats.hp = 60;
     s.hp = 1;
-    PANEL_BY_ID.shop.action('buy-hp', '', s, api);
-    expect(s.gold).toBe(80);
+    expect(PANEL_BY_ID.shop.render(s, api)).toContain('<i class="coin-ic"></i>200');
+
+    // 买 1 瓶：只扣金币、只入库，不直接回血
+    PANEL_BY_ID.shop.action('buy', 'hp:1', s, api);
+    expect(s.gold).toBe(800);
+    expect(s.potions.hp).toBe(1);
+    expect(s.hp).toBe(1);
+
+    // 用一瓶：回 20 点，库存 −1
+    expect(usePotion(s, 'hp')).toBe('ok');
     expect(s.hp).toBe(21);
+    expect(s.potions.hp).toBe(0);
+
+    // 没有库存再喝：empty，不改变血量
+    expect(usePotion(s, 'hp')).toBe('empty');
+    expect(s.hp).toBe(21);
+
+    // 10 档：金币只够 5 瓶，按能买的截断
+    s.gold = 1000;
+    PANEL_BY_ID.shop.action('buy', 'hp:10', s, api);
+    expect(s.potions.hp).toBe(5);
+    expect(s.gold).toBe(0);
+
+    // 满血时喝药不消耗
+    s.potions.hp = 2;
+    s.hp = maxHp(s);
+    expect(usePotion(s, 'hp')).toBe('full');
+    expect(s.potions.hp).toBe(2);
+
+    // 升级后同一批库存自动按新档位结算（不会有过期药）
+    s.level = 40;
+    s.hp = 1;
+    usePotion(s, 'hp');
+    expect(s.hp).toBe(41); // 回 40 点
+  });
+
+  it('商店：没有库存上限，MAX 99 一次买 99 瓶', () => {
+    const s = createInitialState();
+    s.level = 20;
+    s.gold = 100000;
+    s.potions.hp = 500; // 已经很多了，照样能继续买
+    const { api } = fakeApi(() => s);
+    const html = PANEL_BY_ID.shop.render(s, api);
+    expect(html).not.toContain(`data-act="buy" data-arg="hp:1" disabled`);
+
+    PANEL_BY_ID.shop.action('buy', 'hp:99', s, api);
+    expect(s.potions.hp).toBe(599);
+    expect(s.gold).toBe(100000 - 99 * 200); // 单价 = 回复 20 × 10
+
+    // 金币不足 99 瓶时，按能买的瓶数买
+    s.gold = 200 * 7 + 5;
+    PANEL_BY_ID.shop.action('buy', 'hp:99', s, api);
+    expect(s.potions.hp).toBe(599 + 7);
+    expect(s.gold).toBe(5);
+  });
+
+  it('药水回复：堆血后按上限 25% 保底，前期仍按档位', () => {
+    const s = createInitialState();
+    s.level = 100; // 档位 100
+    s.baseStats.hp = 6000; // 装备/加点把上限堆到 6000
+    s.hp = 1;
+    s.potions.hp = 1;
+
+    // 档位 100 vs 上限 25% = 1500 → 取大的
+    expect(potionHealNow(s, 'hp')).toBe(1500);
+    usePotion(s, 'hp');
+    expect(s.hp).toBe(1501);
+
+    // 上限不高时仍按档位（与旧数值一致）
+    const t = createInitialState();
+    t.level = 20;
+    t.baseStats.hp = 60;
+    expect(potionHealNow(t, 'hp')).toBe(20); // max(20, 15)
   });
 });

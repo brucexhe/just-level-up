@@ -8,9 +8,11 @@ import {
   gainExp,
   maxHp,
   maxMp,
+  potionHealNow,
   skillLevel,
   skillName,
   spendMp,
+  usePotion,
   type GameState,
 } from '../../state/gameState';
 import {
@@ -21,7 +23,7 @@ import {
   resetDailyStages,
 } from '../../core/stage';
 import { rollDrops, type GroundDrop } from '../../core/drops';
-import { goldDrop } from '../../core/economy';
+import { goldDrop, type PotionKind } from '../../core/economy';
 import { expToNext, isBreakthrough, killExp } from '../../core/progression';
 import { skillMpCost, skillPower, skillValue } from '../../core/skills';
 import { createMonster, isMagicHit, type Combatant } from '../combat';
@@ -56,6 +58,7 @@ import {
 import { RARITY_META, SLOT_META } from '../../data/items';
 import { BASE_ATTRS } from '../../core/types';
 import { GameUI } from '../../ui';
+import { fmtNum } from '../../ui/dom';
 import type {
   Cooldown,
   MinimapData,
@@ -1057,7 +1060,7 @@ export class StageBattleScene extends Phaser.Scene {
   // ---------- 输入 ----------
 
   private setupInput() {
-    this.input.keyboard!.addCapture('SPACE,Q,W,E,F');
+    this.input.keyboard!.addCapture('SPACE,Q,W,E,F,Z,X');
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (p.rightButtonDown()) {
@@ -1101,6 +1104,9 @@ export class StageBattleScene extends Phaser.Scene {
     this.input.keyboard!.on('keydown-W', () => this.castSkill('frenzy'));
     this.input.keyboard!.on('keydown-E', () => this.castSkill('poison'));
     this.input.keyboard!.on('keydown-F', () => this.autoEquipBest());
+    // 药水热键：Z 回血 / X 回蓝（1-9 已被快速加点占用，空格 + QWE 是技能）
+    this.input.keyboard!.on('keydown-Z', () => this.drinkPotion('hp'));
+    this.input.keyboard!.on('keydown-X', () => this.drinkPotion('mp'));
 
     const numKeys = [
       Phaser.Input.Keyboard.KeyCodes.ONE,
@@ -1211,6 +1217,7 @@ export class StageBattleScene extends Phaser.Scene {
       designWidth: 1200,
       getState: () => this.state,
       castSkill: (id) => this.castSkill(id),
+      drinkPotion: (kind) => this.drinkPotion(kind),
       cooldownOf: (id) => this.cooldownOf(id),
       now: () => this.time.now,
       minimap: () => this.minimapData(),
@@ -2225,6 +2232,29 @@ export class StageBattleScene extends Phaser.Scene {
     );
   }
 
+  /**
+   * 喝一瓶药（底部药槽 / Z·X 热键）。药效按当前等级档位结算，
+   * 满血满蓝不消耗；没有库存时提示去商店。
+   */
+  private drinkPotion(kind: PotionKind): void {
+    // 先算回复量（喝完之后 hp 变了，但上限不变，先取更直观）
+    const heal = potionHealNow(this.state, kind);
+    const res = usePotion(this.state, kind);
+    const label = kind === 'hp' ? '回血药' : '回蓝药';
+    if (res === 'ok') {
+      this.ui.toast(
+        `使用${label}，恢复 ${fmtNum(heal)} 点${kind === 'hp' ? '生命' : '法力'}`,
+        '#7ee787',
+      );
+      audio.play('coin');
+      saveState(this.state);
+    } else if (res === 'empty') {
+      this.ui.toast(`${label}不足，去商店购买`, '#ff8a8a');
+    } else {
+      this.ui.toast(kind === 'hp' ? '生命已满' : '法力已满', '#8d9ab0');
+    }
+  }
+
   /** 挥砍特效的统一前置：单位方向向量 + 任意距离上的锚点 */
   private swingAt(angle: number, dist: number): { x: number; y: number } {
     return {
@@ -2515,7 +2545,7 @@ export class StageBattleScene extends Phaser.Scene {
       this.targetRing.setVisible(false);
     }
 
-    // 没有自动回复：血蓝只能靠药店买药补（金币又只能靠打怪掉）
+    // 没有自动回复：血蓝只能靠商店买药、底部药槽（Z/X）补
     if (time >= this.playerNextAttackAt) this.tryMelee(time);
     this.updateFireballs();
     this.updateGroundDrops();

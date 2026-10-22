@@ -1,6 +1,6 @@
 import { BALANCE } from '../core/balance';
 import { EQUIP_SLOTS, totalPoints, type EquipSlot, type EquipmentItem } from '../core/equipment';
-import { canBuyPotion, potionTier } from '../core/economy';
+import { potionPrice, potionTier } from '../core/economy';
 import { attackIntervalMs, mitigationRate, moveSpeed } from '../core/formulas';
 import { expToNext, isBreakthrough } from '../core/progression';
 import {
@@ -21,6 +21,7 @@ import {
   allocateAttrPoints,
   allocateEquipPoints,
   bookPoints,
+  buyPotion,
   equipAllocCap,
   equipAllocLeft,
   equipBest,
@@ -29,6 +30,7 @@ import {
   aggregatedStats,
   maxHp,
   maxMp,
+  potionHealNow,
   sellAllSkillBooks,
   sellInventoryItem,
   sellSkillBook,
@@ -608,75 +610,74 @@ const bagPanel: PanelDef = {
   },
 };
 
-// ----------------------------- 药店 -----------------------------
+// ----------------------------- 商店 -----------------------------
 
 const shopPanel: PanelDef = {
   id: 'shop',
-  title: '药店',
-  icon: '🧪',
+  title: '商店',
+  icon: '🏪',
   dock: 'right',
   render(s) {
     const tier = potionTier(s.level);
-    const price = tier;
-    const canBuy = canBuyPotion(s.level) && s.gold >= price;
-    const dis = canBuy ? '' : 'disabled';
-    const cls = canBuy ? '' : 'disabled';
+    const hasTier = tier > 0;
 
-    const card = (
-      kind: 'hp' | 'mp',
-      icon: string,
-      name: string,
-      sub: string,
-    ) => `<div class="potion ${kind}">
-        <div class="pt-top">
-          <div class="pt-ico">${icon}</div>
-          <div style="flex:1;min-width:0">
-            <div class="pt-nm">${name}</div>
-            <div class="pt-sub">${sub}</div>
+    // 一行一件：左边图标 + 名称/档位/回复/单价，右边三个购买按钮（+1 / +10 / +MAX 99）
+    const card = (kind: 'hp' | 'mp', icon: string) => {
+      const heal = potionHealNow(s, kind);
+      const price = potionPrice(heal); // 售价 = 回复点数 × 10
+      const afford = hasTier ? Math.floor(s.gold / Math.max(1, price)) : 0;
+      const canBuy = hasTier && afford >= 1;
+      const buy = (qty: number, label: string, gold = false) =>
+        `<button class="btn${gold ? ' gold' : ''}" data-act="buy" data-arg="${kind}:${qty}" ${
+          canBuy ? '' : 'disabled'
+        }>${label}</button>`;
+      // 左：图标；右：上排「档位级名称 … 金币价」、下排三个按钮，两排总高与图标一致
+      return `<div class="potion ${kind}">
+        <div class="pt-ico">${icon}</div>
+        <div class="pt-body">
+          <div class="pt-head">
+            <div class="pt-nm">${fmtNum(tier)}级${kind === 'hp' ? '回血药' : '回蓝药'}</div>
+            <div class="pt-price"><i class="coin-ic"></i>${fmtNum(price)}</div>
           </div>
+          <div class="pt-acts">${buy(1, '+1')}${buy(10, '+10')}${buy(99, '+MAX 99', true)}</div>
         </div>
-        <div class="pt-bar">${liveBar(kind, s)}</div>
-        <div class="pt-buy"><button class="btn big gold ${cls}" data-act="buy-${kind}" ${dis}>
-          购买（${fmtNum(price)} 金币）</button></div>
       </div>`;
+    };
 
     return `
       <div class="shop-coin">
         <span class="l">金币</span><b class="num" data-live="gold">${fmtNum(s.gold)}</b>
-        <span class="grow" style="margin-left:auto;font-size:11px;color:#7d8aa0">金币只能买药</span>
       </div>
       <div class="note" style="margin-top:10px">
-        当前药档：<b>${tier > 0 ? `Lv ${tier}` : '无'}</b>（药档 = ⌊等级/10⌋×10）。
+        当前药档：<b>${hasTier ? `Lv ${tier}` : '无'}</b>（药档 = ⌊等级/10⌋×10）。
         ${
-          tier > 0
-            ? `每瓶回复 <b>${fmtNum(tier)}</b> 点，售价 <b>${fmtNum(tier)}</b> 金币。`
+          hasTier
+            ? '售价 = <b>每瓶实际回复点数 × 10</b>；买到的药进底部两个药槽。'
             : '等级不足 10 级，暂时没有药可买。'
         }
       </div>
-      ${card('hp', '🧴', `${tier}级回血药`, `回复 ${fmtNum(tier)} 点生命`)}
-      ${card('mp', '🔷', `${tier}级回蓝药`, `回复 ${fmtNum(tier)} 点法力`)}
-      <div class="note" style="margin-top:10px">
-        <b>不会自动回血回蓝</b>：除了升级和死亡复活会回满，平时只能靠这里的药。
-        金币<b>唯一来源</b>是怪物掉落（掉金币 = 怪物等级），<b>唯一用途</b>是买药；装备和技能书只能靠打怪掉落。
-      </div>
+      ${card('hp', '🧴')}
+      ${card('mp', '🔷')}
     `;
   },
-  action(act, _arg, s, api) {
-    const kind = act === 'buy-hp' ? 'hp' : act === 'buy-mp' ? 'mp' : null;
+  action(act, arg, s, api) {
+    if (act !== 'buy') return;
+    const [kindRaw, qtyRaw] = arg.split(':');
+    const kind = kindRaw === 'hp' ? 'hp' : kindRaw === 'mp' ? 'mp' : null;
     if (!kind) return;
     const tier = potionTier(s.level);
     if (tier <= 0) {
       api.toast('等级不足 10 级，没有药可买', '#ff8a8a');
       return;
     }
-    if (s.gold < tier) {
+    const want = Math.max(1, Math.floor(Number(qtyRaw) || 1));
+    const got = buyPotion(s, kind, want);
+    const nm = kind === 'hp' ? '回血药' : '回蓝药';
+    if (got > 0) {
+      api.toast(`买到 ${fmtNum(got)} 瓶${nm}（现有 ${fmtNum(s.potions[kind])} 瓶）`, '#7ee787');
+    } else {
       api.toast('金币不足', '#ff8a8a');
-      return;
     }
-    s.gold -= tier;
-    if (kind === 'hp') s.hp = Math.min(maxHp(s), s.hp + tier);
-    else s.mp = Math.min(maxMp(s), s.mp + tier);
-    api.toast(`使用 ${tier} 级${kind === 'hp' ? '回血' : '回蓝'}药`, '#7ee787');
     api.refresh();
   },
 };

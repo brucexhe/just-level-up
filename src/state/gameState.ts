@@ -1,4 +1,10 @@
 import { BALANCE } from '../core/balance';
+import {
+  potionHeal,
+  potionPrice,
+  potionTier,
+  type PotionKind,
+} from '../core/economy';
 import { addSets, emptyStats, maxHp as computeMaxHp } from '../core/attributes';
 import {
   EQUIP_SLOTS,
@@ -52,6 +58,11 @@ export interface GameState {
   stages: Record<number, StageProgress>;
   /** 上次游玩的日期（dayKeyOf 格式）；跨天时所有已解锁关卡怪物重刷 */
   stageDay: string;
+  /**
+   * 药水库存（商店购买）：只存**数量**，不记档位 ——
+   * 药效与售价永远按当前等级档位结算，所以升级后旧药自动变强，不会有过期药。
+   */
+  potions: { hp: number; mp: number };
 }
 
 export function createInitialState(): GameState {
@@ -90,6 +101,7 @@ export function createInitialState(): GameState {
     stage: 1,
     stages: {},
     stageDay: '',
+    potions: { hp: 0, mp: 0 },
   };
   s.hp = maxHp(s);
   s.mp = maxMp(s);
@@ -108,6 +120,54 @@ export function restoreMp(s: GameState, amount: number): void {
 
 export function restoreHp(s: GameState, amount: number): void {
   s.hp = Math.min(maxHp(s), s.hp + amount);
+}
+
+// ---------------- 药水（商店购买 / 快捷槽使用） ----------------
+
+/**
+ * 购买药水：返回实际买到的瓶数。**库存不设上限**，想买多少买多少，
+ * 唯一的约束是金币（不够就按能买的瓶数截断）与等级档位。
+ * 价格 = 该药实际回复点数 × 10（回血/回蓝各自按自己的回复量算）。
+ */
+export function buyPotion(s: GameState, kind: PotionKind, n: number): number {
+  const tier = potionTier(s.level);
+  if (tier <= 0 || n <= 0) return 0;
+  const price = potionPrice(potionHealNow(s, kind));
+  const afford = Math.floor(s.gold / Math.max(1, price));
+  const bought = Math.max(0, Math.min(Math.floor(n), afford));
+  if (bought <= 0) return 0;
+  s.gold -= bought * price;
+  s.potions[kind] += bought;
+  return bought;
+}
+
+export type PotionUseResult = 'ok' | 'empty' | 'full';
+
+/**
+ * 这瓶药当前实际能回多少 = max(档位, 对应上限 × POTION_HEAL_PCT)。
+ * 前期档位远大于比例值（数值与旧版一致）；后期 HP/MP 被装备堆高时，
+ * 由 25% 保底兜住，药水不会变成「回个零头」。商店/药槽/toast 都显示这个数。
+ */
+export function potionHealNow(s: GameState, kind: PotionKind): number {
+  const tier = potionHeal(potionTier(s.level));
+  const max = kind === 'hp' ? maxHp(s) : maxMp(s);
+  return Math.max(tier, Math.round(max * BALANCE.POTION_HEAL_PCT));
+}
+
+/**
+ * 喝一瓶药：回血/回蓝按**当前等级档位**结算（库存不记档位，升级后同一批药自动变强），
+ * 并受「上限 25%」保底。满血/满蓝不消耗（避免误喝），返回 'empty' / 'full' 供 UI 提示。
+ */
+export function usePotion(s: GameState, kind: PotionKind): PotionUseResult {
+  if (s.potions[kind] <= 0) return 'empty';
+  const max = kind === 'hp' ? maxHp(s) : maxMp(s);
+  const cur = kind === 'hp' ? s.hp : s.mp;
+  if (cur >= max) return 'full';
+  const heal = potionHealNow(s, kind);
+  s.potions[kind] -= 1;
+  if (kind === 'hp') s.hp = Math.min(max, s.hp + heal);
+  else s.mp = Math.min(max, s.mp + heal);
+  return 'ok';
 }
 
 /** 聚合属性 = 人物基础 + 所有已穿戴装备 */

@@ -99,6 +99,20 @@ describe('存档读写', () => {
     expect(loadState()).toBeNull();
   });
 
+  it('药水库存随存档往返；旧档没有该字段则为 0 瓶', () => {
+    const s = createInitialState();
+    s.potions = { hp: 12, mp: 3 };
+    saveState(s);
+    expect(loadState()!.potions).toEqual({ hp: 12, mp: 3 });
+
+    // 旧档 / 手改坏档：缺失或非法 → 0；没有上限，大数字原样保留
+    const old = normalizeState({ level: 5 });
+    expect(old.potions).toEqual({ hp: 0, mp: 0 });
+    const bad = normalizeState({ potions: { hp: -4, mp: 12345 } });
+    expect(bad.potions.hp).toBe(0);
+    expect(bad.potions.mp).toBe(12345);
+  });
+
   it('清空存档会连备份一起删掉', () => {
     const s = createInitialState();
     backupState(s);

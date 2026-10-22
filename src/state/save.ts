@@ -228,6 +228,13 @@ export function normalizeState(raw: unknown): GameState {
   s.stage = Math.max(1, Math.floor(num(r.stage, 1)));
   // 日期键原样保留；旧档没有该字段 → ''，读档时会判为跨天而触发一次刷新
   s.stageDay = typeof r.stageDay === 'string' ? r.stageDay : '';
+  // 药水库存：旧档没有 → 0 瓶；没有上限，只需保证非负整数
+  const pot = (r.potions && typeof r.potions === 'object' ? r.potions : {}) as Record<
+    string,
+    unknown
+  >;
+  const stock = (v: unknown) => Math.max(0, Math.floor(num(v, 0)));
+  s.potions = { hp: stock(pot.hp), mp: stock(pot.mp) };
   s.stages = {};
   if (r.stages && typeof r.stages === 'object') {
     for (const [k, v] of Object.entries(r.stages as Record<string, unknown>)) {
