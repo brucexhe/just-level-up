@@ -4,9 +4,11 @@ import {
   allocateEquipPoint,
   allocateEquipPoints,
   aggregatedStats,
+  canEquip,
   createInitialState,
   equipAllocCap,
   equipAllocLeft,
+  equipBest,
   equipItem,
   gainExp,
   maxHp,
@@ -73,6 +75,7 @@ describe('equipment loop', () => {
 
   it('equipping adds stats to aggregate; swapping returns old to bag', () => {
     const s = createInitialState();
+    s.level = 10; // 只能穿等级 ≤ 自身的装备
     const it = dropEquipment(10, fixed(0.5));
     it.slot = 'weapon';
     equipItem(s, it);
@@ -88,6 +91,7 @@ describe('equipment loop', () => {
 
   it('free equip point binds to the worn item, and only on its own lines', () => {
     const s = createInitialState();
+    s.level = 10;
     const it = dropEquipment(10, fixed(0.5));
     it.slot = 'weapon';
     equipItem(s, it);
@@ -107,7 +111,7 @@ describe('equipment loop', () => {
 
   it('每词条自由投入上限 = 人物等级', () => {
     const s = createInitialState(); // Lv1 → 上限 1
-    const it = dropEquipment(10, fixed(0.5));
+    const it = dropEquipment(1, fixed(0.5)); // Lv1 人物只穿得上 Lv1 装备
     it.slot = 'weapon';
     equipItem(s, it);
     s.equipPoints = 10;
@@ -143,11 +147,29 @@ describe('equipment loop', () => {
 
   it('unequip moves item back to bag', () => {
     const s = createInitialState();
+    s.level = 8;
     const it = dropEquipment(8, fixed(0.5));
     it.slot = 'boots';
     equipItem(s, it);
     unequipItem(s, 'boots');
     expect(s.equipped.boots).toBeUndefined();
     expect(s.inventory).toContain(it);
+  });
+
+  it('等级不足的装备穿不上：equipItem 拒绝、equipBest 跳过', () => {
+    const s = createInitialState(); // Lv1
+    const it = dropEquipment(20, fixed(0.5));
+    it.slot = 'weapon';
+    s.inventory.push(it);
+    expect(canEquip(s, it)).toBe(false);
+    expect(equipItem(s, it)).toBe(false);
+    expect(s.equipped.weapon).toBeUndefined();
+    expect(s.inventory).toContain(it);
+    expect(equipBest(s)).toBe(0);
+
+    s.level = it.level;
+    expect(canEquip(s, it)).toBe(true);
+    expect(equipBest(s)).toBe(1);
+    expect(s.equipped.weapon).toBe(it);
   });
 });

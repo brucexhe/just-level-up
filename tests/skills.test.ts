@@ -236,6 +236,7 @@ describe('装备品质（贪婪洞窟式：品质 = 权重 roll + 词条数 + �
 describe('一键穿装', () => {
   it('每个部位只穿点数最高的一件，其余留在背包', () => {
     const s = createInitialState();
+    s.level = 30; // 两件装备分别 Lv≤10 / Lv≤30，都得够等级才参与比较
     const a = dropEquipment(10, fixed(0.2));
     const b = dropEquipment(30, fixed(0.9));
     b.slot = a.slot = 'weapon';

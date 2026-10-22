@@ -107,6 +107,7 @@ describe('面板渲染（headless 字符串校验）', () => {
     const s = createInitialState();
     const it = dropEquipment(12, () => 0.5);
     it.slot = 'weapon';
+    s.level = it.level; // 只能穿等级 ≤ 自身的装备
     equipItem(s, it);
     const { api, view } = fakeApi(() => s);
     view.equipSlot = 'weapon';
@@ -135,7 +136,7 @@ describe('面板渲染（headless 字符串校验）', () => {
 
   it('装备加点三档 + 等级上限：投满后按钮禁用，action 层仍拒绝并提示上限', () => {
     const s = createInitialState();
-    const it = dropEquipment(20, () => 0.5);
+    const it = dropEquipment(1, () => 0.5); // Lv1 人物只能穿 Lv1 装备
     it.slot = 'weapon';
     equipItem(s, it);
     const { api, view, toasts } = fakeApi(() => s);
@@ -207,6 +208,7 @@ describe('面板渲染（headless 字符串校验）', () => {
 
   it('背包装备行显示与已穿戴装备的点数对比（↑升 / ↓降 / 持平 / 空位）', () => {
     const s = createInitialState();
+    s.level = 40; // 让下面这些 Lv10~40 的装备都够等级穿上
     const { api, view } = fakeApi(() => s);
     view.bagTab = 'equip';
 
@@ -243,8 +245,29 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(PANEL_BY_ID.bag.render(s, api)).toContain('持平');
   });
 
+  it('背包：等级不足的装备按钮禁用 + 提示，绕过 UI 也穿不上', () => {
+    const s = createInitialState(); // Lv1
+    const it = dropEquipment(20, () => 0.5);
+    it.slot = 'weapon';
+    s.inventory.push(it);
+    const { api, view, toasts } = fakeApi(() => s);
+    view.bagTab = 'equip';
+
+    const html = PANEL_BY_ID.bag.render(s, api);
+    expect(html).toContain(`Lv${it.level} · 武器`);
+    expect(html).toContain(`需 Lv${it.level}</span>`);
+    expect(html).toContain(`data-act="equip" data-arg="${it.id}" disabled`);
+    expect(html).toContain('>等级不足</button>');
+
+    PANEL_BY_ID.bag.action('equip', it.id, s, api);
+    expect(s.equipped.weapon).toBeUndefined();
+    expect(s.inventory).toContain(it);
+    expect(toasts.some((t) => t.includes('等级不足'))).toBe(true);
+  });
+
   it('背包面板可切换装备 / 技能书，技能书穿戴即替换等级（旧等级回包）', () => {
     const s = createInitialState();
+    s.level = 9; // 背包里那件是 Lv≤9 的装备，等级要够穿
     s.inventory.push(dropEquipment(9, () => 0.4));
     const book = dropSkillBook(9, () => 0.4);
     book.skillId = 'poison';
