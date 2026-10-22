@@ -130,10 +130,10 @@ describe('formulas', () => {
 });
 
 describe('progression', () => {
-  it('expToNext = 5×等级^1.5（幂律，不是常数步长的线性）', () => {
-    expect(expToNext(1)).toBe(5);
-    expect(expToNext(9)).toBe(135);
-    expect(expToNext(99)).toBe(4925);
+  it('expToNext = 3×等级^1.5（幂律，不是常数步长的线性）', () => {
+    expect(expToNext(1)).toBe(3);
+    expect(expToNext(9)).toBe(81);
+    expect(expToNext(99)).toBe(2955);
     // 需求必须比"怪给的经验(∝等级)"长得快，否则永远 1 只怪 1 级
     for (const L of [1, 5, 10, 100, 1000]) {
       expect(expToNext(L * 2) / expToNext(L)).toBeGreaterThan(2);
@@ -150,13 +150,13 @@ describe('progression', () => {
     expect(killExp(9)).toBe(9);
   });
 
-  it('杀同级怪升级所需只数 ≈ 5×√等级（前期不拖、后期变硬）', () => {
+  it('杀同级怪升级所需只数 ≈ 3×√等级（前期不拖、后期变硬）', () => {
     const kills = (L: number) => Math.ceil(expToNext(L) / killExp(L));
-    expect(kills(1)).toBe(5);
-    expect(kills(10)).toBe(16);
-    expect(kills(100)).toBe(50);
-    expect(kills(1000)).toBe(159);
-    expect(kills(10000)).toBe(500);
+    expect(kills(1)).toBe(3);
+    expect(kills(10)).toBe(10);
+    expect(kills(100)).toBe(30);
+    expect(kills(1000)).toBe(95);
+    expect(kills(10000)).toBe(300);
     // 单调递增
     for (const L of [1, 10, 100, 1000, 10000]) {
       expect(kills(L * 4)).toBeGreaterThan(kills(L) * 1.5);

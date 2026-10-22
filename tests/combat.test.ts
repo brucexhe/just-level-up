@@ -88,14 +88,14 @@ describe('怪物攻击力（前期不该几下被打死）', () => {
   it('怪物血量与防御超线性成长：越到后期同级怪越难打', () => {
     const hp = (lv: number) => createMonster(lv).maxHp;
     const def = (lv: number) => createMonster(lv).stats.pDef ?? 0;
-    // 高于线性（等级 ×1）
+    // 血量 = 5 × 等级^1.05：Lv1 是 5，明显高于线性的 1
+    expect(hp(1)).toBe(BALANCE.MONSTER_HP_BASE);
     expect(hp(100)).toBeGreaterThan(100);
     expect(def(100)).toBeGreaterThan(100);
-    // 等级翻 10 倍，血量涨得比 10 倍还多
+    // 等级翻 10 倍，血量涨得比 10 倍还多（指数 1.05 > 1）
     expect(hp(1000) / hp(100)).toBeGreaterThan(10);
     expect(def(1000) / def(100)).toBeGreaterThan(10);
-    // 低等级时基本不影响手感
-    expect(hp(1)).toBe(1);
-    expect(hp(10)).toBeLessThan(30);
+    // 前期同级怪不再是"一刀死"：Lv10 有 60+ 血，玩家攻击约 30 → 3 刀
+    expect(hp(10)).toBeGreaterThan(50);
   });
 });

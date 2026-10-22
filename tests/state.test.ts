@@ -26,8 +26,8 @@ const fixed = (v: number) => () => v;
 describe('exp / level up', () => {
   it('打同级怪要多杀几只才升一级（不再是 1 只 1 级）', () => {
     const s = createInitialState();
-    // 打 1 级怪得 1 exp，升 1→2 需 expToNext(1)=5 exp
-    for (let i = 0; i < 4; i++) gainExp(s, 1);
+    // 打 1 级怪得 1 exp，升 1→2 需 expToNext(1)=3 exp
+    for (let i = 0; i < 2; i++) gainExp(s, 1);
     expect(s.level).toBe(1);
     gainExp(s, 1);
     expect(s.level).toBe(2);
