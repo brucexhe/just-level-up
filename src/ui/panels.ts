@@ -21,6 +21,8 @@ import {
   allocateAttrPoints,
   allocateEquipPoints,
   bookPoints,
+  equipAllocCap,
+  equipAllocLeft,
   equipBest,
   equipItem,
   equipmentStats,
@@ -184,20 +186,24 @@ const characterPanel: PanelDef = {
 
 function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
   const r = RARITY_META[item.rarity];
-  // 只能往这件装备已有的词条上加点：与人物属性面板同款的行样式，+1 / +10 / MAX 三档
+  // 只能往这件装备已有的词条上加点：与人物属性面板同款的行样式，+1 / +10 / MAX 三档。
+  // 每词条自由投入上限 = 人物等级；投满后按钮禁用（已投数字转金色）。
   const allocable = BASE_ATTRS.filter((k) => (item.stats[k] ?? 0) > 0);
-  const can = s.equipPoints > 0;
+  const cap = equipAllocCap(s);
   const alloc =
     allocable.length > 0
       ? `<div class="attr-list">${allocable
           .map((k) => {
             const base = item.stats[k] ?? 0;
             const free = item.freeAllocated[k] ?? 0;
+            const left = Math.max(0, cap - free);
+            const can = s.equipPoints > 0 && left > 0;
+            const full = left <= 0;
             return `<div class="attr-row" title="${esc(ATTR_META[k].hint)}">
               <span class="ic" style="color:${ATTR_META[k].color}">${ATTR_META[k].icon}</span>
               <span class="nm">${ATTR_META[k].name}</span>
               <span class="vl num">${fmtNum(base)}${
-                free > 0 ? `<i>+${fmtNum(free)}</i>` : ''
+                free > 0 ? `<i class="${full ? 'full' : ''}">+${fmtNum(free)}</i>` : ''
               }</span>
               <span class="ops">
                 <button data-act="alloc1" data-arg="${k}" ${can ? '' : 'disabled'}>+1</button>
@@ -221,9 +227,7 @@ function itemCard(s: GameState, item: EquipmentItem, slot: EquipSlot): string {
           }</span> · 总点数 <b class="num">${fmtNum(totalPoints(item))}</b></div>
         </div>
       </div>
-      <div class="alloc-box">
-        ${alloc}
-      </div>
+      <div class="alloc-box">${alloc}</div>
       <div class="ic-foot">
         <button class="btn" data-act="unequip">卸下到背包</button>
       </div>
@@ -299,14 +303,34 @@ const equipmentPanel: PanelDef = {
       case 'alloc1':
       case 'alloc10':
       case 'allocmax': {
-        // arg 是属性键，部位取自当前选中的槽位；档位：+1 / +10 / 全部
+        // arg 是属性键，部位取自当前选中的槽位；档位：+1 / +10 / 全部（都受等级上限截断）
         const target = api.view.equipSlot;
         if (!target) break;
         const key = arg as BaseAttr;
-        const n = act === 'alloc1' ? 1 : act === 'alloc10' ? 10 : s.equipPoints;
-        const got = allocateEquipPoints(s, target, key, n);
-        if (got > 0) api.toast(`+${fmtNum(got)} ${ATTR_META[key].name}`, '#7ee787');
-        else api.toast('自由装备点不足', '#ff8a8a');
+        const item = s.equipped[target];
+        if (!item) break;
+        const cap = equipAllocCap(s);
+        const left = equipAllocLeft(s, item, key);
+        if (left <= 0) {
+          api.toast(`最多加 Lv${fmtNum(cap)} 的点`, '#ff8a8a');
+          break;
+        }
+        if (s.equipPoints <= 0) {
+          api.toast('自由装备点不足', '#ff8a8a');
+          break;
+        }
+        const want = act === 'alloc1' ? 1 : act === 'alloc10' ? 10 : s.equipPoints;
+        const got = allocateEquipPoints(s, target, key, Math.min(want, left));
+        if (got > 0) {
+          const now = item.freeAllocated[key] ?? 0;
+          // 投满时顺带点明上限，玩家不用去别处找规则
+          api.toast(
+            now >= cap
+              ? `+${fmtNum(got)} ${ATTR_META[key].name}，已达 Lv${fmtNum(cap)} 上限`
+              : `+${fmtNum(got)} ${ATTR_META[key].name}`,
+            '#7ee787',
+          );
+        }
         api.refresh();
         break;
       }

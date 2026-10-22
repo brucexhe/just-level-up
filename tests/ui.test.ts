@@ -123,36 +123,54 @@ describe('面板渲染（headless 字符串校验）', () => {
     PANEL_BY_ID.equipment.action('alloc1', key, s, api);
     expect(s.equipPoints).toBe(2);
     expect(it.freeAllocated[key]).toBe(1);
-    // 已投的点以绿字 +N 显示在数值列
+    // 已投的点以绿字 +N 显示在数值列（不显示上限）
     const html3 = PANEL_BY_ID.equipment.render(s, api);
-    expect(html3).toContain(`+1</i>`);
+    expect(html3).toContain('+1</i>');
+    expect(html3).not.toContain('/1</i>');
   });
 
-  it('装备加点三档：+1 / +10 / MAX（后期点数多也能一次投完）', () => {
+  it('装备加点三档 + 等级上限：投满后按钮禁用，action 层仍拒绝并提示上限', () => {
     const s = createInitialState();
     const it = dropEquipment(20, () => 0.5);
     it.slot = 'weapon';
     equipItem(s, it);
-    const { api, view } = fakeApi(() => s);
+    const { api, view, toasts } = fakeApi(() => s);
     view.equipSlot = 'weapon';
     const key = Object.keys(it.stats)[0]!;
 
-    // +10：点数够就投 10
+    // Lv1：上限 1 → +10 也只投 1
     s.equipPoints = 55;
     PANEL_BY_ID.equipment.action('alloc10', key, s, api);
-    expect(s.equipPoints).toBe(45);
-    expect(it.freeAllocated[key]).toBe(10);
+    expect(it.freeAllocated[key]).toBe(1);
 
-    // MAX：把剩下的全部投进去
+    // 升到 Lv100：上限 100，MAX 投 min(可用点, 剩余空间) = 54
+    s.level = 100;
     PANEL_BY_ID.equipment.action('allocmax', key, s, api);
     expect(s.equipPoints).toBe(0);
     expect(it.freeAllocated[key]).toBe(55);
 
-    // 点数不足时 +10 只投剩余的（allocateEquipPoints 循环到不够为止）
-    s.equipPoints = 3;
-    PANEL_BY_ID.equipment.action('alloc10', key, s, api);
-    expect(s.equipPoints).toBe(0);
-    expect(it.freeAllocated[key]).toBe(58);
+    // 补到上限：再来 45 点，MAX 只能吃到 100
+    s.equipPoints = 200;
+    PANEL_BY_ID.equipment.action('allocmax', key, s, api);
+    expect(it.freeAllocated[key]).toBe(100);
+    expect(s.equipPoints).toBe(200 - 45);
+
+    // 已满：数值列只显示已投点数（金色），+1/+10/MAX 全部禁用
+    const html = PANEL_BY_ID.equipment.render(s, api);
+    expect(html).toContain('+100</i>');
+    expect(html).not.toContain('/100</i>');
+    expect(html).toContain('i class="full"');
+    expect(html).toContain(`data-act="alloc1" data-arg="${key}" disabled`);
+    expect(html).toContain(`data-act="alloc10" data-arg="${key}" disabled`);
+    expect(html).toContain(`data-act="allocmax" data-arg="${key}" disabled`);
+    // 不再有「投入自由装备点…」的说明文案
+    expect(html).not.toContain('投入自由装备点');
+
+    // 按钮已禁用，但 action 层保留兜底：点数不扣，提示上限
+    const before = s.equipPoints;
+    PANEL_BY_ID.equipment.action('allocmax', key, s, api);
+    expect(s.equipPoints).toBe(before);
+    expect(toasts.some((t) => t.includes('最多加 Lv100 的点'))).toBe(true);
   });
 
   it('技能面板：三个主动技能默认已学会，可花技能点升级', () => {

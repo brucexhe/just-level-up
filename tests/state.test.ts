@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   allocateAttrPoint,
   allocateEquipPoint,
+  allocateEquipPoints,
   aggregatedStats,
   createInitialState,
+  equipAllocCap,
+  equipAllocLeft,
   equipItem,
   gainExp,
   maxHp,
@@ -100,6 +103,29 @@ describe('equipment loop', () => {
     expect(allocateEquipPoint(s, 'weapon', own)).toBe(true);
     expect(totalPoints(it)).toBe(before + 1);
     expect(s.equipPoints).toBe(2);
+  });
+
+  it('每词条自由投入上限 = 人物等级', () => {
+    const s = createInitialState(); // Lv1 → 上限 1
+    const it = dropEquipment(10, fixed(0.5));
+    it.slot = 'weapon';
+    equipItem(s, it);
+    s.equipPoints = 10;
+    const key = Object.keys(it.stats)[0] as BaseAttr;
+
+    expect(equipAllocLeft(s, it, key)).toBe(1);
+    expect(allocateEquipPoint(s, 'weapon', key)).toBe(true); // 1/1 投满
+    expect(equipAllocLeft(s, it, key)).toBe(0);
+    // 满了：再投被拒，点数不扣
+    expect(allocateEquipPoint(s, 'weapon', key)).toBe(false);
+    expect(s.equipPoints).toBe(9);
+
+    // 升级 → 上限跟着涨
+    s.level = 5;
+    expect(equipAllocLeft(s, it, key)).toBe(4);
+    expect(allocateEquipPoints(s, 'weapon', key, 100)).toBe(4); // 超出的被截断
+    expect(it.freeAllocated[key]).toBe(5);
+    expect(s.equipPoints).toBe(5);
   });
 
   it('sell refunds half points and no gold', () => {

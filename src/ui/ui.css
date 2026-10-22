@@ -857,16 +857,15 @@
   padding: 7px 10px;
   border-top: 1px dashed #35415a;
 }
-.alloc-box .ab-title {
-  font-size: 10px;
-  color: #8d9ab0;
-  margin-bottom: 5px;
-}
 .alloc-box .attr-row .nm {
   width: 40px;
 }
 .alloc-box .attr-row .vl {
   font-size: 13px;
+}
+/* 投满上限：已投点数转金色，配合点击时的「最多加 Lv{N} 点」提示 */
+.alloc-box .attr-row .vl i.full {
+  color: #ffd93d;
 }
 .alloc-box .note {
   font-size: 10px;

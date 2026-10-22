@@ -218,8 +218,23 @@ export function unequipItem(s: GameState, slot: EquipSlot): void {
 }
 
 /**
+ * 每词条自由投入的上限 = **人物当前等级**。
+ * 等级涨上去，上限跟着涨；装备基础点数不吃这个上限（只管 freeAllocated）。
+ * 「附加 ≤ 等级」→ 一条词条投满约等于该属性翻倍，与人物线的强度比例天然锁定。
+ */
+export function equipAllocCap(s: GameState): number {
+  return Math.max(1, Math.floor(s.level));
+}
+
+/** 某词条还能投几点 = 上限 − 已投 */
+export function equipAllocLeft(s: GameState, it: EquipmentItem, key: BaseAttr): number {
+  return Math.max(0, equipAllocCap(s) - (it.freeAllocated[key] ?? 0));
+}
+
+/**
  * 把 1 点自由装备点分配到某件已穿戴装备上。
- * 只能加该装备**自带的词条**（普通 1 条就只能加那 1 条），不能凭空造新词条。
+ * 只能加该装备**自带的词条**（普通 1 条就只能加那 1 条），
+ * 且该词条的自由投入不能超过「人物等级」。
  */
 export function allocateEquipPoint(
   s: GameState,
@@ -229,6 +244,7 @@ export function allocateEquipPoint(
   const it = s.equipped[slot];
   if (!it || s.equipPoints <= 0) return false;
   if (!((it.stats[key] ?? 0) > 0)) return false;
+  if (equipAllocLeft(s, it, key) <= 0) return false;
   s.equipPoints -= 1;
   it.freeAllocated[key] = (it.freeAllocated[key] ?? 0) + 1;
   s.hp = Math.min(maxHp(s), s.hp);
