@@ -29,5 +29,5 @@ export const RARITY_META: Record<RarityKey, RarityMeta> = {
   rare: { name: '稀有', color: '#6ab0f3', dim: 'rgba(106,176,243,.18)' },
   epic: { name: '史诗', color: '#c08cff', dim: 'rgba(192,140,255,.20)' },
   legend: { name: '传说', color: '#ffb454', dim: 'rgba(255,180,84,.22)' },
-  myth: { name: '神话', color: '#ff6b9d', dim: 'rgba(255,107,157,.24)' },
+  myth: { name: '神话', color: '#e8404a', dim: 'rgba(232,64,74,.24)' },
 };
