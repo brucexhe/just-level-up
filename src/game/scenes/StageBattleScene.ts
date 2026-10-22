@@ -82,8 +82,16 @@ import {
 /** 地图边长（正方形）。5000 才装得下一关 100 只怪而不显得挤 */
 const MAP_SIZE = 5000;
 const ATTACK_RANGE = 90;
-/** 警戒范围：超出这个距离怪物不再追击，也不再显示等级/血条 */
+/** 警戒范围：超出这个距离怪物不再追击，血条也不亮起 */
 const CHASE_RANGE = 300;
+/**
+ * 等级/名称标签的显示距离。比 CHASE_RANGE 大一档，是为了让玩家在**走进怪之前**
+ * 就读到等级：环形刷怪后「离人物越远等级越高」，而 300 同时是索敌半径，
+ * 等标签和追击同时亮起时已经来不及撤了（300 → 90 只有约 1.3 秒）。
+ * 500 → 90 约 2.5 秒（相对靠近速度约 166 px/s），够判断也够掉头。
+ * 血条仍锁在 CHASE_RANGE 内，否则屏幕上会同时挂出二十几根红条。
+ */
+const LEVEL_RANGE = 500;
 /** 掉落物拾取半径 */
 const PICKUP_RANGE = 36;
 /**
@@ -369,8 +377,10 @@ interface MonsterView {
    * 普通怪 magicEvery = 0，永远走物理这一档。
    */
   atkIndex: number;
-  /** 等级/血条当前是否处于显示状态（用于淡入淡出，避免每帧 tween） */
+  /** 血条当前是否处于显示状态（边界是 CHASE_RANGE，用于淡入淡出避免每帧 tween） */
   hudOn: boolean;
+  /** 名称/等级标签当前是否处于显示状态（边界是更宽的 LEVEL_RANGE） */
+  labelOn: boolean;
   /** 标签上已渲染的血量，用于脏检查 */
   shownHp: number;
 }
@@ -583,7 +593,7 @@ export class StageBattleScene extends Phaser.Scene {
         this.monsterAttack(m);
         return true;
       },
-      /** 怪物快照（调试用：距离 / 是否在追 / 等级标签可见性） */
+      /** 怪物快照（调试用：距离 / 是否在追 / 等级标签与血条可见性） */
       monsters: () =>
         this.monsters
           .filter((m) => m.sprite.active)
@@ -595,6 +605,7 @@ export class StageBattleScene extends Phaser.Scene {
             hp: Math.round(m.data.hp),
             aggressive: m.data.aggressive,
             labelVisible: m.label.visible,
+            barVisible: m.hpBg.visible,
             scaleX: +m.sprite.scaleX.toFixed(3),
             scaleY: +m.sprite.scaleY.toFixed(3),
             dots: m.dots.length,
@@ -1077,6 +1088,7 @@ export class StageBattleScene extends Phaser.Scene {
       bobApplied: 0,
       atkIndex: 0,
       hudOn: false,
+      labelOn: false,
       shownHp: -1,
     };
     sprite.setData('view', view);
@@ -1972,35 +1984,59 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   /**
-   * 走进战斗范围才亮出血条和等级，并带淡入淡出，
-   * 让「进入战斗」这件事有明确的画面反馈。
+   * 走进战斗范围才亮出血条，并带淡入淡出，
+   * 让「进入战斗」这件事有明确的画面反馈。等级标签由 setMonsterLabelVisible 管。
    */
   private setMonsterHudVisible(m: MonsterView, on: boolean): void {
     if (m.hudOn === on) return;
     m.hudOn = on;
-    this.tweens.killTweensOf([m.label, m.hpBg, m.hpFg, m.hpText]);
+    this.tweens.killTweensOf([m.hpBg, m.hpFg, m.hpText]);
     if (on) {
-      m.label.setVisible(true).setAlpha(0);
       m.hpFg.setVisible(true).setAlpha(0);
       m.hpBg.setVisible(true).setAlpha(0);
       m.hpText.setVisible(true).setAlpha(0);
       m.shownHp = -1; // 强制刷新一次血量文字
       this.tweens.add({
-        targets: [m.label, m.hpFg, m.hpText],
+        targets: [m.hpFg, m.hpText],
         alpha: 1,
         duration: 130,
       });
       this.tweens.add({ targets: m.hpBg, alpha: 0.75, duration: 130 });
     } else {
       this.tweens.add({
-        targets: [m.label, m.hpBg, m.hpFg, m.hpText],
+        targets: [m.hpBg, m.hpFg, m.hpText],
         alpha: 0,
         duration: 110,
         onComplete: () => {
-          m.label.setVisible(false);
           m.hpBg.setVisible(false);
           m.hpFg.setVisible(false);
           m.hpText.setVisible(false);
+        },
+      });
+    }
+  }
+
+  /**
+   * 怪走进 LEVEL_RANGE 就显示名称 + 等级，比血条早一档，
+   * 让玩家在怪开始追击之前就有判断依据。
+   * 淡入淡出沿用血条那套时长，视觉上两者仍然像同一个 HUD 分别亮起。
+   */
+  private setMonsterLabelVisible(m: MonsterView, on: boolean): void {
+    if (m.labelOn === on) return;
+    m.labelOn = on;
+    this.tweens.killTweensOf(m.label);
+    if (on) {
+      m.label.setVisible(true).setAlpha(0);
+      m.shownHp = -1; // 首次亮起要把文字填上，否则淡入的是一帧空白
+      this.tweens.add({ targets: m.label, alpha: 1, duration: 130 });
+    } else {
+      this.tweens.add({
+        targets: m.label,
+        alpha: 0,
+        duration: 110,
+        onComplete: () => {
+          // 期间可能又走进范围了，别把已经该显示的字藏掉
+          if (!m.labelOn) m.label.setVisible(false);
         },
       });
     }
@@ -2632,9 +2668,10 @@ export class StageBattleScene extends Phaser.Scene {
         this.player.x,
         this.player.y,
       );
-      // 进入战斗范围（CHASE_RANGE）才显示等级 + 血量，远处保持安静
+      // 等级/名称在 LEVEL_RANGE 外不显示，血条要走进警戒范围才亮
+      this.setMonsterLabelVisible(m, d <= LEVEL_RANGE);
       this.setMonsterHudVisible(m, d <= CHASE_RANGE);
-      if (m.hudOn) this.refreshMonsterLabel(m);
+      if (m.labelOn || m.hudOn) this.refreshMonsterLabel(m);
       // BOSS 走到眼前才播登场提示
       if (m.isBoss && !m.announced && d <= CHASE_RANGE) {
         m.announced = true;
