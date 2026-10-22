@@ -47,11 +47,12 @@ describe('P2 growth loop closes at locked starting values', () => {
     expect(s.level).toBe(2);
     expect(s.attrPoints).toBe(1);
 
-    // 升级本身带九项属性各 ATTR_PER_LEVEL，再手动 +1 点血量
+    // 升级自带成长：九项各 ATTR_PER_LEVEL，血量另吃 ATTR_HP_PER_LEVEL；这里再手动 +1 点血量
     allocateAttrPoint(s, 'hp');
     expect(s.attrPoints).toBe(0);
+    const autoHp = BALANCE.ATTR_HP_PER_LEVEL * (s.level - 1);
     const auto = BALANCE.ATTR_PER_LEVEL * (s.level - 1);
-    expect(maxHp(s)).toBe(BASE_ATTR_START + auto + 1);
+    expect(maxHp(s)).toBe(BASE_ATTR_START + autoHp + 1);
     // 升级回满血蓝
     expect(s.hp).toBe(maxHp(s));
     // 没有点了，再加失败

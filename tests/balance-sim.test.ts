@@ -26,15 +26,16 @@ const KEYS: BaseAttr[] = [
 type Dump = 'hp' | 'pDef' | 'pAtk';
 
 /**
- * 角色属性 = 初始 10 + 等级自带(每级 +1) + 自由点数(全投 dump) + 装备点数(全投 dump)。
+ * 角色属性 = 初始 10 + 等级自带(每级 +1，血量每级 +5) + 自由点数(全投 dump) + 装备点数(全投 dump)。
  * gear 传 0 表示裸装；传 10×等级 表示穿满同等级装备。
  */
 function build(level: number, dump: Dump, gear: number) {
   const s = createInitialState();
   const auto = BALANCE.ATTR_PER_LEVEL * (level - 1);
+  const autoHp = BALANCE.ATTR_HP_PER_LEVEL * (level - 1);
   const free = level - 1;
   const base: AttrSet = {};
-  for (const k of KEYS) base[k] = BASE_ATTR_START + auto;
+  for (const k of KEYS) base[k] = BASE_ATTR_START + (k === 'hp' ? autoHp : auto);
   base[dump] = (base[dump] ?? 0) + free + gear;
   s.baseStats = base;
   s.level = level;
@@ -178,17 +179,32 @@ describe('成型后的平衡模拟', () => {
    */
   it('BOSS 法术压力：不堆法防会被几下打死，堆了才扛得住', () => {
     console.log('\n【BOSS 法术 vs 玩家法防（打同级）】\n');
-    console.log('等级   BOSS法攻   裸法防  挨打  可扛 │ 全投法防  挨打  可扛');
+    console.log('等级   BOSS法攻   裸法防  挨打  可扛 │ 全投法防  挨打  可扛 │ 砍死BOSS');
     for (const lv of LEVELS) {
       const boss = createMonster(lv, true);
       const mAtk = boss.stats.mAtk ?? 1;
       const bareDef = BASE_ATTR_START + (lv - 1);
       const maxDef = bareDef + (lv - 1);
-      const hp = bareDef;
+      // 血量和法防不再共用一条线：血量吃 ATTR_HP_PER_LEVEL
+      const hp = BASE_ATTR_START + BALANCE.ATTR_HP_PER_LEVEL * (lv - 1);
       const hit = (def: number) =>
         computeDamage({ attack: mAtk, defense: def, attackerLevel: lv }, () => 0.5);
       const d1 = hit(bareDef);
       const d2 = hit(maxDef);
+      const killBoss = Math.ceil(
+        boss.maxHp /
+          Math.max(
+            1,
+            computeDamage(
+              {
+                attack: BASE_ATTR_START + (lv - 1),
+                defense: boss.stats.pDef ?? 0,
+                attackerLevel: lv,
+              },
+              () => 0.5,
+            ),
+          ),
+      );
       console.log(
         `Lv${String(lv).padEnd(5)} ${String(mAtk).padStart(9)} ${String(
           bareDef,
@@ -196,7 +212,7 @@ describe('成型后的平衡模拟', () => {
           Math.ceil(hp / d1),
         ).padStart(5)} │ ${String(maxDef).padStart(9)} ${String(d2).padStart(6)} ${String(
           Math.ceil(hp / d2),
-        ).padStart(5)}`,
+        ).padStart(5)} │ ${String(killBoss).padStart(7)} 刀`,
       );
       // 法术那一发一定要比 BOSS 自己的物理普攻疼
       const phys = computeDamage(
@@ -204,9 +220,14 @@ describe('成型后的平衡模拟', () => {
         () => 0.5,
       );
       expect(d1).toBeGreaterThan(phys);
-      // 裸装在后期扛不住：5 下以内必死
+      // 裸装后期依然扛不住 BOSS：能挨的法术刀数远少于砍死它所需的刀数。
+      // 血量斜率提到 +5 后「5 下以内必死」这个绝对值不再成立，改成两边对比，
+      // 以后再调 ATTR_HP_PER_LEVEL 不用回来改这个常数。
       if (lv >= 100) {
-        expect(Math.ceil(hp / d1)).toBeLessThanOrEqual(5);
+        const survive = Math.ceil(hp / d1);
+        expect(survive).toBeLessThan(killBoss);
+        // 上限哨兵：裸装不能肉到让装备失去意义
+        expect(survive).toBeLessThanOrEqual(10);
       }
       // 法防投资的回报要等防御量级追上等级才明显（Lv1000 起）：
       // 用伤害而不是刀数比较，后期刀数会被 1 刀的下限吃掉

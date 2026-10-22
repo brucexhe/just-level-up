@@ -82,7 +82,10 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(s.attrPoints).toBe(1);
     PANEL_BY_ID.character.action('attrmax', 'hp', s, api);
     expect(s.attrPoints).toBe(0);
-    expect(s.baseStats.hp).toBe(BASE_ATTR_START + auto + 1);
+    // 血量的等级自带斜率是 ATTR_HP_PER_LEVEL，不是全属性那条
+    expect(s.baseStats.hp).toBe(
+      BASE_ATTR_START + BALANCE.ATTR_HP_PER_LEVEL * (s.level - 1) + 1,
+    );
   });
 
   it('人物面板三档按钮：+1 / +10 / MAX（+10 不足时投剩余）', () => {

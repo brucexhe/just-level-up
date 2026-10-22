@@ -223,9 +223,10 @@ export function gainExp(s: GameState, amount: number): number {
     s.exp -= expToNext(s.level);
     s.level += 1;
     s.attrPoints += BALANCE.POINTS_PER_LEVEL;
-    // 等级自带的体质成长：九项属性各 +1（自由点数另外分配）
+    // 等级自带的体质成长：九项各 +1，血量单独 +5（自由点数另外分配）
     for (const k of BASE_ATTRS) {
-      s.baseStats[k] = (s.baseStats[k] ?? 0) + BALANCE.ATTR_PER_LEVEL;
+      const gain = k === 'hp' ? BALANCE.ATTR_HP_PER_LEVEL : BALANCE.ATTR_PER_LEVEL;
+      s.baseStats[k] = (s.baseStats[k] ?? 0) + gain;
     }
     ups += 1;
   }
