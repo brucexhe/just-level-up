@@ -657,7 +657,7 @@ const shopPanel: PanelDef = {
         }
       </div>
       ${card('hp', '🧴')}
-      ${card('mp', '🔷')}
+      ${card('mp', '🧪')}
     `;
   },
   action(act, arg, s, api) {

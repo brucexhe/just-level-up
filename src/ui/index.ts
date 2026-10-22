@@ -139,7 +139,7 @@ export class GameUI {
             <span class="ps-num" data-potion="hp">0</span>
           </button>
           <button class="potion-slot mp" data-drink="mp" title="回蓝药：点击使用（快捷键 X）">
-            <span class="ps-key">X</span><span class="ps-ico">🔷</span>
+            <span class="ps-key">X</span><span class="ps-ico">🧪</span>
             <span class="ps-num" data-potion="mp">0</span>
           </button>
         </div>
