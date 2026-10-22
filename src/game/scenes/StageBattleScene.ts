@@ -1215,6 +1215,7 @@ export class StageBattleScene extends Phaser.Scene {
       root: document.getElementById('ui-root') as HTMLElement,
       host: document.getElementById('shell') as HTMLElement,
       designWidth: 1200,
+      designHeight: 720,
       getState: () => this.state,
       castSkill: (id) => this.castSkill(id),
       drinkPotion: (kind) => this.drinkPotion(kind),
@@ -2700,8 +2701,11 @@ export class StageBattleScene extends Phaser.Scene {
 export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'app',
-  width: 1200,
-  height: 720,
+  // 逻辑分辨率 = 一帧能看到的世界像素，不是画面大小（大小由 index.html 的 #app 决定）。
+  // 保持 5:3 与画布盒子同比例；HUD 尺寸已与它解耦（src/ui/index.ts bindScale 只缩不放）。
+  // 1440 是折中：比 1200 多看 20% 的世界，比之前调过的 1680 让人物大 17%。
+  width: 1440,
+  height: 864,
   backgroundColor: '#10141a',
   disableContextMenu: true,
   pixelArt: true,
@@ -2709,6 +2713,9 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
+    // 默认 true：boot 时若 #app 高度为 0，Phaser 会把它改写成 100%×100%，
+    // 而 #shell 是 fit-content 的 flex item → 整块画面塌成 0×0（实测踩过一次）
+    expandParent: false,
   },
   physics: {
     default: 'arcade',

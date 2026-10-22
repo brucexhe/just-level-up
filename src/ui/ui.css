@@ -1167,9 +1167,9 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: 14px;
+  gap: 11px;
+  padding: 8px 11px;
+  border-radius: 15px;
   background: linear-gradient(180deg, rgba(26, 34, 48, 0.96), rgba(12, 17, 25, 0.97));
   border: 1px solid #33415a;
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55),
@@ -1188,9 +1188,9 @@
 }
 .potion-slot {
   position: relative;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 11px;
   background: linear-gradient(180deg, #262232, #15121c);
   border: 1px solid #4a3f5e;
   display: flex;
@@ -1217,7 +1217,7 @@
   border-color: #6ab0f3;
 }
 .potion-slot .ps-ico {
-  font-size: 18px;
+  font-size: 20px;
   z-index: 2;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
 }
@@ -1231,7 +1231,7 @@
   position: absolute;
   top: 2px;
   left: 4px;
-  font-size: 9px;
+  font-size: 10px;
   color: #8d9ab0;
   z-index: 3;
 }
@@ -1239,7 +1239,7 @@
   position: absolute;
   bottom: 1px;
   right: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: #fff;
   text-shadow: 0 1px 3px #000;

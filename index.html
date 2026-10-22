@@ -31,7 +31,9 @@
         line-height: 0;
       }
       #app {
-        width: min(1200px, 96vw, 130vh);
+        /* 锁 5:3 = 逻辑分辨率（1440×864）的比例，否则 Scale.FIT 会在上下留黑边；
+           HUD 大小已与盒子解耦（只缩不放），所以这里只管画面物理尺寸 */
+        width: min(96vw, calc((100vh - 96px) * 5 / 3));
         aspect-ratio: 1200 / 720;
       }
       footer {

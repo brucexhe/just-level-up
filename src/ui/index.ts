@@ -24,6 +24,7 @@ export interface GameUIOptions {
   /** 用于测量缩放的容器（#shell） */
   host: HTMLElement;
   designWidth: number;
+  designHeight: number;
   getState(): GameState;
   castSkill(id: SkillId): void;
   /** 喝一瓶药（工具栏快捷槽 / Z、X 热键） */
@@ -362,8 +363,14 @@ export class GameUI {
 
   private bindScale() {
     const apply = () => {
-      const w = this.opts.host.clientWidth || this.opts.designWidth;
-      const s = w / this.opts.designWidth;
+      const { designWidth, designHeight } = this.opts;
+      const w = this.opts.host.clientWidth || designWidth;
+      const h = this.opts.host.clientHeight || (w * designHeight) / designWidth;
+      // 只缩不放：窗口宽 > 设计稿时 HUD 元素维持原尺寸（全屏时工具栏/弹窗不再跟着变大）。
+      // 同时把设计稿铺满整个盒子，贴右/贴底/居中的元素才不会停在半屏处。
+      const s = Math.min(w / designWidth, 1);
+      this.root.style.width = `${w / s}px`;
+      this.root.style.height = `${h / s}px`;
       this.root.style.transform = `scale(${s})`;
     };
     apply();
