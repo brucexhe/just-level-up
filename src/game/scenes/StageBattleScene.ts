@@ -114,6 +114,13 @@ const HP_BAR = {
 
 /** 每关每个等级各刷几只（10 个等级 × 10 只 = 一关 100 只） */
 const STAGE_MONSTERS_PER_LEVEL = 10;
+/** 铺怪圈层的外沿边距：最外圈也不贴地图边缘，否则怪会卡在边界上 */
+const SPAWN_EDGE_MARGIN = 120;
+/**
+ * 中心安全圈半径：人物出生点（地图正中）四周不刷怪。
+ * 有了它，「由内向外等级递增」的第一个圈是「走过去才打得着」，而不是开局被贴脸。
+ */
+const SPAWN_SAFE_RADIUS = 420;
 /** 场景装饰物（树/石头/灌木）数量 */
 const OBSTACLE_COUNT = 180;
 
@@ -952,26 +959,44 @@ export class StageBattleScene extends Phaser.Scene {
     this.groundDrops = [];
   }
 
+  /**
+   * 第 band 圈（0 = 本关最低等级）内的一个落点。
+   *
+   * 环带按**面积**等分，不是按半径等分：圆环面积 ∝ r²，等分半径会把怪全挤成一坨在中心、
+   * 四角空空如也。这里用切比雪夫半径 f = max(|dx|,|dy|)，「f 以内」的面积正好 ∝ f²，
+   * 所以取 f = sqrt(线性插值) 就是等面积，每一圈的密度一样。
+   * 用方形环而不是圆形环，是为了让地图四角也铺到怪（正方形地图的角不该是空白区）。
+   */
+  private spawnPointInBand(band: number, bands: number): { x: number; y: number } {
+    const c = MAP_SIZE / 2;
+    const half = c - SPAWN_EDGE_MARGIN;
+    const inner = (SPAWN_SAFE_RADIUS / half) ** 2; // 安全圈吃掉的面积比例
+    const edge = (k: number) => Math.sqrt(inner + ((1 - inner) * k) / bands) * half;
+    const rIn = edge(band);
+    const rOut = edge(band + 1);
+    // 在 rOut 的方形内均匀取点，掉进内圈（切比雪夫半径 < rIn）就重取
+    for (let i = 0; i < 40; i++) {
+      const dx = (Math.random() * 2 - 1) * rOut;
+      const dy = (Math.random() * 2 - 1) * rOut;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) >= rIn) {
+        return { x: Math.round(c + dx), y: Math.round(c + dy) };
+      }
+    }
+    // 兜底：最外圈接受率最低，连续失败就直接贴本圈外沿（保证落在地图内）
+    const dx = Math.random() < 0.5 ? -rOut : rOut;
+    return { x: Math.round(c + dx), y: Math.round(c + (Math.random() * 2 - 1) * rOut) };
+  }
+
   private spawnMonster(level: number, isBoss = false) {
     const skin = skinForStage(artStageOf(this.stage));
-    // 全图随机分布（留 120px 边距，避免怪卡在地图边缘）
-    const lo = 120;
-    const hi = MAP_SIZE - 120;
-    let x = 0;
-    let y = 0;
-    for (let i = 0; i < 30; i++) {
-      x = Phaser.Math.Between(lo, hi);
-      y = Phaser.Math.Between(lo, hi);
-      if (
-        Phaser.Math.Distance.Between(
-          x,
-          y,
-          this.player?.x ?? MAP_SIZE / 2,
-          this.player?.y ?? MAP_SIZE / 2,
-        ) > 420
-      )
-        break;
-    }
+    /*
+     * 等级 → 圈层：本关最低等级贴着人物出生点，越外圈等级越高，
+     * 顶格等级（含 BOSS，它的等级就是 hi）落在最外圈。
+     */
+    const { lo, hi } = this.stageRange();
+    const bands = hi - lo + 1;
+    const band = Phaser.Math.Clamp(level - lo, 0, bands - 1);
+    const { x, y } = this.spawnPointInBand(band, bands);
     const sprite = this.monsterGroup.create(x, y, `${skin}-a`) as Phaser.Physics.Arcade.Sprite;
     sprite.setScale(isBoss ? 5.5 : 3).setDepth(y).play(`walk-${skin}`);
     if (isBoss) sprite.setTint(0xff9a9a);
