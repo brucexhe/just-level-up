@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { BALANCE } from '../../core/balance';
 import { attackIntervalMs, computeDamage, moveSpeed } from '../../core/formulas';
 import {
   aggregatedStats,
@@ -2511,6 +2512,67 @@ export class StageBattleScene extends Phaser.Scene {
       monstersAlive: alive,
 
     };
+  }
+
+  /**
+   * 控制台调试入口（window.LV.hp）。直接改内存里的 state 并立刻落盘，
+   * 不经过 localStorage 读取，所以不会在读档时被夹回上限。
+   *
+   * - `LV.hp()`          只查看，返回 { hp, maxHp }
+   * - `LV.hp(500)`       当前血 = 500，超过现有上限时连上限一起抬到 500
+   * - `LV.hp(500, 10000)` 当前血 = 500，上限 = 10000（只给上限时会顺手回满）
+   *
+   * 上限写在 baseStats.hp 上（装备的 hp 词条仍叠加在其上），与加点走的同一条链路。
+   */
+  debugHp(current?: number, max?: number): { hp: number; maxHp: number } {
+    const s = this.state;
+    const hasCurrent = typeof current === 'number' && Number.isFinite(current);
+    const hasMax = typeof max === 'number' && Number.isFinite(max);
+
+    let targetMax = hasMax ? Math.max(1, Math.floor(max)) : maxHp(s);
+    if (!hasMax && hasCurrent && current > targetMax) targetMax = Math.floor(current);
+
+    if (targetMax !== maxHp(s)) {
+      const equipHp =
+        maxHp(s) - Math.round((s.baseStats.hp ?? 0) * BALANCE.HP_PER_POINT);
+      s.baseStats.hp = Math.max(
+        1,
+        Math.round(targetMax / BALANCE.HP_PER_POINT) - equipHp,
+      );
+    }
+
+    const cap = maxHp(s);
+    if (hasCurrent) s.hp = Math.min(cap, Math.max(0, Math.floor(current)));
+    else if (hasMax) s.hp = cap;
+
+    saveState(s);
+    return { hp: Math.round(s.hp), maxHp: cap };
+  }
+
+  /** 蓝量版的控制台调试入口（window.LV.mp），语义与 debugHp 完全一致。 */
+  debugMp(current?: number, max?: number): { mp: number; maxMp: number } {
+    const s = this.state;
+    const hasCurrent = typeof current === 'number' && Number.isFinite(current);
+    const hasMax = typeof max === 'number' && Number.isFinite(max);
+
+    let targetMax = hasMax ? Math.max(1, Math.floor(max)) : maxMp(s);
+    if (!hasMax && hasCurrent && current > targetMax) targetMax = Math.floor(current);
+
+    if (targetMax !== maxMp(s)) {
+      const equipMp =
+        maxMp(s) - Math.round((s.baseStats.mp ?? 0) * BALANCE.MP_PER_POINT);
+      s.baseStats.mp = Math.max(
+        1,
+        Math.round(targetMax / BALANCE.MP_PER_POINT) - equipMp,
+      );
+    }
+
+    const cap = maxMp(s);
+    if (hasCurrent) s.mp = Math.min(cap, Math.max(0, Math.floor(current)));
+    else if (hasMax) s.mp = cap;
+
+    saveState(s);
+    return { mp: Math.round(s.mp), maxMp: cap };
   }
 
   // ---------- 主循环 ----------
