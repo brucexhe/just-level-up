@@ -31,7 +31,6 @@ import {
   aggregatedStats,
   maxHp,
   maxMp,
-  potionHealNow,
   sellAllSkillBooks,
   sellInventoryItem,
   sellSkillBook,
@@ -713,8 +712,7 @@ const shopPanel: PanelDef = {
 
     // 一行一件：左边图标 + 名称/档位/回复/单价，右边三个购买按钮（+1 / +10 / +MAX 99）
     const card = (kind: 'hp' | 'mp', icon: string) => {
-      const heal = potionHealNow(s, kind);
-      const price = potionPrice(heal); // 售价 = 回复点数 × 10
+      const price = potionPrice(tier); // 售价 = 档位 × 10，不随回复量浮动
       const afford = hasTier ? Math.floor(s.gold / Math.max(1, price)) : 0;
       const canBuy = hasTier && afford >= 1;
       const buy = (qty: number, label: string, gold = false) =>

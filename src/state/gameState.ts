@@ -127,12 +127,12 @@ export function restoreHp(s: GameState, amount: number): void {
 /**
  * 购买药水：返回实际买到的瓶数。**库存不设上限**，想买多少买多少，
  * 唯一的约束是金币（不够就按能买的瓶数截断）与等级档位。
- * 价格 = 该药实际回复点数 × 10（回血/回蓝各自按自己的回复量算）。
+ * 价格 = 当前档位 × 10（70 级药 700 金币），与商店标价一致。
  */
 export function buyPotion(s: GameState, kind: PotionKind, n: number): number {
   const tier = potionTier(s.level);
   if (tier <= 0 || n <= 0) return 0;
-  const price = potionPrice(potionHealNow(s, kind));
+  const price = potionPrice(tier);
   const afford = Math.floor(s.gold / Math.max(1, price));
   const bought = Math.max(0, Math.min(Math.floor(n), afford));
   if (bought <= 0) return 0;

@@ -221,7 +221,7 @@ describe('economy / potions', () => {
     expect(potionTier(900)).toBe(900);
   });
 
-  it('potion heal & price：售价 = 实际回复点数 × 10', () => {
+  it('potion heal & price：售价 = 档位 × 10', () => {
     expect(potionHeal(90)).toBe(90);
     expect(potionPrice(90)).toBe(900); // 90 × 10
     expect(potionPrice(20)).toBe(200);
