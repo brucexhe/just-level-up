@@ -17,7 +17,7 @@ import { BALANCE } from '../src/core/balance';
 import type { UIApi, UIView } from '../src/ui/api';
 
 function fakeApi(state: () => GameState) {
-  const view: UIView = { equipSlot: null, skillId: 'attack', bagTab: 'equip' };
+  const view: UIView = { equipSlot: null, skillId: 'fireball', bagTab: 'equip' };
   const toasts: string[] = [];
   const flags = { paused: false, music: true, sfx: true, volume: 0.6, backups: 0 };
   const api: UIApi = {
@@ -215,18 +215,12 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(toasts.some((t) => t.includes('已达技能上限 Lv3'))).toBe(true);
   });
 
-  it('技能面板：普攻没有升级入口，技能点也花不掉', () => {
+  it('技能面板：只列火球/狂暴/毒刃，普攻不是技能不出现', () => {
     const s = createInitialState();
-    s.skillPoints = 10;
-    const { api, view } = fakeApi(() => s);
-    view.skillId = 'attack';
+    const { api } = fakeApi(() => s);
     const html = PANEL_BY_ID.skills.render(s, api);
-    expect(html).not.toContain('升级到 Lv');
-    expect(html).toContain('普攻不吃技能点');
-    // 就算绕过 UI 直接派发 upgrade，也不该扣点 / 升级
-    PANEL_BY_ID.skills.action('upgrade', '', s, api);
-    expect(s.skills.attack).toBe(1);
-    expect(s.skillPoints).toBe(10);
+    for (const n of ['火球术', '狂暴', '毒刃']) expect(html).toContain(n);
+    expect(html).not.toContain('普攻');
   });
 
   it('背包装备行显示与已穿戴装备的点数对比（↑升 / ↓降 / 持平 / 空位）', () => {

@@ -85,8 +85,8 @@ export class GameUI {
   private skillEls = new Map<SkillId, { root: HTMLElement; cd: HTMLElement; num: HTMLElement }>();
   private toolEls = new Map<PanelId, { btn: HTMLElement; badge?: HTMLElement }>();
   private sig = '';
-  private lastFocus: Partial<Record<PanelId, string>> = { skills: 'attack' };
-  private view: UIView = { equipSlot: null, skillId: 'attack', bagTab: 'equip' };
+  private lastFocus: Partial<Record<PanelId, string>> = {};
+  private view: UIView = { equipSlot: null, skillId: 'fireball', bagTab: 'equip' };
   private api: UIApi;
 
   constructor(opts: GameUIOptions) {
@@ -305,9 +305,11 @@ export class GameUI {
   // ---------------- 构建 ----------------
 
   private buildSkillBar() {
-    this.skillBar.innerHTML = SKILLS.map(
+    // 普攻不是技能：底部技能栏只放火球/狂暴/毒刃（普攻仍有空格热键，点怪即攻击）
+    const list = SKILLS.filter((d) => d.id !== 'attack');
+    this.skillBar.innerHTML = list.map(
       (d) => `<button class="skill-slot" data-skill="${d.id}" title="${d.name} — ${d.hotkey}">
-        <span class="ss-key">${d.hotkey === '空格' ? '␣' : d.hotkey}</span>
+        <span class="ss-key">${d.hotkey}</span>
         <span class="ss-ico">${d.icon}</span>
         <span class="ss-lv" data-lv="${d.id}">0</span>
         <span class="ss-cd" data-cd="${d.id}" style="height:0%"></span>
@@ -315,7 +317,7 @@ export class GameUI {
       </button>`,
     ).join('');
 
-    SKILLS.forEach((d) => {
+    list.forEach((d) => {
       const el = this.skillBar.querySelector(
         `[data-skill="${d.id}"]`,
       ) as HTMLElement;

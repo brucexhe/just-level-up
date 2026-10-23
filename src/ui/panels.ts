@@ -6,7 +6,6 @@ import { expToNext, isBreakthrough } from '../core/progression';
 import {
   describeSkill,
   skillMpCost,
-  skillPower,
   skillPowerCoef,
   skillValue,
   type SkillBook,
@@ -354,39 +353,37 @@ const skillsPanel: PanelDef = {
   dock: 'right',
   render(s, api) {
     const cur = api.view.skillId;
-    const list = SKILLS.map((d) => {
-      const lv = skillLevel(s, d.id);
-      return `<button class="sk-tab ${cur === d.id ? 'on' : ''} ${
-        lv > 0 ? '' : 'locked'
-      }" data-act="pick" data-arg="${d.id}" title="${d.name} · ${
-        lv > 0 ? `Lv${lv} · 快捷键 ${d.hotkey}` : '未习得（需要技能书）'
-      }">
+    // 普攻不是技能（不吃技能点、也不能升级），技能面板只列真正可升级的三种
+    const list = SKILLS.filter((d) => d.id !== 'attack')
+      .map((d) => {
+        const lv = skillLevel(s, d.id);
+        return `<button class="sk-tab ${cur === d.id ? 'on' : ''} ${
+          lv > 0 ? '' : 'locked'
+        }" data-act="pick" data-arg="${d.id}" title="${d.name} · ${
+          lv > 0 ? `Lv${lv} · 快捷键 ${d.hotkey}` : '未习得（需要技能书）'
+        }">
         <span class="sk-tab-ico">${d.icon}</span>
         <span class="sk-tab-nm">${d.name}</span>
         <span class="sk-tab-lv">${lv > 0 ? `Lv${lv}` : '未学'}</span>
       </button>`;
-    }).join('');
+      })
+      .join('');
 
     const def = SKILL_BY_ID[cur];
     const lv = skillLevel(s, cur);
     const cost = skillUpgradeCostOf(s, cur);
     const cap = skillLevelCap(s);
-    const upgradeable = cur !== 'attack';
     const atCap = lv >= cap;
-    const canUp = upgradeable && lv > 0 && !atCap && s.skillPoints >= cost;
-    const tail = upgradeable
-      ? atCap
-        ? `<div class="sd-next">技能等级上限 = 人物等级：已达 Lv${cap}，提升角色等级后可继续升级</div>
+    const canUp = lv > 0 && !atCap && s.skillPoints >= cost;
+    const tail = atCap
+      ? `<div class="sd-next">技能等级上限 = 人物等级：已达 Lv${cap}，提升角色等级后可继续升级</div>
             <div style="height:9px"></div>
             <button class="btn big gold disabled" disabled>已达上限 Lv${cap}</button>`
-        : `<div class="sd-next">下一级：${esc(describeSkill(def, lv + 1))}</div>
+      : `<div class="sd-next">下一级：${esc(describeSkill(def, lv + 1))}</div>
             <div style="height:9px"></div>
             <button class="btn big gold ${canUp ? '' : 'disabled'}" data-act="upgrade" ${
               canUp ? '' : 'disabled'
-            }>升级到 Lv${lv + 1}（消耗 ${fmtNum(cost)} 技能点）</button>`
-      : `<div class="note" style="margin-top:8px">普攻不吃技能点、也不能升级：伤害 =
-            物攻 ×${skillPower(def, lv).toFixed(2)}（狂暴期间另乘加成），攻速由敏捷决定。
-            技能点留给火球 / 狂暴 / 毒刃。</div>`;
+            }>升级到 Lv${lv + 1}（消耗 ${fmtNum(cost)} 技能点）</button>`;
     const detail =
       lv > 0
         ? `<div class="skill-detail">
@@ -435,7 +432,6 @@ const skillsPanel: PanelDef = {
     }
     if (act === 'upgrade') {
       const id = api.view.skillId;
-      if (id === 'attack') return;
       const before = skillLevel(s, id);
       if (upgradeSkill(s, id)) {
         api.toast(`${SKILL_BY_ID[id].name} 提升到 Lv${before + 1}`, '#ffd93d');
