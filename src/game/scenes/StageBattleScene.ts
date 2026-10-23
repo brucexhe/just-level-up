@@ -242,6 +242,24 @@ const FRENZY_RING = {
   alphaAmpFallback: 0.18,
 };
 
+/**
+ * 护盾气泡（参考热血传奇的魔法盾）：包住角色的半透明圆球 + 亮边。
+ * 角色显示高 48px（半径 24），球半径放到 34 才有"罩子"的余量，不会像紧身圈。
+ */
+const SHIELD_ORB = {
+  radius: 34,
+  color: 0x6ac0ff,
+  fillAlpha: 0.14,
+  rimColor: 0xa8dcff,
+  rimWidth: 2,
+  rimAlpha: 0.9,
+  /** 呼吸周期：幅度压得很小，别抢战斗视线 */
+  periodMs: 900,
+  scaleAmp: 0.025,
+  /** 画在角色本体上面一层：气泡把人物包在里面；怪物仍按 y 排序压在球前面 */
+  depthOffset: 0.5,
+};
+
 /** ------- 普攻刀光：六层的数值都集中在这里，方便对着美术表逐行核对 ------- */
 
 /**
@@ -417,6 +435,10 @@ export class StageBattleScene extends Phaser.Scene {
   private stuckX = 0;
   private stuckY = 0;
   private frenzyUntil = 0;
+  /** 护盾截止时刻（0 / 过期 = 未激活） */
+  private shieldUntil = 0;
+  /** 护盾气泡（包裹角色的半透明圆球） */
+  private shieldOrb!: Phaser.GameObjects.Arc;
   private cooldowns = new Map<SkillId, number>();
   private bossAtLevel = -1;
   /** 当前关卡（1 起） */
@@ -499,6 +521,11 @@ export class StageBattleScene extends Phaser.Scene {
       .setScale(0.9)
       .setAlpha(0.8)
       .setDepth(3)
+      .setVisible(false);
+    this.shieldOrb = this.add
+      .circle(0, 0, SHIELD_ORB.radius, SHIELD_ORB.color, SHIELD_ORB.fillAlpha)
+      .setStrokeStyle(SHIELD_ORB.rimWidth, SHIELD_ORB.rimColor, SHIELD_ORB.rimAlpha)
+      .setDepth(5)
       .setVisible(false);
     this.player = this.physics.add.sprite(MAP_SIZE / 2, MAP_SIZE / 2, 'player-a');
     this.player.setScale(PLAYER_SCALE).setCollideWorldBounds(true).setDepth(5);
@@ -605,6 +632,8 @@ export class StageBattleScene extends Phaser.Scene {
       revive: () => {
         if (this.dead) this.revive();
       },
+      /** 护盾状态（冒烟测试用） */
+      shield: () => ({ active: this.shieldActive(), reduce: this.shieldReduce() }),
       /** 怪物快照（调试用：距离 / 是否在追 / 等级标签与血条可见性） */
       monsters: () =>
         this.monsters
@@ -1110,7 +1139,7 @@ export class StageBattleScene extends Phaser.Scene {
   // ---------- 输入 ----------
 
   private setupInput() {
-    this.input.keyboard!.addCapture('SPACE,Q,W,E,F,Z,X,UP,DOWN,LEFT,RIGHT');
+    this.input.keyboard!.addCapture('SPACE,Q,W,E,F,R,Z,X,UP,DOWN,LEFT,RIGHT');
     this.cursors = this.input.keyboard!.createCursorKeys();
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -1155,6 +1184,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.input.keyboard!.on('keydown-Q', () => this.castSkill('fireball'));
     this.input.keyboard!.on('keydown-W', () => this.castSkill('frenzy'));
     this.input.keyboard!.on('keydown-E', () => this.castSkill('poison'));
+    this.input.keyboard!.on('keydown-R', () => this.castSkill('shield'));
     this.input.keyboard!.on('keydown-F', () => this.autoEquipBest());
     // 药水热键：Z 回血 / X 回蓝（1-9 已被快速加点占用，空格 + QWE 是技能）
     this.input.keyboard!.on('keydown-Z', () => this.drinkPotion('hp'));
@@ -1409,6 +1439,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.playerNextAttackAt += dt;
     this.steerSince += dt;
     if (this.frenzyUntil > 0) this.frenzyUntil += dt;
+    if (this.shieldUntil > 0) this.shieldUntil += dt;
     for (const m of this.monsters) {
       m.nextAttackAt += dt;
       m.knockUntil += dt;
@@ -1454,6 +1485,8 @@ export class StageBattleScene extends Phaser.Scene {
     this.checkDailyRollover();
     this.bossAtLevel = -1;
     this.frenzyUntil = 0;
+    this.shieldUntil = 0;
+    this.shieldOrb.setVisible(false);
     this.cooldowns.clear();
     this.playerNextAttackAt = 0;
     this.clearMonsters();
@@ -1578,6 +1611,9 @@ export class StageBattleScene extends Phaser.Scene {
       case 'poison':
         this.castPoison(lv);
         break;
+      case 'shield':
+        this.castShield(lv);
+        break;
     }
     this.cooldowns.set(id, now + def.cdMs);
   }
@@ -1601,6 +1637,26 @@ export class StageBattleScene extends Phaser.Scene {
     // 这里直接推一把：update 里的边沿检测是兜底（读档/超时过期也要能自动退），
     // 主动释放时不该等到下一帧才亮起来
     this.toggleFrenzyFx(true);
+  }
+
+  private shieldActive(): boolean {
+    return this.time.now < this.shieldUntil;
+  }
+
+  /** 护盾期间的伤害减免（物理/法术同一档；computeDamage 内部会夹到 90% 上限） */
+  private shieldReduce(): number {
+    if (!this.shieldActive()) return 0;
+    const lv = Math.max(1, skillLevel(this.state, 'shield'));
+    return skillPower(SKILL_BY_ID.shield, lv);
+  }
+
+  /** 护盾：持续 5 秒（与狂暴同构），抗性随技能等级线性成长 */
+  private castShield(lv: number) {
+    const pct = Math.round(skillPower(SKILL_BY_ID.shield, lv) * 100);
+    this.shieldUntil = this.time.now + skillValue(SKILL_BY_ID.shield);
+    this.cameras.main.flash(140, 120, 200, 255);
+    audio.play('magic');
+    this.ui.toast(`护盾展开！物理/法术抗性 +${pct}%`, '#8fd0ff');
   }
 
   /**
@@ -2665,6 +2721,18 @@ export class StageBattleScene extends Phaser.Scene {
     }
     this.updateFrenzyGlow(time, frenzy, glowPulse);
 
+    // 护盾气泡：跟着角色走，呼吸幅度很小；死亡时 shieldUntil 已被清零，这里自然隐藏
+    const shieldOn = this.shieldActive();
+    this.shieldOrb.setVisible(shieldOn);
+    if (shieldOn) {
+      const k = (Math.sin((time / SHIELD_ORB.periodMs) * Math.PI * 2) + 1) / 2;
+      this.shieldOrb
+        .setPosition(this.player.x, this.player.y)
+        .setDepth(this.player.y + SHIELD_ORB.depthOffset)
+        .setScale(1 + SHIELD_ORB.scaleAmp * (k * 2 - 1))
+        .setAlpha(0.9 + 0.1 * k);
+    }
+
     // 点击移动卡住检测：持续朝目标转向却 400ms 内几乎没位移 → 被障碍挡住，放弃目标
     if (dir !== null) {
       if (this.steerSince === 0) {
@@ -2845,6 +2913,8 @@ export class StageBattleScene extends Phaser.Scene {
       attack: magic ? (m.data.stats.mAtk ?? 1) : (m.data.stats.pAtk ?? 1),
       defense: magic ? (stats.mDef ?? 0) : (stats.pDef ?? 0),
       attackerLevel: m.data.level,
+      // 护盾按「抗性」乘进最终伤害：物抗/法抗同档，和防御减伤叠乘
+      dmgReduce: this.shieldReduce(),
     });
     this.state.hp -= dmg;
     const tint = magic ? 0xc08cff : 0xff6b6b;
@@ -2881,8 +2951,9 @@ export class StageBattleScene extends Phaser.Scene {
     this.player.setTexture('player-a');
     this.player.setRotation(Math.PI / 2);
     this.player.setTint(0x8892a0);
-    // 狂暴随死亡熄灭：主动关一次立即生效（update 的边沿检测只是兜底）
+    // 狂暴 / 护盾随死亡熄灭：主动关一次立即生效（update 的边沿检测只是兜底）
     this.frenzyUntil = 0;
+    this.shieldUntil = 0;
     this.toggleFrenzyFx(false);
     this.cameras.main.shake(160, 0.006);
     audio.play('die');

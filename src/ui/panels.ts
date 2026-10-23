@@ -400,7 +400,7 @@ const skillsPanel: PanelDef = {
                 2,
               )}</b></div>
               <div class="kv"><span>附加数值</span><b class="num">${
-                def.school === 'buff' || def.school === 'dot'
+                def.school === 'buff' || def.school === 'dot' || def.school === 'ward'
                   ? `${Math.round(skillValue(def) / 1000)} s`
                   : '—'
               }</b></div>

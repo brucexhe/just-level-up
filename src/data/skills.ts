@@ -1,6 +1,6 @@
-export type SkillId = 'attack' | 'fireball' | 'frenzy' | 'poison';
+export type SkillId = 'attack' | 'fireball' | 'frenzy' | 'poison' | 'shield';
 
-export type SkillSchool = 'physical' | 'magical' | 'buff' | 'dot';
+export type SkillSchool = 'physical' | 'magical' | 'buff' | 'dot' | 'ward';
 
 export interface SkillDef {
   id: SkillId;
@@ -72,6 +72,19 @@ export const SKILLS: SkillDef[] = [
     power: 0.1,
     value: 5000,
     desc: '需先选中一只怪：以它为中心撒出毒雾（半径随技能等级扩大），5 秒内范围内所有怪每 0.5 秒受到法术伤害。',
+  },
+  {
+    id: 'shield',
+    name: '护盾',
+    icon: '🛡',
+    hotkey: 'R',
+    school: 'ward',
+    mpCost: 3,
+    mpCostGrowth: 0.5,
+    cdMs: 60000,
+    power: 0.1,
+    value: 5000,
+    desc: '展开球形护盾（参考魔法盾），短时间内提升物理抗性与法术抗性。',
   },
 ];
 

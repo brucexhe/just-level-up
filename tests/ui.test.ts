@@ -181,7 +181,7 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(toasts.some((t) => t.includes('最多加 Lv100 的点'))).toBe(true);
   });
 
-  it('技能面板：三个主动技能默认已学会，可花技能点升级', () => {
+  it('技能面板：四个主动技能默认已学会，可花技能点升级', () => {
     const s = createInitialState();
     s.level = 5; // 技能等级上限 = 人物等级，留出升级空间
     const { api, view } = fakeApi(() => s);
@@ -215,11 +215,11 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(toasts.some((t) => t.includes('已达技能上限 Lv3'))).toBe(true);
   });
 
-  it('技能面板：只列火球/狂暴/毒刃，普攻不是技能不出现', () => {
+  it('技能面板：只列火球/狂暴/毒刃/护盾，普攻不是技能不出现', () => {
     const s = createInitialState();
     const { api } = fakeApi(() => s);
     const html = PANEL_BY_ID.skills.render(s, api);
-    for (const n of ['火球术', '狂暴', '毒刃']) expect(html).toContain(n);
+    for (const n of ['火球术', '狂暴', '毒刃', '护盾']) expect(html).toContain(n);
     expect(html).not.toContain('普攻');
   });
 

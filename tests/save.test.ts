@@ -174,6 +174,8 @@ describe('normalizeState 容错', () => {
     expect(s.equipped.weapon).toBeUndefined();
     expect(s.skills.fireball).toBe(2);
     expect(s.skills.attack).toBe(1);
+    // 旧档没存过的新技能也要补成默认 Lv1（护盾是后加的）
+    expect(s.skills.shield).toBe(1);
   });
 });
 

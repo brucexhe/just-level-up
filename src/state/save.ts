@@ -220,8 +220,8 @@ export function normalizeState(raw: unknown): GameState {
       }
     }
   }
-  // 三个主动技能默认就会（旧档也补上），只是等级低
-  for (const id of ['attack', 'fireball', 'frenzy', 'poison'] as SkillId[]) {
+  // 主动技能默认就会（旧档也补上），只是等级低
+  for (const id of ['attack', 'fireball', 'frenzy', 'poison', 'shield'] as SkillId[]) {
     if (!((s.skills[id] ?? 0) > 0)) s.skills[id] = 1;
   }
 

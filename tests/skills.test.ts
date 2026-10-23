@@ -29,16 +29,16 @@ import { SKILL_BY_ID } from '../src/data/skills';
 const fixed = (v: number) => () => v;
 
 describe('技能书 / 技能点', () => {
-  it('普攻不进掉落池：只会掉火球 / 狂暴 / 毒刃', () => {
+  it('普攻不进掉落池：只会掉火球 / 狂暴 / 毒刃 / 护盾', () => {
     const got = new Set<string>();
     for (let i = 0; i < 400; i++) {
       const b = dropSkillBook(20, Math.random);
       got.add(b.skillId);
     }
     expect(got.has('attack')).toBe(false);
-    for (const id of got) expect(['fireball', 'frenzy', 'poison']).toContain(id);
-    // 三种都要能掉出来（蒙特卡洛，跑 400 次必然覆盖）
-    expect([...got].sort()).toEqual(['fireball', 'frenzy', 'poison']);
+    for (const id of got) expect(['fireball', 'frenzy', 'poison', 'shield']).toContain(id);
+    // 四种都要能掉出来（蒙特卡洛，跑 400 次必然覆盖）
+    expect([...got].sort()).toEqual(['fireball', 'frenzy', 'poison', 'shield']);
   });
 
   it('掉出来的技能书等级 ∈ [关卡最低等级, 怪等级]：第 3 关 26 级怪 → 21-26', () => {
@@ -49,9 +49,9 @@ describe('技能书 / 技能点', () => {
     }
   });
 
-  it('开局三个主动技能就都会（Lv1）', () => {
+  it('开局四个主动技能就都会（Lv1）', () => {
     const s = createInitialState();
-    for (const id of ['attack', 'fireball', 'frenzy', 'poison'] as const) {
+    for (const id of ['attack', 'fireball', 'frenzy', 'poison', 'shield'] as const) {
       expect(skillLevel(s, id)).toBe(1);
     }
   });

@@ -79,6 +79,8 @@ export function describeSkill(def: SkillDef, level: number): string {
       return `造成 ${pct}% 法攻的法术伤害（单体追踪）。`;
     case 'buff':
       return `${dur}内攻击力与攻击/施法速度 +${pct}%。`;
+    case 'ward':
+      return `${dur}内物理抗性与法术抗性 +${pct}%。`;
     case 'dot':
       return `${dur}内每 0.5 秒造成 ${pct}% 法攻的法术伤害，毒雾半径随等级扩大。`;
     default:
