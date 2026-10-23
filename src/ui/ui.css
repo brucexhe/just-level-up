@@ -497,8 +497,9 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
   letter-spacing: 0.5px;
 }
+/* 与怪物血条同一正红（#e05656），只做深→浅渐变保持条形 HUD 质感 */
 .bar.hp > i {
-  background: linear-gradient(90deg, #1f7a35, #4ade6a);
+  background: linear-gradient(90deg, #7b2f2f, #e05656);
 }
 .bar.hp.low > i {
   background: linear-gradient(90deg, #7a1d1d, #ff5a5a);

@@ -585,7 +585,7 @@ export class GameUI {
       const max = k === 'hp' ? mhp : k === 'mp' ? mmp : next;
       const w = Math.max(0, Math.min(1, max > 0 ? cur / max : 0)) * 100;
       setWidth(el, `${w.toFixed(1)}%`);
-      // 血量过低时血条转红并呼吸，危险状态一眼可见
+      // 血量过低时呼吸提示（血条本身就是红色，靠明暗闪烁区分危险状态）
       if (k === 'hp') el.parentElement?.classList.toggle('low', w <= 30);
     });
 
