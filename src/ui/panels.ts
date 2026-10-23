@@ -22,6 +22,7 @@ import {
   bookPoints,
   buyPotion,
   canEquip,
+  canEquipSkillBook,
   equipAllocCap,
   equipAllocLeft,
   equipBest,
@@ -35,6 +36,7 @@ import {
   sellInventoryItem,
   sellSkillBook,
   skillLevel,
+  skillLevelCap,
   skillUpgradeCostOf,
   unequipItem,
   upgradeSkill,
@@ -369,10 +371,16 @@ const skillsPanel: PanelDef = {
     const def = SKILL_BY_ID[cur];
     const lv = skillLevel(s, cur);
     const cost = skillUpgradeCostOf(s, cur);
+    const cap = skillLevelCap(s);
     const upgradeable = cur !== 'attack';
-    const canUp = upgradeable && lv > 0 && s.skillPoints >= cost;
+    const atCap = lv >= cap;
+    const canUp = upgradeable && lv > 0 && !atCap && s.skillPoints >= cost;
     const tail = upgradeable
-      ? `<div class="sd-next">下一级：${esc(describeSkill(def, lv + 1))}</div>
+      ? atCap
+        ? `<div class="sd-next">技能等级上限 = 人物等级：已达 Lv${cap}，提升角色等级后可继续升级</div>
+            <div style="height:9px"></div>
+            <button class="btn big gold disabled" disabled>已达上限 Lv${cap}</button>`
+        : `<div class="sd-next">下一级：${esc(describeSkill(def, lv + 1))}</div>
             <div style="height:9px"></div>
             <button class="btn big gold ${canUp ? '' : 'disabled'}" data-act="upgrade" ${
               canUp ? '' : 'disabled'
@@ -430,9 +438,12 @@ const skillsPanel: PanelDef = {
     }
     if (act === 'upgrade') {
       const id = api.view.skillId;
+      if (id === 'attack') return;
       const before = skillLevel(s, id);
       if (upgradeSkill(s, id)) {
         api.toast(`${SKILL_BY_ID[id].name} 提升到 Lv${before + 1}`, '#ffd93d');
+      } else if (before >= skillLevelCap(s)) {
+        api.toast(`已达技能上限 Lv${skillLevelCap(s)}，提升角色等级后才能继续升级`, '#ff8a8a');
       } else {
         api.toast('技能点不足', '#ff8a8a');
       }
@@ -504,16 +515,22 @@ function bookRows(s: GameState): string {
   if (s.skillBooks.length === 0) {
     return `<div class="bag-empty">还没有技能书，打怪有几率掉落</div>`;
   }
-  const sorted = [...s.skillBooks].sort((a, b) => b.points - a.points);
+  const sorted = [...s.skillBooks].sort((a, b) => {
+    // 等级不够穿的沉到底部，和装备背包同一套排序
+    const lock = (x: typeof a) => (canEquipSkillBook(s, x) ? 0 : 1);
+    return lock(a) - lock(b) || b.points - a.points;
+  });
   return sorted
     .map((b: SkillBook) => {
       const def = SKILL_BY_ID[b.skillId];
       const cur = skillLevel(s, b.skillId);
       const gain = bookPoints(b);
-      // 换装预览：升 / 降多少级，一眼看得出值不值
+      // 换装预览：升 / 降多少级，一眼看得出值不值；穿不了时优先提示所需等级
       const delta = b.points - cur;
-      const badge =
-        delta > 0
+      const blocked = !canEquipSkillBook(s, b);
+      const badge = blocked
+        ? `<span class="bi-dn">需 Lv${fmtNum(b.points)}</span>`
+        : delta > 0
           ? `<span class="bi-up">↑${fmtNum(delta)}</span>`
           : delta < 0
             ? `<span class="bi-dn">↓${fmtNum(-delta)}</span>`
@@ -529,7 +546,9 @@ function bookRows(s: GameState): string {
           </div>
         </div>
         <div class="bi-acts">
-          <button class="btn gold" data-act="use-book" data-arg="${b.id}">穿戴</button>
+          <button class="btn gold" data-act="use-book" data-arg="${b.id}"${
+            blocked ? ' disabled' : ''
+          }>${blocked ? '等级不足' : '穿戴'}</button>
           <button class="btn danger" data-act="sell-book" data-arg="${b.id}">卖出 +${fmtNum(
             bookPoints(b),
           )}</button>
@@ -611,6 +630,15 @@ const bagPanel: PanelDef = {
         const b = s.skillBooks.find((x) => x.id === arg);
         if (b) {
           const r = equipSkillBook(s, b);
+          if (r.kind === 'blocked') {
+            api.toast(
+              `等级不足：技能书 Lv${fmtNum(r.need)}，当前角色 Lv${fmtNum(
+                Math.floor(s.level),
+              )}`,
+              '#ff8a8a',
+            );
+            break;
+          }
           const name = SKILL_BY_ID[r.skill].name;
           if (r.kind === 'equip') {
             api.toast(

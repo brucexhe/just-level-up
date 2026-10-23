@@ -183,6 +183,7 @@ describe('面板渲染（headless 字符串校验）', () => {
 
   it('技能面板：三个主动技能默认已学会，可花技能点升级', () => {
     const s = createInitialState();
+    s.level = 5; // 技能等级上限 = 人物等级，留出升级空间
     const { api, view } = fakeApi(() => s);
     view.skillId = 'fireball';
     // 开局就会，所以不该再出现「未习得」
@@ -193,6 +194,25 @@ describe('面板渲染（headless 字符串校验）', () => {
     PANEL_BY_ID.skills.action('upgrade', '', s, api);
     expect(s.skills.fireball).toBe(2);
     expect(s.skillPoints).toBe(4);
+  });
+
+  it('技能面板：到人物等级上限后不再显示升级入口', () => {
+    const s = createInitialState();
+    s.level = 3;
+    s.skills.fireball = 3;
+    s.skillPoints = 999;
+    const { api, view, toasts } = fakeApi(() => s);
+    view.skillId = 'fireball';
+
+    const html = PANEL_BY_ID.skills.render(s, api);
+    expect(html).not.toContain('升级到 Lv4');
+    expect(html).toContain('已达上限 Lv3');
+
+    // 绕过 UI 直接派发也不会扣点
+    PANEL_BY_ID.skills.action('upgrade', '', s, api);
+    expect(s.skills.fireball).toBe(3);
+    expect(s.skillPoints).toBe(999);
+    expect(toasts.some((t) => t.includes('已达技能上限 Lv3'))).toBe(true);
   });
 
   it('技能面板：普攻没有升级入口，技能点也花不掉', () => {
@@ -295,6 +315,31 @@ describe('面板渲染（headless 字符串校验）', () => {
     PANEL_BY_ID.bag.action('equip', id, s, api);
     expect(s.inventory).toHaveLength(0);
     expect(Object.keys(s.equipped).length).toBe(1);
+  });
+
+  it('背包技能书：等级高于人物等级时标「需 Lv」并禁用穿戴', () => {
+    const s = createInitialState();
+    s.level = 5;
+    const book = { id: 'over', skillId: 'fireball' as const, points: 8 };
+    s.skillBooks.push(book);
+    const { api, view, toasts } = fakeApi(() => s);
+    view.bagTab = 'book';
+
+    const html = PANEL_BY_ID.bag.render(s, api);
+    expect(html).toContain('需 Lv8');
+    expect(html).toContain('等级不足');
+    expect(html).toContain(`data-act="use-book" data-arg="${book.id}" disabled`);
+
+    // 绕过 UI 直接派发也不会穿，书留在背包
+    PANEL_BY_ID.bag.action('use-book', book.id, s, api);
+    expect(s.skills.fireball).toBe(1);
+    expect(s.skillBooks).toContain(book);
+    expect(toasts.some((t) => t.includes('等级不足'))).toBe(true);
+
+    // 人物等级够了就能穿
+    s.level = 8;
+    PANEL_BY_ID.bag.action('use-book', book.id, s, api);
+    expect(s.skills.fireball).toBe(8);
   });
 
   it('商店：购买只入库不直接喝；药槽使用才回血；药效按当前档位结算', () => {

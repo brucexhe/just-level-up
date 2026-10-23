@@ -58,6 +58,7 @@ describe('技能书 / 技能点', () => {
 
   it('穿戴技能书 = 直接把技能等级替换成书的等级，旧等级退回背包', () => {
     const s = createInitialState();
+    s.level = 10; // 人物等级要够，书 Lv8 才能穿
     expect(skillLevel(s, 'fireball')).toBe(1);
 
     const b = { id: 'a', skillId: 'fireball' as const, points: 8 };
@@ -77,6 +78,7 @@ describe('技能书 / 技能点', () => {
 
   it('再穿一本更低的书会降回去（和穿差装备一样，允许但不推荐）', () => {
     const s = createInitialState();
+    s.level = 10;
     s.skills.fireball = 9;
     const b = { id: 'low', skillId: 'fireball' as const, points: 3 };
     s.skillBooks.push(b);
@@ -86,7 +88,41 @@ describe('技能书 / 技能点', () => {
     expect(s.skillBooks.some((x) => x.points === 9)).toBe(true);
   });
 
-  it('卖出技能书 = 获得该书等级一半的技能点', () => {
+  it('技能等级上限 = 人物等级：到顶后不能再升，技能点不扣', () => {
+    const s = createInitialState();
+    s.level = 3;
+    s.skillPoints = 100;
+    s.skills.fireball = 2;
+
+    expect(upgradeSkill(s, 'fireball')).toBe(true); // 2 → 3，正好等于人物等级
+    expect(skillLevel(s, 'fireball')).toBe(3);
+    const left = s.skillPoints;
+    expect(upgradeSkill(s, 'fireball')).toBe(false); // 3 → 4 超过人物等级
+    expect(skillLevel(s, 'fireball')).toBe(3);
+    expect(s.skillPoints).toBe(left);
+
+    // 人物升级后上限跟着抬，才能继续升
+    s.level = 4;
+    expect(upgradeSkill(s, 'fireball')).toBe(true);
+    expect(skillLevel(s, 'fireball')).toBe(4);
+  });
+
+  it('技能书等级高于人物等级不能穿戴：技能不变、书留在背包', () => {
+    const s = createInitialState();
+    s.level = 5;
+    const b = { id: 'over', skillId: 'poison' as const, points: 6 };
+    s.skillBooks.push(b);
+
+    const r = equipSkillBook(s, b);
+    expect(r.kind).toBe('blocked');
+    expect(skillLevel(s, 'poison')).toBe(1);
+    expect(s.skillBooks).toContain(b);
+
+    // 正好等于人物等级则可以穿
+    b.points = 5;
+    expect(equipSkillBook(s, b).kind).toBe('equip');
+    expect(skillLevel(s, 'poison')).toBe(5);
+  });  it('卖出技能书 = 获得该书等级一半的技能点', () => {
     const s = createInitialState();
     const b = { id: 'a', skillId: 'poison' as const, points: 9 };
     s.skillBooks.push(b);
@@ -132,6 +168,7 @@ describe('技能书 / 技能点', () => {
 
   it('技能点升级消耗 = 当前等级，且威力随等级成长', () => {
     const s = createInitialState();
+    s.level = 10; // 技能等级上限 = 人物等级
     s.skillPoints = 10;
     const before = skillPower(SKILL_BY_ID.fireball, 1);
     expect(skillUpgradeCost(1)).toBe(1);

@@ -372,15 +372,28 @@ export function isSkillLearned(s: GameState, id: SkillId): boolean {
 
 export type EquipBookResult =
   | { kind: 'equip', skill: SkillId, from: number, to: number }
-  | { kind: 'learn', skill: SkillId, to: number };
+  | { kind: 'learn', skill: SkillId, to: number }
+  | { kind: 'blocked', need: number };
+
+/** 技能等级上限 = 人物当前等级（与装备「等级不足不能穿」同一条规则） */
+export function skillLevelCap(s: GameState): number {
+  return Math.max(1, Math.floor(s.level));
+}
+
+/** 技能书等级必须 ≤ 人物等级才能穿戴 */
+export function canEquipSkillBook(s: GameState, book: SkillBook): boolean {
+  return book.points <= skillLevelCap(s);
+}
 
 /**
  * 穿戴技能书：和穿装备一样 —— 技能书自带等级，穿上就把该技能的等级**替换**成书的点数。
+ * 书等级高于人物等级时拒绝（返回 blocked），书留在背包里等升级。
  *
  * 被换下来的等级不会凭空消失：按原等级生成一本新书退回背包
  * （和「换装备时旧装备回到背包」是同一条规则），玩家可以再把它卖掉换技能点。
  */
 export function equipSkillBook(s: GameState, book: SkillBook): EquipBookResult {
+  if (!canEquipSkillBook(s, book)) return { kind: 'blocked', need: book.points };
   const idx = s.skillBooks.indexOf(book);
   if (idx >= 0) s.skillBooks.splice(idx, 1);
 
@@ -418,6 +431,8 @@ export function upgradeSkill(s: GameState, id: SkillId): boolean {
   if (id === 'attack') return false;
   const lv = skillLevel(s, id);
   if (lv <= 0) return false;
+  // 技能等级不能超过人物等级，到顶后即使有技能点也不能再升
+  if (lv >= skillLevelCap(s)) return false;
   const cost = skillUpgradeCost(lv);
   if (s.skillPoints < cost) return false;
   s.skillPoints -= cost;

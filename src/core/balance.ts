@@ -171,9 +171,9 @@ export const BALANCE = {
   BREAKTHROUGH_LO_SLOPE: 1,
   BREAKTHROUGH_HI_SLOPE: 2,
   /** 普通怪掉装备的概率（与技能书互斥，两者相加 = 总掉率 20%） */
-  DROP_EQUIP_CHANCE: 0.12,
+  DROP_EQUIP_CHANCE: 0.15,
   /** 普通怪掉技能书的概率（与装备互斥） */
-  DROP_BOOK_CHANCE: 0.08,
+  DROP_BOOK_CHANCE: 0.05,
   /** BOSS 保底掉几件装备（BOSS 每 10 级才一只，作为里程碑奖励） */
   BOSS_EQUIP_GUARANTEE: 1,
   /**
@@ -185,7 +185,7 @@ export const BALANCE = {
    * 必出普通；打 26 级（封顶稀有）→ 普通 63% / 优秀 26% / 稀有 11%。
    * 神话不在普通怪的池子里（BOSS 独占），它的权重只影响 BOSS 的额外判定。
    */
-  RARITY_WEIGHTS: [60, 25, 10, 3.5, 1.2, 0.3],
+  RARITY_WEIGHTS: [50, 30, 15, 10, 5, 1],
   /** 各品质的词条数（贪婪洞窟的核心：品质 = 随机词条数；本游戏拆的是九项基础属性） */
   RARITY_AFFIXES: [1, 2, 2, 3, 3, 4],
   /**
