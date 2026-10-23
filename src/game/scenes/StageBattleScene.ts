@@ -410,6 +410,8 @@ export class StageBattleScene extends Phaser.Scene {
   private obstacles!: Phaser.Physics.Arcade.StaticGroup;
   private moveTarget: { x: number; y: number } | null = null;
   private attackTarget: MonsterView | null = null;
+  /** 方向键（↑↓←→）：按住即手动移动，和右键点击移动并存，按键优先 */
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private targetRing!: Phaser.GameObjects.Image;
   private steerSince = 0;
   private stuckX = 0;
@@ -1108,7 +1110,8 @@ export class StageBattleScene extends Phaser.Scene {
   // ---------- 输入 ----------
 
   private setupInput() {
-    this.input.keyboard!.addCapture('SPACE,Q,W,E,F,Z,X');
+    this.input.keyboard!.addCapture('SPACE,Q,W,E,F,Z,X,UP,DOWN,LEFT,RIGHT');
+    this.cursors = this.input.keyboard!.createCursorKeys();
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (this.dead) return; // 躺尸期间点击战场无效（弹窗/复活条接管输入）
@@ -1208,6 +1211,20 @@ export class StageBattleScene extends Phaser.Scene {
       duration: 300,
       onComplete: () => mark.destroy(),
     });
+  }
+
+  /**
+   * 方向键移动：按住即走，斜向由 cos/sin 自动归一化（不会比直走快）。
+   * 按下任意方向 = 玩家手动接管，作废右键/小地图的寻路目标，松开后恢复原逻辑。
+   */
+  private keyDirection(): number | null {
+    if (this.dead) return null;
+    const c = this.cursors;
+    const dx = (c.right?.isDown ? 1 : 0) - (c.left?.isDown ? 1 : 0);
+    const dy = (c.down?.isDown ? 1 : 0) - (c.up?.isDown ? 1 : 0);
+    if (dx === 0 && dy === 0) return null;
+    this.moveTarget = null;
+    return Math.atan2(dy, dx);
   }
 
   /** 本帧移动方向（弧度）；无目标或已到达时返回 null */
@@ -2609,7 +2626,7 @@ export class StageBattleScene extends Phaser.Scene {
 
     const stats = aggregatedStats(this.state);
     const speed = moveSpeed(stats.speed ?? 0);
-    const dir = this.steerVelocity();
+    const dir = this.keyDirection() ?? this.steerVelocity();
     const vx = dir === null ? 0 : Math.cos(dir) * speed;
     const vy = dir === null ? 0 : Math.sin(dir) * speed;
     this.player.setVelocity(vx, vy);
