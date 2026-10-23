@@ -129,7 +129,7 @@ export function effectiveStats(item: EquipmentItem): AttrSet {
 let itemSeq = 0;
 
 export interface DropEquipOpts {
-  /** BOSS 的保底掉落：等级 = BOSS 等级，品质固定神话 */
+  /** BOSS 的保底掉落：等级 = BOSS 等级，品质按 70% 传说 / 30% 神话 roll */
   bossGuarantee?: boolean;
   /** 品质下限（BOSS 的额外判定保底优秀起，学贪婪洞窟"BOSS 必掉金色以上"） */
   minRarity?: RarityKey;
@@ -141,7 +141,7 @@ export interface DropEquipOpts {
  * 由怪物等级掉落一件装备：
  * - 装备等级 ∈ [所属关卡最低等级, 怪等级]；品质在等级封顶的档位里按权重 roll；
  * - 词条数与点数倍率由品质决定（见 BALANCE.RARITY_AFFIXES / RARITY_POINT_MULT）；
- * - bossGuarantee 是 BOSS 的保底掉落：直接给怪等级 + 神话，作为里程碑奖励。
+ * - bossGuarantee 是 BOSS 的保底掉落：直接给怪等级 + 传说/神话（7:3），作为里程碑奖励。
  */
 export function dropEquipment(
   monsterLevel: number,
@@ -152,7 +152,9 @@ export function dropEquipment(
     ? Math.max(1, Math.floor(monsterLevel))
     : rollDropLevel(monsterLevel, rng);
   const rarity = opts.bossGuarantee
-    ? 'myth'
+    ? rng() < BALANCE.BOSS_GUARANTEE_LEGEND_CHANCE
+      ? 'legend'
+      : 'myth'
     : rollRarity(maxRarityOfLevel(level), rng, opts.minRarity, opts.allowMyth);
   const tier = TIER_INDEX[rarity];
   const budget = Math.max(1, Math.round(level * BALANCE.RARITY_POINT_MULT[tier]!));

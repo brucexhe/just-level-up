@@ -177,6 +177,11 @@ export const BALANCE = {
   /** BOSS 保底掉几件装备（BOSS 每 10 级才一只，作为里程碑奖励） */
   BOSS_EQUIP_GUARANTEE: 1,
   /**
+   * BOSS 保底装备的品质：传说（金色）70% / 神话 30%。
+   * 不再是固定神话 —— 神话留作低频里程碑，同时保证 BOSS 保底必出金色以上。
+   */
+  BOSS_GUARANTEE_LEGEND_CHANCE: 0.7,
+  /**
    * 品质权重表，顺序 = 普通/优秀/稀有/史诗/传说/神话（index 与 equipment.ts 的
    * TIER_ORDER 对齐）。参考《贪婪洞窟》的陡峭衰减：每往上一档大约砍 60-70%，
    * 让史诗以上是"事件"、神话是"里程碑"，而不是每关都出。

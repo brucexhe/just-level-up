@@ -224,7 +224,8 @@ describe('装备品质（贪婪洞窟式：品质 = 权重 roll + 词条数 + �
     for (let i = 0; i < 200; i++) {
       expect(dropEquipment(21).rarity).toBe('common'); // 段首封顶普通
     }
-    // 等级先均匀 roll ∈ [21,26] 再封顶，期望 ≈ 普通 78% / 优秀 19% / 稀有 3.5%
+    // 等级先均匀 roll ∈ [21,26] 再封顶：21-22 必普通、23-24 封顶优秀、25-26 封顶稀有
+    // 权重 [50,30,15,10,5,1] → 期望 ≈ 普通 71.7% / 优秀 23.0% / 稀有 5.3%
     let c = 0, f = 0, r = 0;
     for (let i = 0; i < 3000; i++) {
       const it = dropEquipment(26);
@@ -233,12 +234,12 @@ describe('装备品质（贪婪洞窟式：品质 = 权重 roll + 词条数 + �
       else if (it.rarity === 'rare') r++;
       else throw new Error(`26 级普通怪不该掉 ${it.rarity}`);
     }
-    expect(c / 3000).toBeGreaterThan(0.74);
-    expect(c / 3000).toBeLessThan(0.82);
-    expect(f / 3000).toBeGreaterThan(0.15);
-    expect(f / 3000).toBeLessThan(0.22);
-    expect(r / 3000).toBeGreaterThan(0.02);
-    expect(r / 3000).toBeLessThan(0.05);
+    expect(c / 3000).toBeGreaterThan(0.68);
+    expect(c / 3000).toBeLessThan(0.76);
+    expect(f / 3000).toBeGreaterThan(0.19);
+    expect(f / 3000).toBeLessThan(0.27);
+    expect(r / 3000).toBeGreaterThan(0.03);
+    expect(r / 3000).toBeLessThan(0.08);
   });
 
   it('总点数 = round(等级 × 品质倍率)，词条数 = 品质词条数', () => {
@@ -252,12 +253,29 @@ describe('装备品质（贪婪洞窟式：品质 = 权重 roll + 词条数 + �
     }
   });
 
-  it('BOSS 保底装备 = BOSS 等级 + 神话（4 条、×2.2）', () => {
-    const it = dropEquipment(30, fixed(0.5), { bossGuarantee: true });
-    expect(it.level).toBe(30);
-    expect(it.rarity).toBe('myth');
-    expect(totalPoints(it)).toBe(Math.round(30 * BALANCE.RARITY_POINT_MULT[5]!));
-    expect(Object.keys(it.stats).length).toBe(BALANCE.RARITY_AFFIXES[5]!);
+  it('BOSS 保底装备 = BOSS 等级 + 传说/神话（7:3）', () => {
+    const legend = dropEquipment(30, fixed(0.69), { bossGuarantee: true });
+    expect(legend.level).toBe(30);
+    expect(legend.rarity).toBe('legend');
+    expect(totalPoints(legend)).toBe(Math.round(30 * BALANCE.RARITY_POINT_MULT[4]!));
+    expect(Object.keys(legend.stats).length).toBe(BALANCE.RARITY_AFFIXES[4]!);
+
+    const myth = dropEquipment(30, fixed(0.7), { bossGuarantee: true });
+    expect(myth.level).toBe(30);
+    expect(myth.rarity).toBe('myth');
+    expect(totalPoints(myth)).toBe(Math.round(30 * BALANCE.RARITY_POINT_MULT[5]!));
+    expect(Object.keys(myth.stats).length).toBe(BALANCE.RARITY_AFFIXES[5]!);
+  });
+
+  it('BOSS 保底品质分布：传说约 70% / 神话约 30%', () => {
+    let legend = 0;
+    const n = 4000;
+    for (let i = 0; i < n; i++) {
+      if (dropEquipment(30, Math.random, { bossGuarantee: true }).rarity === 'legend') legend++;
+    }
+    const p = legend / n;
+    expect(p).toBeGreaterThan(0.66);
+    expect(p).toBeLessThan(0.74);
   });
 
   it('BOSS 额外判定：保底优秀起、可及神话（学"BOSS 必掉金色以上"）', () => {

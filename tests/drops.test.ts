@@ -23,18 +23,18 @@ function sampleDropRates(n: number, isBoss: boolean) {
 }
 
 describe('掉落概率（装备 / 技能书互斥）', () => {
-  it('掉率常量：装备 12% + 技能书 8% = 总 20%', () => {
-    expect(BALANCE.DROP_EQUIP_CHANCE).toBeCloseTo(0.12);
-    expect(BALANCE.DROP_BOOK_CHANCE).toBeCloseTo(0.08);
+  it('掉率常量：装备 15% + 技能书 5% = 总 20%', () => {
+    expect(BALANCE.DROP_EQUIP_CHANCE).toBeCloseTo(0.15);
+    expect(BALANCE.DROP_BOOK_CHANCE).toBeCloseTo(0.05);
     expect(BALANCE.DROP_EQUIP_CHANCE + BALANCE.DROP_BOOK_CHANCE).toBeCloseTo(0.2);
   });
 
-  it('普通怪：装备约 12%、技能书约 8%，总掉率约 20%', () => {
+  it('普通怪：装备约 15%、技能书约 5%，总掉率约 20%', () => {
     const r = sampleDropRates(40000, false);
-    expect(r.equip).toBeGreaterThan(0.11);
-    expect(r.equip).toBeLessThan(0.13);
-    expect(r.book).toBeGreaterThan(0.07);
-    expect(r.book).toBeLessThan(0.09);
+    expect(r.equip).toBeGreaterThan(0.14);
+    expect(r.equip).toBeLessThan(0.16);
+    expect(r.book).toBeGreaterThan(0.04);
+    expect(r.book).toBeLessThan(0.06);
     expect(r.any).toBeGreaterThan(0.19);
     expect(r.any).toBeLessThan(0.21);
   });
@@ -76,15 +76,15 @@ describe('掉落概率（装备 / 技能书互斥）', () => {
     }
   });
 
-  it('掉落物带等级信息（BOSS 保底 = BOSS 等级 + 神话；书等级 ∈ 关卡段）', () => {
+  it('掉落物带等级信息（BOSS 保底 = BOSS 等级 + 传说；书等级 ∈ 关卡段）', () => {
     for (const ml of [5, 15, 40]) {
       const d = rollDrops(ml, true, () => 0.5);
-      // rng=0.5 已超过普通掉率，只会出 BOSS 保底那一件
+      // rng=0.5 已超过普通掉率，只会出 BOSS 保底那一件；0.5 < 0.7 → 传说
       const eq = d.find((x) => x.kind === 'equip');
       expect(eq).toBeTruthy();
       if (eq && eq.kind === 'equip') {
         expect(eq.item.level).toBe(ml);
-        expect(eq.item.rarity).toBe('myth');
+        expect(eq.item.rarity).toBe('legend');
       }
     }
     const b = rollDrops(12, false, () => BALANCE.DROP_EQUIP_CHANCE + 0.001);
