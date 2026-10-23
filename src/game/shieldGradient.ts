@@ -9,7 +9,14 @@
  * 于是 hypot(nx, ny) = 1 恰好落在椭圆轮廓上 —— 这让"渐变到边缘刚好收住"变成一句判据。
  */
 
-/** 罩的椭圆比例：高 = 宽 × 1.5 */
+/**
+ * 罩的默认椭圆比例：高 = 宽 × 1.5。
+ *
+ * 归一化坐标已经把轮廓拉成任意比例（`hypot(nx, ny) = 1` 永远是那个椭圆），
+ * ASPECT 管的是**装饰**：赤道环、高光、右下加厚要在屏幕上圆，就得把 ny 还原成
+ * 「以半宽为单位」的真实纵向距离 —— `py = ny × (高/宽)`。
+ * 所以改罩子比例时必须把实际比例传进来，否则这些装饰会跟着一起被拉伸。
+ */
 export const ASPECT = 1.5;
 
 export type RGBA = [number, number, number, number];
@@ -87,8 +94,8 @@ function sampleShell(r: number): RGBA {
  * ② 右下加密：球面在这一侧更厚。
  * 注意是"加厚"不是"加阴影" —— 发光体加暗色会脏，且会引入金系之外的第 6 档颜色。
  */
-function lowerRight(nx: number, ny: number, r: number): RGBA {
-  const py = ny * ASPECT;
+function lowerRight(nx: number, ny: number, r: number, aspect: number): RGBA {
+  const py = ny * aspect;
   const ang = Math.atan2(py, nx); // 真实角度（屏幕坐标 y 向下为正）
   const from = 0.05 * Math.PI; // ≈9°  右侧
   const to = 0.55 * Math.PI; // ≈99° 正下方
@@ -105,11 +112,11 @@ function lowerRight(nx: number, ny: number, r: number): RGBA {
  * 画成压扁的椭圆环而不是水平直线，这样两端会自然贴到罩壁上，
  * 读起来是"套在罩子上的一圈箍"。
  */
-function equatorRing(nx: number, ny: number): RGBA {
-  const py = ny * ASPECT;
-  const ringCY = -0.1 * ASPECT; // 略高于几何赤道：角色腰带/剑格本身就是 0xe8c84a，压在 y=0 会撞成一片金
+function equatorRing(nx: number, ny: number, aspect: number): RGBA {
+  const py = ny * aspect;
+  const ringCY = -0.1 * aspect; // 略高于几何赤道：角色腰带/剑格本身就是 0xe8c84a，压在 y=0 会撞成一片金
   const rx = 0.95;
-  const ry = 0.13 * ASPECT;
+  const ry = 0.13 * aspect;
   const ey = (py - ringCY) / ry;
   const d = Math.hypot(nx / rx, ey); // d = 1 落在环线上
   const front = ey > 0; // 靠近镜头的下半弧更亮更粗，后半是罩子背面
@@ -124,10 +131,10 @@ function equatorRing(nx: number, ny: number): RGBA {
  * ④ 左上柔边高光（最后画，压在最上层）。
  * 必须柔边收到 0 —— 硬边会变成"贴了一块白纸"，能量罩的高光是散射的。
  */
-function highlight(nx: number, ny: number): RGBA {
-  const py = ny * ASPECT;
+function highlight(nx: number, ny: number, aspect: number): RGBA {
+  const py = ny * aspect;
   const relX = nx - -0.36; // 中心偏移：头顶左上方的罩面上，避开角色头部
-  const relY = py - -0.46 * ASPECT;
+  const relY = py - -0.46 * aspect;
   // 长轴方向 −45°（左下↔右上），垂直于"左上"的半径方向
   const c = Math.cos(-Math.PI / 4);
   const s = Math.sin(-Math.PI / 4);
@@ -155,14 +162,15 @@ function highlight(nx: number, ny: number): RGBA {
  *
  * @param nx -1..1，相对半宽的横向位置
  * @param ny -1..1，相对半高的纵向位置
+ * @param aspect 显示高 / 显示宽，默认 1.5；装饰层靠它换算真实纵横比
  * @returns [r, g, b, a]，a 取 0..1（贴图像素里再乘 255）
  */
-export function shieldShade(nx: number, ny: number): RGBA {
+export function shieldShade(nx: number, ny: number, aspect = ASPECT): RGBA {
   const r = Math.hypot(nx, ny);
   if (r > 1) return [0, 0, 0, 0]; // 椭圆之外
   let col = sampleShell(r);
-  col = over(col, lowerRight(nx, ny, r));
-  col = over(col, equatorRing(nx, ny));
-  col = over(col, highlight(nx, ny));
+  col = over(col, lowerRight(nx, ny, r, aspect));
+  col = over(col, equatorRing(nx, ny, aspect));
+  col = over(col, highlight(nx, ny, aspect));
   return col;
 }

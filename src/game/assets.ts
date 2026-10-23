@@ -106,17 +106,22 @@ function smoothstep(x: number): number {
 }
 
 /**
- * 护盾罩的显示尺寸：宽 60、高 90，严格 1 : 1.5 的竖长椭圆。
+ * 护盾罩的显示尺寸：宽 60、高 68。
  *
- * 为什么是这个数而不是更大 —— 横向要不切掉 48px 宽的角色（还带一把右伸的剑），
- * 半横轴至少 ~24；一旦定了宽，1:1.5 就把半纵轴锁到 ~36，而角色脚线在 +20，
- * 所以**罩心钉在角色中心时罩底必然压到脚下阴影，尺寸越大压得越狠**。
- * 结论：宽度加到横向余量够（左右各 7-8px）就停，纵向多出来的空间让给头顶。
+ * 宽度维持 60 不动 —— 横向要不切掉 48px 宽的角色（还带一把右伸的剑），半横轴至少 ~24。
+ * 高度从 90 收到 68：旧的 90 配 offsetY -8，罩顶到 y-53，而人物等级标签就在 y-44，
+ * 整整一行字压在菲涅尔亮边（全罩最亮、alpha 0.95）上，等于被罩子刷掉。
+ * 68 → 半纵轴 34，罩顶 y-32：头顶（y-24）留 8px 余量，等级标签彻底在罩子外面。
+ *
+ * 纵横比因此不再是 1 : 1.5，所以烘焙时必须把**实际比例**传给着色函数：
+ * 赤道环 / 高光 / 右下加厚都是按「半宽为单位」算的，不传就会跟着一起被拉扁。
  */
 export const SHIELD_DISP_W = 60;
-export const SHIELD_DISP_H = 90;
+export const SHIELD_DISP_H = 68;
 /** 超采样倍数：贴图 = 显示 × 4，配合 LINEAR 让渐变不出现色阶断层 */
 export const SHIELD_TEX_SS = 4;
+/** 罩的实际纵横比（高 / 宽），shieldShade 用它换算装饰层的真实形状 */
+export const SHIELD_ASPECT = SHIELD_DISP_H / SHIELD_DISP_W;
 
 /**
  * 护盾罩（参考热血传奇法师的魔法盾）：金色椭圆 + 从外到内的渐变。
@@ -140,7 +145,7 @@ export function bakeShieldOrb(scene: Phaser.Scene): void {
     const ny = (y + 0.5 - cy) / cy;
     for (let x = 0; x < w; x++) {
       const nx = (x + 0.5 - cx) / cx;
-      const c = shieldShade(nx, ny);
+      const c = shieldShade(nx, ny, SHIELD_ASPECT);
       const i = (y * w + x) * 4;
       px[i] = c[0];
       px[i + 1] = c[1];
