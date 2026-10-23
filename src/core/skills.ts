@@ -53,9 +53,9 @@ export function skillPower(def: SkillDef, level: number): number {
   return def.power * skillPowerCoef(level);
 }
 
-/** 技能当前等级的附加数值（半径 / 时长）：每级 +1 */
-export function skillValue(def: SkillDef, level: number): number {
-  return def.value + Math.max(0, level - 1);
+/** 技能的固定附加数值（Buff / DoT 时长 ms）。时长不随等级成长 —— 等级只加威力（毒刃半径另走 POISON_RADIUS_*）。 */
+export function skillValue(def: SkillDef): number {
+  return def.value;
 }
 
 /** 技能当前等级的法力消耗 */
@@ -68,24 +68,19 @@ export function skillUpgradeCost(level: number): number {
   return Math.max(1, level);
 }
 
-/** 技能当前等级的效果描述 */
+/** 技能当前等级的效果描述（百分比口径：威力 ×100 = 百分数） */
 export function describeSkill(def: SkillDef, level: number): string {
-  const p = skillPower(def, level);
+  const pct = Math.round(skillPower(def, level) * 100);
+  const dur = `${Math.round(def.value / 1000)} 秒`;
   switch (def.school) {
     case 'physical':
-      return `造成 物攻 ×${p.toFixed(2)} 的物理伤害，攻速由敏捷决定。`;
+      return `造成 ${pct}% 物攻的物理伤害，攻速由敏捷决定。`;
     case 'magical':
-      return `造成 法攻 ×${p.toFixed(2)} 的法术伤害，爆炸半径 ${Math.round(
-        skillValue(def, level),
-      )} px。`;
+      return `造成 ${pct}% 法攻的法术伤害（单体追踪）。`;
     case 'buff':
-      return `持续 ${(skillValue(def, level) / 1000).toFixed(1)} 秒内，攻击力 +${Math.round(
-        p * 100,
-      )}%，攻击/施法速度 +${Math.round(p * 100)}%。`;
+      return `${dur}内攻击力与攻击/施法速度 +${pct}%。`;
     case 'dot':
-      return `${(skillValue(def, level) / 1000).toFixed(1)} 秒内每 0.5 秒造成 法攻 ×${p.toFixed(
-        2,
-      )} 的法术伤害。`;
+      return `${dur}内每 0.5 秒造成 ${pct}% 法攻的法术伤害，毒雾半径随等级扩大。`;
     default:
       return def.desc;
   }

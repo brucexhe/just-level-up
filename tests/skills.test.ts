@@ -157,13 +157,18 @@ describe('技能书 / 技能点', () => {
     expect(skillPower(fire, 200) / skillPower(fire, 1)).toBeCloseTo(2.97, 2);
   });
 
-  it('附加数值：每级 +1', () => {
-    const fire = SKILL_BY_ID.fireball; // base 90（爆炸半径）
-    expect(skillValue(fire, 1)).toBe(90);
-    expect(skillValue(fire, 10)).toBe(99);
-    expect(skillValue(fire, 100)).toBe(189);
-    const poison = SKILL_BY_ID.poison; // base 4000（持续时间 ms）
-    expect(skillValue(poison, 100)).toBe(4099);
+  it('附加数值固定不随等级成长（毒刃半径另走 POISON_RADIUS_*）', () => {
+    const fire = SKILL_BY_ID.fireball; // 单体后无附加数值
+    expect(skillValue(fire)).toBe(0);
+    const poison = SKILL_BY_ID.poison; // 固定 5 秒（ms）
+    expect(skillValue(poison)).toBe(5000);
+  });
+
+  it('毒刃每跳 = (10 + 等级/10)% 法攻：底数 10%，41 级 14.1%', () => {
+    expect(SKILL_BY_ID.poison.power).toBe(0.1);
+    expect(skillPower(SKILL_BY_ID.poison, 1)).toBeCloseTo(0.101, 5);
+    expect(skillPower(SKILL_BY_ID.poison, 41)).toBeCloseTo(0.141, 5);
+    expect(skillPower(SKILL_BY_ID.poison, 1000)).toBeCloseTo(1.1, 5);
   });
 
   it('技能点升级消耗 = 当前等级，且威力随等级成长', () => {

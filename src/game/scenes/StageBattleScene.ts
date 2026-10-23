@@ -1594,7 +1594,7 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   private castFrenzy(lv: number) {
-    this.frenzyUntil = this.time.now + skillValue(SKILL_BY_ID.frenzy, lv);
+    this.frenzyUntil = this.time.now + skillValue(SKILL_BY_ID.frenzy);
     this.cameras.main.flash(140, 255, 120, 220);
     audio.play('frenzy');
     this.ui.toast(`狂暴！攻击与攻速 +${Math.round((this.frenzyMult() - 1) * 100)}%`, '#ff9fd8');
@@ -1674,7 +1674,7 @@ export class StageBattleScene extends Phaser.Scene {
     const cx = target.sprite.x;
     const cy = target.sprite.y;
     const radius = POISON_RADIUS_BASE + POISON_RADIUS_GROWTH * (lv - 1);
-    const duration = skillValue(SKILL_BY_ID.poison, lv);
+    const duration = skillValue(SKILL_BY_ID.poison);
     const power =
       (stats.mAtk ?? 1) * skillPower(SKILL_BY_ID.poison, lv) * this.frenzyMult();
 
@@ -1777,8 +1777,14 @@ export class StageBattleScene extends Phaser.Scene {
     this.fireballs.set(fb, { target, trail });
 
     const mAtk = (stats.mAtk ?? 1) * this.frenzyMult();
-    this.physics.add.overlap(fb, this.monsterGroup, () => {
-      this.explodeFireball(fb, trail, mAtk, lv);
+    // 单体锁定：穿过无关的怪，只有撞上锁定的目标才爆裂；
+    // 目标中途被打死就一路飞到超时自然消散（updateFireballs 会停止追踪）
+    this.physics.add.overlap(fb, this.monsterGroup, (_fb, obj) => {
+      const view = (obj as Phaser.Physics.Arcade.Sprite).getData('view') as
+        | MonsterView
+        | undefined;
+      if (view !== target) return;
+      this.explodeFireball(fb, trail, mAtk, lv, target);
     });
     // 兜底回收：飞过头 / 目标中途死了，火球不会一直留在场上
     this.time.delayedCall(2200, () => this.retireFireball(fb));
@@ -1827,6 +1833,7 @@ export class StageBattleScene extends Phaser.Scene {
     trail: Phaser.GameObjects.Particles.ParticleEmitter,
     mAtk: number,
     lv: number,
+    target: MonsterView,
   ) {
     const px = fb.x;
     const py = fb.y;
@@ -1845,18 +1852,15 @@ export class StageBattleScene extends Phaser.Scene {
 
     this.cameras.main.shake(90, 0.005);
 
-    const radius = skillValue(SKILL_BY_ID.fireball, lv);
-    for (const m of [...this.monsters]) {
-      const d = Phaser.Math.Distance.Between(px, py, m.sprite.x, m.sprite.y);
-      if (d > radius) continue;
-      const dmg = computeDamage({
-        attack: mAtk * skillPower(SKILL_BY_ID.fireball, lv),
-        defense: m.data.stats.mDef ?? 0,
-        attackerLevel: this.state.level,
-      });
-      const angle = Phaser.Math.Angle.Between(px, py, m.sprite.x, m.sprite.y);
-      this.applyDamage(m, dmg, angle);
-    }
+    // 单体结算：目标中途被打死就是一发空爆，只有视觉没有伤害
+    if (!target.sprite.active) return;
+    const dmg = computeDamage({
+      attack: mAtk * skillPower(SKILL_BY_ID.fireball, lv),
+      defense: target.data.stats.mDef ?? 0,
+      attackerLevel: this.state.level,
+    });
+    const angle = Phaser.Math.Angle.Between(px, py, target.sprite.x, target.sprite.y);
+    this.applyDamage(target, dmg, angle);
   }
 
   // ---------- 战斗 ----------

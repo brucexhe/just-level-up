@@ -14,7 +14,7 @@ export interface SkillDef {
   cdMs: number;
   /** 威力系数（1 级）：每级 +1% 基数，100 级才翻倍 */
   power: number;
-  /** 附加数值（AoE 半径 px / Buff 时长 ms / DoT 时长 ms）：每级 +1 */
+  /** 固定附加数值（Buff / DoT 时长 ms）：不随等级成长；毒刃的毒雾半径另走 POISON_RADIUS_* */
   value: number;
   /** 未习得时的说明 */
   desc: string;
@@ -44,8 +44,8 @@ export const SKILLS: SkillDef[] = [
     mpCostGrowth: 0.6,
     cdMs: 2500,
     power: 1,
-    value: 90,
-    desc: '需先用左键选中一只怪：火球会自动追向它，命中后范围爆裂，法术伤害。',
+    value: 0,
+    desc: '需先用左键选中一只怪：火球会自动追向它，命中后造成单体法术伤害。',
   },
   {
     id: 'frenzy',
@@ -69,9 +69,9 @@ export const SKILLS: SkillDef[] = [
     mpCost: 3,
     mpCostGrowth: 0.5,
     cdMs: 6000,
-    power: 0.5,
-    value: 4000,
-    desc: '需先选中一只怪：以它为中心撒出毒雾，范围内所有怪持续中毒，每 0.5 秒结算一次法术伤害。',
+    power: 0.1,
+    value: 5000,
+    desc: '需先选中一只怪：以它为中心撒出毒雾（半径随技能等级扩大），5 秒内范围内所有怪每 0.5 秒受到法术伤害。',
   },
 ];
 

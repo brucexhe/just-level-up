@@ -403,11 +403,9 @@ const skillsPanel: PanelDef = {
                 2,
               )}</b></div>
               <div class="kv"><span>附加数值</span><b class="num">${
-                def.school === 'magical'
-                  ? `${Math.round(skillValue(def, lv))} px`
-                  : def.school === 'buff' || def.school === 'dot'
-                    ? `${(skillValue(def, lv) / 1000).toFixed(1)} s`
-                    : '—'
+                def.school === 'buff' || def.school === 'dot'
+                  ? `${Math.round(skillValue(def) / 1000)} s`
+                  : '—'
               }</b></div>
             </div>
             ${tail}
