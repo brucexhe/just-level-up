@@ -454,6 +454,13 @@ const skillsPanel: PanelDef = {
 
 // ----------------------------- 背包 -----------------------------
 
+/** 神话（红色）装备的卖出确认：点「卖出」后按钮换成「确认卖出 / 取消」，直到明确选择才复位 */
+let mythSellArmed: string | null = null;
+
+function isMythSellArmed(it: EquipmentItem): boolean {
+  return it.rarity === 'myth' && mythSellArmed === it.id;
+}
+
 function equipmentRows(s: GameState): string {
   if (s.inventory.length === 0) {
     return `<div class="bag-empty">背包里还没有装备，去打怪吧</div>`;
@@ -484,6 +491,7 @@ function equipmentRows(s: GameState): string {
       const tip = cur
         ? `当前：${esc(cur.name)} · 总点数 ${fmtNum(curPts)}`
         : '该部位空着';
+      const sellArmed = isMythSellArmed(it);
       return `<div class="bag-item" style="border-color:${r.color}44">
         <div class="bi-top">
           <div class="bi-ico" style="border-color:${r.color}66">${SLOT_META[it.slot].icon}</div>
@@ -502,9 +510,16 @@ function equipmentRows(s: GameState): string {
           <button class="btn gold" data-act="equip" data-arg="${it.id}"${
             blocked ? ' disabled' : ''
           }>${blocked ? '等级不足' : '穿戴'}</button>
-          <button class="btn danger" data-act="sell-item" data-arg="${it.id}">卖出 +${fmtNum(
-            Math.max(1, Math.floor(totalPoints(it) * BALANCE.SELL_REFUND_RATE)),
-          )}</button>
+          ${
+            sellArmed
+              ? `<div class="confirm-group">
+                   <button class="btn danger confirm" data-act="sell-item" data-arg="${it.id}">确认卖出</button>
+                   <button class="btn cancel" data-act="cancel-sell" data-arg="${it.id}">取消</button>
+                 </div>`
+              : `<button class="btn danger" data-act="sell-item" data-arg="${it.id}">卖出 +${fmtNum(
+                  Math.max(1, Math.floor(totalPoints(it) * BALANCE.SELL_REFUND_RATE)),
+                )}</button>`
+          }
         </div>
       </div>`;
     })
@@ -620,10 +635,23 @@ const bagPanel: PanelDef = {
       case 'sell-item': {
         const it = s.inventory.find((x) => x.id === arg);
         if (it) {
+          // 红色神话是 BOSS 里程碑掉落，卖出不可撤销：先换成「确认卖出 / 取消」
+          if (it.rarity === 'myth' && !isMythSellArmed(it)) {
+            mythSellArmed = it.id;
+            api.toast(`神话装备卖出后不可撤销：${it.name}`, '#ff8a8a');
+            api.refresh();
+            break;
+          }
+          mythSellArmed = null;
           const got = sellInventoryItem(s, it);
           api.toast(`卖出 ${it.name}，+${got} 自由装备点`, '#ffd93d');
           api.refresh();
         }
+        break;
+      }
+      case 'cancel-sell': {
+        if (mythSellArmed === arg) mythSellArmed = null;
+        api.refresh();
         break;
       }
       case 'use-book': {

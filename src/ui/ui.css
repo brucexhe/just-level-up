@@ -1049,6 +1049,19 @@
   flex: 1;
   text-align: center;
 }
+/* 卖出确认组：整体占原「卖出」按钮的位置（与「穿戴」对半分），内部按 2/3 + 1/3 分 */
+.bag-item .bi-acts .confirm-group {
+  flex: 1; 
+  display: flex;
+  gap: 5px; 
+}
+.bag-item .bi-acts .confirm-group .btn.confirm {
+  flex: 1;
+  padding:0px 11px;
+}
+.bag-item .bi-acts .confirm-group .btn.cancel {
+   
+}
 .bag-empty {
   padding: 26px 0;
   text-align: center;

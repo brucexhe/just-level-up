@@ -317,6 +317,54 @@ describe('面板渲染（headless 字符串校验）', () => {
     expect(Object.keys(s.equipped).length).toBe(1);
   });
 
+  it('背包卖出神话（红色）装备：卖出按钮换成确认卖出 / 取消', () => {
+    const s = createInitialState();
+    const myth = dropEquipment(10, () => 0.7, { bossGuarantee: true });
+    expect(myth.rarity).toBe('myth');
+    s.inventory.push(myth);
+    const { api, view } = fakeApi(() => s);
+    view.bagTab = 'equip';
+
+    let html = PANEL_BY_ID.bag.render(s, api);
+    expect(html).toContain('卖出 +');
+    expect(html).not.toContain('确认卖出');
+
+    // 第一次点「卖出」：换成确认 / 取消两个按钮，物品还在
+    PANEL_BY_ID.bag.action('sell-item', myth.id, s, api);
+    expect(s.inventory).toContain(myth);
+    html = PANEL_BY_ID.bag.render(s, api);
+    expect(html).toContain('confirm-group');
+    expect(html).toContain(`data-act="sell-item" data-arg="${myth.id}">确认卖出`);
+    expect(html).toContain(`data-act="cancel-sell" data-arg="${myth.id}">取消`);
+
+    // 点「取消」：恢复成普通卖出按钮，不卖
+    PANEL_BY_ID.bag.action('cancel-sell', myth.id, s, api);
+    html = PANEL_BY_ID.bag.render(s, api);
+    expect(html).toContain('卖出 +');
+    expect(html).not.toContain('确认卖出');
+    expect(s.inventory).toContain(myth);
+
+    // 再点一次卖出并确认，才真的卖掉
+    PANEL_BY_ID.bag.action('sell-item', myth.id, s, api);
+    PANEL_BY_ID.bag.action('sell-item', myth.id, s, api);
+    expect(s.inventory).not.toContain(myth);
+    expect(s.equipPoints).toBeGreaterThan(0);
+  });
+
+  it('背包卖出传说（金色）及以下装备直接成交', () => {
+    const s = createInitialState();
+    const legend = dropEquipment(10, () => 0, { bossGuarantee: true });
+    expect(legend.rarity).toBe('legend');
+    s.inventory.push(legend);
+    const { api, view } = fakeApi(() => s);
+    view.bagTab = 'equip';
+
+    expect(PANEL_BY_ID.bag.render(s, api)).not.toContain('确认卖出');
+    PANEL_BY_ID.bag.action('sell-item', legend.id, s, api);
+    expect(s.inventory).not.toContain(legend);
+    expect(s.equipPoints).toBeGreaterThan(0);
+  });
+
   it('背包技能书：等级高于人物等级时标「需 Lv」并禁用穿戴', () => {
     const s = createInitialState();
     s.level = 5;
