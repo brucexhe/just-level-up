@@ -17,6 +17,7 @@ import {
   artStageOf,
   stageDef,
   stageName,
+  stageStars,
 } from '../src/data/stages';
 import { normalizeState } from '../src/state/save';
 
@@ -89,16 +90,25 @@ describe('关卡与怪物刷新', () => {
     expect(new Set(STAGES.map((s) => s.ground.base)).size).toBe(10);
   });
 
-  it('第 11 关起是第 10 关的强化版：地形怪物沿用，等级继续涨', () => {
-    expect(artStageOf(11)).toBe(10);
-    expect(artStageOf(25)).toBe(10);
+  it('第 11 关起每 10 关一轮循环：美术回圈复用，名字加★，等级继续涨', () => {
+    expect(artStageOf(11)).toBe(1);
+    expect(artStageOf(20)).toBe(10);
+    expect(artStageOf(21)).toBe(1);
+    expect(artStageOf(25)).toBe(5);
     expect(artStageOf(10)).toBe(10);
     expect(artStageOf(3)).toBe(3);
-    // 美术复用第 10 关，但等级段继续往上
-    expect(stageDef(11)).toBe(stageDef(10));
+    // 美术回圈复用，但等级段继续往上
+    expect(stageDef(11)).toBe(stageDef(1));
     expect(levelBandOfStage(11)).toEqual([101, 110]);
     expect(levelBandOfStage(12)).toEqual([111, 120]);
-    expect(stageName(11)).toBe(stageName(10));
+    // 强化轮数：11-20 关一星、21-30 关两星
+    expect(stageStars(10)).toBe(0);
+    expect(stageStars(11)).toBe(1);
+    expect(stageStars(20)).toBe(1);
+    expect(stageStars(21)).toBe(2);
+    expect(stageName(10)).toBe('星界');
+    expect(stageName(11)).toBe('草原★');
+    expect(stageName(21)).toBe('草原★★');
   });
 
   it('每日 0 点刷新：击杀进度与 BOSS 归属日清零，永久通关标记保留', () => {

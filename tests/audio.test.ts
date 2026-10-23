@@ -267,8 +267,10 @@ describe('10 个关卡各一首 BGM', () => {
     expect(musicThemeForStage(1).name).toBe('草原');
     expect(musicThemeForStage(6).name).toBe('火山');
     expect(musicThemeForStage(10).name).toBe('星界');
-    expect(musicThemeForStage(11)).toBe(musicThemeForStage(10));
-    expect(musicThemeForStage(999)).toBe(musicThemeForStage(10));
+    // 第 11 关起每 10 关一轮循环：第 11 关回到草原曲
+    expect(musicThemeForStage(11)).toBe(musicThemeForStage(1));
+    expect(musicThemeForStage(20)).toBe(musicThemeForStage(10));
+    expect(musicThemeForStage(999)).toBe(musicThemeForStage(9));
     expect(musicThemeForStage(0).name).toBe('草原');
   });
 

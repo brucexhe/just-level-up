@@ -280,7 +280,7 @@ export const CHORDS: Chord[] = MUSIC_THEMES[0]!.chords;
 
 /** 按关卡取 BGM 主题；第 11 关及以后沿用第 10 关（星界） */
 export function musicThemeForStage(stage: number): MusicTheme {
-  const i = Math.min(Math.max(1, Math.floor(stage || 1)), MUSIC_THEMES.length);
+  const i = ((Math.max(1, Math.floor(stage || 1)) - 1) % MUSIC_THEMES.length) + 1;
   return MUSIC_THEMES[i - 1]!;
 }
 

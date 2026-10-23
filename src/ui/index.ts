@@ -14,7 +14,8 @@ import type {
   UIView,
 } from './api';
 import { fmtNum, makeDraggable } from './dom';
-import { STAGES } from '../data/stages';
+import { STAGES, artStageOf, stageDef, stageStars } from '../data/stages';
+import { levelBandOfStage } from '../core/stage';
 import { PANEL_BY_ID, PANELS } from './panels';
 import type { SfxName } from '../game/audio';
 
@@ -233,21 +234,27 @@ export class GameUI {
     if (!force && sig === this.modalSig) return;
     this.modalSig = sig;
     const thumbs = this.opts.stageThumbs();
-    const cards = STAGES.map((st) => {
-      const locked = st.id > d.maxStage;
-      const cur = st.id === d.stage;
-      const thumb = thumbs[st.id] ?? '';
-      return `<button class="stage-card${locked ? ' locked' : ''}${cur ? ' cur' : ''}"
-          ${locked ? 'disabled' : ''} data-act="goto-stage" data-stage="${st.id}">
+    // 1-10 关全部展示（未解锁置灰）；11 关起无限，只多放一张「下一关」预告卡
+    const total = Math.max(STAGES.length, d.maxStage + 1);
+    const cards: string[] = [];
+    for (let k = 1; k <= total; k++) {
+      const def = stageDef(k);
+      const [lo, hi] = levelBandOfStage(k);
+      const stars = stageStars(k);
+      const locked = k > d.maxStage;
+      const cur = k === d.stage;
+      const thumb = thumbs[k] ?? thumbs[artStageOf(k)] ?? '';
+      cards.push(`<button class="stage-card${locked ? ' locked' : ''}${cur ? ' cur' : ''}"
+          ${locked ? 'disabled' : ''} data-act="goto-stage" data-stage="${k}">
         <span class="sc-thumb"${thumb ? ` style="background-image:url(${thumb})"` : ''}></span>
         <span class="sc-body">
-          <span class="sc-nm">${st.id}. ${st.name}${cur ? ' ·当前' : ''}</span>
-          <span class="sc-sub">Lv${st.band[0]}-${st.band[1]} · ${st.monsterName}</span>
+          <span class="sc-nm">${k}. ${def.name}${stars ? `<span class="sc-star">${'★'.repeat(stars)}</span>` : ''}</span>
+          <span class="sc-sub">Lv${lo}-${hi} · ${def.monsterName}</span>
         </span>
         ${locked ? '<span class="sc-lock">🔒</span>' : ''}
-      </button>`;
-    }).join('');
-    this.stageGrid.innerHTML = cards;
+      </button>`);
+    }
+    this.stageGrid.innerHTML = cards.join('');
   }
 
   // ---------------- 构建 ----------------

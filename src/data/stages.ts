@@ -1,9 +1,10 @@
 /**
- * 关卡：一共 10 关，每 10 级一关（第 1 关 Lv1-10 … 第 10 关 Lv91-100）。
+ * 关卡：美术一共 10 套，每 10 级一关（第 1 关 Lv1-10 … 第 10 关 Lv91-100）。
  *
- * 第 11 关及以后是**第 10 关的强化版**：沿用第 10 关的地形与怪物皮肤，
- * 等级继续往上加（见 `levelBandOfStage`）。
- * 这样等级可以无限成长，而美术只要做 10 套。
+ * 第 11 关起**每 10 关一轮循环**：沿用对应关的地形与怪物皮肤
+ * （第 11 关 = 草原、第 12 关 = 森林 …… 第 21 关又回到草原），
+ * 等级继续往上加（见 `levelBandOfStage`），名字后缀 ★ 表示强化轮数
+ * （11-20 关一星、21-30 关两星……）。这样等级可以无限成长，而美术只要做 10 套。
  *
  * 每关三件事不一样：地面配色、障碍物、怪物皮肤。
  */
@@ -70,7 +71,7 @@ export interface StageDef {
   desc: string;
 }
 
-/** 美术关卡数量：第 11 关起复用第 10 关 */
+/** 美术关卡数量：10 套皮肤，第 11 关起按 10 关一轮循环使用 */
 export const STAGE_COUNT = 10;
 
 export const STAGES: StageDef[] = [
@@ -266,17 +267,25 @@ export const STAGES: StageDef[] = [
   },
 ];
 
-/** 第 k 关的定义；k > 10 复用第 10 关（强化版） */
-export function stageDef(k: number): StageDef {
-  const i = Math.min(Math.max(1, Math.floor(k)), STAGE_COUNT);
-  return STAGES[i - 1]!;
-}
-
-export function stageName(k: number): string {
-  return stageDef(k).name;
-}
-
-/** 地形/怪物用的关卡序号（11+ 一律按第 10 关渲染） */
+/** 第 k 关用的美术关序号：1-10 循环（11→1、20→10、21→1） */
 export function artStageOf(k: number): number {
-  return Math.min(Math.max(1, Math.floor(k)), STAGE_COUNT);
+  return ((Math.max(1, Math.floor(k)) - 1) % STAGE_COUNT) + 1;
+}
+
+/** 第 k 关的强化轮数：1-10 关为 0，11-20 关为 1（一星），21-30 关为 2（两星）…… */
+export function stageStars(k: number): number {
+  return Math.floor((Math.max(1, Math.floor(k)) - 1) / STAGE_COUNT);
+}
+
+/**
+ * 第 k 关的定义；k > 10 时按 10 关一轮循环复用（第 11 关用第 1 关的皮肤）。
+ * 注意 `band` 是美术关的等级段，第 11 关起真实等级段要用 `levelBandOfStage(k)`。
+ */
+export function stageDef(k: number): StageDef {
+  return STAGES[artStageOf(k) - 1]!;
+}
+
+/** 关卡名（含强化星标）：第 11 关 = 草原★、第 21 关 = 草原★★ */
+export function stageName(k: number): string {
+  return stageDef(k).name + '★'.repeat(stageStars(k));
 }

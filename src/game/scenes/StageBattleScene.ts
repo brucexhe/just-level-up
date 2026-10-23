@@ -1479,7 +1479,8 @@ export class StageBattleScene extends Phaser.Scene {
       drops: this.groundDrops.map((g) => ({ x: g.x, y: g.y })),
       view: { x: cam.x, y: cam.y, w: cam.width, h: cam.height },
       stage: this.stage,
-      stageName: stageLabel(this.stage),
+      // 小地图标题只显示基础名（不带★）；星标只在选关卡片里出现
+      stageName: stageDef(this.stage).name,
       maxStage: this.maxStage(),
       monstersLeft: this.monsters.length,
     };
