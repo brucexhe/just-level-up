@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { shieldShade } from './shieldGradient';
 import {
   STAGES,
   STAGE_COUNT,
@@ -94,7 +95,7 @@ function bakeCrescent(
   }
   ctx.putImageData(img, 0, 0);
   tex.refresh();
-  // 全局 pixelArt 会把全部纹理锁成 NEAREST（保像素硬边），
+  // pixelArt 会让每个纹理 source 在 init 时被引擎压成 NEAREST（保角色的像素硬边），
   // 但月牙是「放大显示的特效」，单独开 LINEAR 才能吃到超采样的光滑边。
   tex.setFilter(Phaser.Textures.FilterMode.LINEAR);
 }
@@ -102,6 +103,54 @@ function bakeCrescent(
 function smoothstep(x: number): number {
   const t = x < 0 ? 0 : x > 1 ? 1 : x;
   return t * t * (3 - 2 * t);
+}
+
+/**
+ * 护盾罩的显示尺寸：宽 60、高 90，严格 1 : 1.5 的竖长椭圆。
+ *
+ * 为什么是这个数而不是更大 —— 横向要不切掉 48px 宽的角色（还带一把右伸的剑），
+ * 半横轴至少 ~24；一旦定了宽，1:1.5 就把半纵轴锁到 ~36，而角色脚线在 +20，
+ * 所以**罩心钉在角色中心时罩底必然压到脚下阴影，尺寸越大压得越狠**。
+ * 结论：宽度加到横向余量够（左右各 7-8px）就停，纵向多出来的空间让给头顶。
+ */
+export const SHIELD_DISP_W = 60;
+export const SHIELD_DISP_H = 90;
+/** 超采样倍数：贴图 = 显示 × 4，配合 LINEAR 让渐变不出现色阶断层 */
+export const SHIELD_TEX_SS = 4;
+
+/**
+ * 护盾罩（参考热血传奇法师的魔法盾）：金色椭圆 + 从外到内的渐变。
+ *
+ * 和旧的蓝色圆球比：圆→椭圆、蓝→金、删掉呼吸缩放（改成尺寸恒定）。
+ * 着色全部在 shieldGradient.ts 的纯函数里（可单测），这里只负责把像素铺到 canvas 上。
+ */
+export function bakeShieldOrb(scene: Phaser.Scene): void {
+  const key = 'shield';
+  if (scene.textures.exists(key)) return;
+  const w = SHIELD_DISP_W * SHIELD_TEX_SS;
+  const h = SHIELD_DISP_H * SHIELD_TEX_SS;
+  const tex = scene.textures.createCanvas(key, w, h);
+  if (!tex) return;
+  const ctx = tex.getContext();
+  const img = ctx.createImageData(w, h);
+  const px = img.data;
+  const cx = w / 2;
+  const cy = h / 2;
+  for (let y = 0; y < h; y++) {
+    const ny = (y + 0.5 - cy) / cy;
+    for (let x = 0; x < w; x++) {
+      const nx = (x + 0.5 - cx) / cx;
+      const c = shieldShade(nx, ny);
+      const i = (y * w + x) * 4;
+      px[i] = c[0];
+      px[i + 1] = c[1];
+      px[i + 2] = c[2];
+      px[i + 3] = Math.round(c[3] * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  tex.refresh();
+  tex.setFilter(Phaser.Textures.FilterMode.LINEAR);
 }
 
 /** 简单贴图（阴影/粒子/条/面板等） */
@@ -781,6 +830,8 @@ export function bakeProps(scene: Phaser.Scene): void {
 
   // 28/11.5/2.4 的 4 倍超采样版（显示尺寸不变，弧线更光滑）
   bakeCrescent(scene, 'slash', SLASH_TEX_SIZE, 46, 9.6);
+
+  bakeShieldOrb(scene);
 
   // 挥砍时绕角色旋转的刀（水平朝向，靠 rotation 对准目标）
   bakeGrid(

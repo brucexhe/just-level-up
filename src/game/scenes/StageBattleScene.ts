@@ -39,7 +39,11 @@ import {
   bakeProps,
   bakeSimple,
   skinForStage,
+  bakeShieldOrb,
   SLASH_TEX_SIZE,
+  SHIELD_DISP_W,
+  SHIELD_DISP_H,
+  SHIELD_TEX_SS,
 } from '../assets';
 import {
   FIREBALL_SPEED,
@@ -243,21 +247,31 @@ const FRENZY_RING = {
 };
 
 /**
- * 护盾气泡（参考热血传奇的魔法盾）：包住角色的半透明圆球 + 亮边。
- * 角色显示高 48px（半径 24），球半径放到 34 才有"罩子"的余量，不会像紧身圈。
+ * 护盾罩（参考热血传奇法师的魔法盾）：金色椭圆 + 从外到内的渐变。
+ *
+ * 和旧的蓝色圆球比有四处改动：
+ * 1. 圆 → 椭圆（宽 : 高 = 1 : 1.5，贴合站姿人形）
+ * 2. 蓝 → 金（色阶全部取自项目里已有的金系色）
+ * 3. 单色填充 → 渐变：菲涅尔亮边 + 左上柔边高光 + 右下加厚 + 赤道环，四件事撑起立体感
+ * 4. **删掉呼吸缩放** —— 尺寸恒定，生命感改由贴图内部的层次承担
+ *
+ * 渐变本身烘焙在 src/game/shieldGradient.ts 的纯函数里，运行时只管位置和显隐。
+ * 尺寸是「横向刚好不切掉角色的最小值」：再大不但没有更"罩"，反而会变成一枚大蛋。
  */
-const SHIELD_ORB = {
-  radius: 34,
-  color: 0x6ac0ff,
-  fillAlpha: 0.14,
-  rimColor: 0xa8dcff,
-  rimWidth: 2,
-  rimAlpha: 0.9,
-  /** 呼吸周期：幅度压得很小，别抢战斗视线 */
-  periodMs: 900,
-  scaleAmp: 0.025,
-  /** 画在角色本体上面一层：气泡把人物包在里面；怪物仍按 y 排序压在球前面 */
+const SHIELD_DOME = {
+  dispW: SHIELD_DISP_W,
+  dispH: SHIELD_DISP_H,
+  /**
+   * 整体上移 8px：罩心若钉在角色中心，罩底会压过脚下的投影
+   * （半纵轴被 1:1.5 锁到 45，而脚线才在 +22），上移把空间让给头顶。
+   * 必须是整数 —— roundPixels 会 floor 掉小数。
+   */
+  offsetY: -8,
+  /** 画在角色本体上面一层：罩把人物包在里面；更靠前的怪仍按 y 排序压在前面 */
   depthOffset: 0.5,
+  /** 展开 / 消散只动 alpha，绝不动缩放 */
+  fadeInMs: 140,
+  fadeOutMs: 220,
 };
 
 /** ------- 普攻刀光：六层的数值都集中在这里，方便对着美术表逐行核对 ------- */
@@ -437,8 +451,10 @@ export class StageBattleScene extends Phaser.Scene {
   private frenzyUntil = 0;
   /** 护盾截止时刻（0 / 过期 = 未激活） */
   private shieldUntil = 0;
-  /** 护盾气泡（包裹角色的半透明圆球） */
-  private shieldOrb!: Phaser.GameObjects.Arc;
+  /** 护盾罩：金色椭圆渐变贴图，尺寸恒定，跟随角色 */
+  private shieldOrb!: Phaser.GameObjects.Image;
+  /** 淡入淡出的进度 0..1（update 驱动，不用 tween：暂停时 update 早退，自然跟着停） */
+  private shieldFade = 0;
   private cooldowns = new Map<SkillId, number>();
   private bossAtLevel = -1;
   /** 当前关卡（1 起） */
@@ -522,9 +538,12 @@ export class StageBattleScene extends Phaser.Scene {
       .setAlpha(0.8)
       .setDepth(3)
       .setVisible(false);
+    // 护盾：scale 在创建时给一次就再也不动（尺寸恒定），生命感全在贴图的渐变层次里
     this.shieldOrb = this.add
-      .circle(0, 0, SHIELD_ORB.radius, SHIELD_ORB.color, SHIELD_ORB.fillAlpha)
-      .setStrokeStyle(SHIELD_ORB.rimWidth, SHIELD_ORB.rimColor, SHIELD_ORB.rimAlpha)
+      .image(0, 0, 'shield')
+      .setScale(1 / SHIELD_TEX_SS)
+      .setOrigin(0.5)
+      .setAlpha(0)
       .setDepth(5)
       .setVisible(false);
     this.player = this.physics.add.sprite(MAP_SIZE / 2, MAP_SIZE / 2, 'player-a');
@@ -1654,9 +1673,10 @@ export class StageBattleScene extends Phaser.Scene {
   private castShield(lv: number) {
     const pct = Math.round(skillPower(SKILL_BY_ID.shield, lv) * 100);
     this.shieldUntil = this.time.now + skillValue(SKILL_BY_ID.shield);
-    this.cameras.main.flash(140, 120, 200, 255);
+    // 金色推论：亮度与原蓝闪(120,200,255)持平≈182，直接给纯金会闪得更刺眼
+    this.cameras.main.flash(140, 228, 179, 80);
     audio.play('magic');
-    this.ui.toast(`护盾展开！物理/法术抗性 +${pct}%`, '#8fd0ff');
+    this.ui.toast(`护盾展开！物理/法术抗性 +${pct}%`, '#ffd07a');
   }
 
   /**
@@ -2675,7 +2695,7 @@ export class StageBattleScene extends Phaser.Scene {
 
   // ---------- 主循环 ----------
 
-  update(time: number) {
+  update(time: number, delta: number) {
     // 暂停时世界完全静止，但 UI 仍然刷新（面板、小地图照常能看）
     if (this.paused) {
       this.player.setVelocity(0, 0);
@@ -2721,16 +2741,18 @@ export class StageBattleScene extends Phaser.Scene {
     }
     this.updateFrenzyGlow(time, frenzy, glowPulse);
 
-    // 护盾气泡：跟着角色走，呼吸幅度很小；死亡时 shieldUntil 已被清零，这里自然隐藏
+    // 护盾：位置跟随 + 淡入淡出，**尺寸恒定**（旧版的 ±2.5% 呼吸缩放已删）
     const shieldOn = this.shieldActive();
-    this.shieldOrb.setVisible(shieldOn);
-    if (shieldOn) {
-      const k = (Math.sin((time / SHIELD_ORB.periodMs) * Math.PI * 2) + 1) / 2;
+    const step = shieldOn
+      ? delta / SHIELD_DOME.fadeInMs
+      : -delta / SHIELD_DOME.fadeOutMs;
+    this.shieldFade = Phaser.Math.Clamp(this.shieldFade + step, 0, 1);
+    this.shieldOrb.setVisible(this.shieldFade > 0);
+    if (this.shieldFade > 0) {
       this.shieldOrb
-        .setPosition(this.player.x, this.player.y)
-        .setDepth(this.player.y + SHIELD_ORB.depthOffset)
-        .setScale(1 + SHIELD_ORB.scaleAmp * (k * 2 - 1))
-        .setAlpha(0.9 + 0.1 * k);
+        .setPosition(this.player.x, this.player.y + SHIELD_DOME.offsetY)
+        .setDepth(this.player.y + SHIELD_DOME.depthOffset)
+        .setAlpha(this.shieldFade);
     }
 
     // 点击移动卡住检测：持续朝目标转向却 400ms 内几乎没位移 → 被障碍挡住，放弃目标
@@ -2951,9 +2973,11 @@ export class StageBattleScene extends Phaser.Scene {
     this.player.setTexture('player-a');
     this.player.setRotation(Math.PI / 2);
     this.player.setTint(0x8892a0);
-    // 狂暴 / 护盾随死亡熄灭：主动关一次立即生效（update 的边沿检测只是兜底）
+    // 狂暴 / 护盾随死亡熄灭：主动关一次立即生效（暂停时 update 会早退，等不到兜底）
     this.frenzyUntil = 0;
     this.shieldUntil = 0;
+    this.shieldFade = 0;
+    this.shieldOrb.setVisible(false);
     this.toggleFrenzyFx(false);
     this.cameras.main.shake(160, 0.006);
     audio.play('die');
