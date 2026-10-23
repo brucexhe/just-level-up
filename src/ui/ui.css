@@ -1332,6 +1332,13 @@
   filter: grayscale(1);
   opacity: 0.45;
 }
+/* 死亡期间：技能槽与药水槽整体置灰且不可点（与 .locked 同一套置灰参数，视觉语言一致） */
+.bottombar.dead .skill-slot,
+.bottombar.dead .potion-slot {
+  pointer-events: none;
+  filter: grayscale(1);
+  opacity: 0.45;
+}
 .skill-slot.nomp .ss-ico {
   filter: grayscale(0.8) brightness(0.7);
 }
@@ -1800,4 +1807,82 @@
   font-size: 10px;
   color: #7d8aa0;
   text-align: center;
+}
+
+/* ---------- 死亡弹窗 ---------- */
+.modal.death .modal-box {
+  width: 380px;
+}
+.death-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 24px 14px;
+  text-align: center;
+}
+.death-body .d-ico {
+  font-size: 34px;
+  line-height: 1;
+}
+.death-body .d-title {
+  font-size: 16px;
+  letter-spacing: 4px;
+  color: #ff6b6b;
+}
+.death-body .d-killer {
+  font-size: 11px;
+  color: #9aa4b2;
+}
+.death-body .d-q {
+  font-size: 12px;
+  color: #c8d0e0;
+  margin-top: 4px;
+}
+.death-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 6px 20px 20px;
+}
+.death-actions .btn {
+  font-size: 12px;
+  padding: 7px 16px;
+}
+.btn.gold {
+  background: linear-gradient(180deg, #453a12, #2b230e);
+  border-color: #8a7430;
+  color: #ffe08a;
+}
+.btn.gold:hover {
+  background: linear-gradient(180deg, #57481a, #332a12);
+  border-color: #c9a83e;
+  color: #fff3c4;
+}
+
+/* 躺尸期的常驻复活入口：挂在底栏上方，随时反悔回城 */
+.death-lying {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(14, 19, 28, 0.94);
+  border: 1px solid #3a4761;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  z-index: 40;
+  animation: pvIn 0.2s ease-out;
+}
+.death-lying[hidden] {
+  display: none;
+}
+.death-lying .dl-text {
+  font-size: 12px;
+  color: #ff8a8a;
+  letter-spacing: 1px;
 }

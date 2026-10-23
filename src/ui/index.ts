@@ -69,12 +69,18 @@ export class GameUI {
   private docks: Record<DockSide, HTMLElement>;
   private toasts: HTMLElement;
   private skillBar!: HTMLElement;
+  private bottomBar!: HTMLElement;
   private toolBar!: HTMLElement;
   private mapCanvas!: HTMLCanvasElement;
   private mapCtx: CanvasRenderingContext2D | null = null;
   private modal!: HTMLElement;
   private stageGrid!: HTMLElement;
   private modalSig = '';
+  private deathModal!: HTMLElement;
+  private deathLying!: HTMLElement;
+  private deathKiller!: HTMLElement;
+  /** 复活回调由场景注入（复活 = 回城满状态，后续死亡惩罚也挂在这条链路上） */
+  private deathRevive: (() => void) | null = null;
   private open: Record<DockSide, PanelId | null> = { left: null, right: null };
   private skillEls = new Map<SkillId, { root: HTMLElement; cd: HTMLElement; num: HTMLElement }>();
   private toolEls = new Map<PanelId, { btn: HTMLElement; badge?: HTMLElement }>();
@@ -166,6 +172,24 @@ export class GameUI {
           <em>底部工具栏 ⚙ 设置 → 继续游戏</em>
         </div>
       </div>
+      <div class="modal death" data-modal="death" hidden>
+        <div class="modal-box death-box">
+          <div class="death-body">
+            <span class="d-ico">💀</span>
+            <b class="d-title">你被击败了</b>
+            <span class="d-killer" data-death-killer></span>
+            <span class="d-q">是否立即回到复活点复活？</span>
+          </div>
+          <div class="death-actions">
+            <button class="btn gold" data-death="revive">回城复活</button>
+            <button class="btn" data-death="lie">原地躺下</button>
+          </div>
+        </div>
+      </div>
+      <div class="death-lying" hidden>
+        <span class="dl-text">💀 你倒下了，正躺在原地</span>
+        <button class="btn gold" data-death="revive">回城复活</button>
+      </div>
     `;
 
     this.docks = {
@@ -174,6 +198,7 @@ export class GameUI {
     };
     this.toasts = this.root.querySelector('.toasts') as HTMLElement;
     this.skillBar = this.root.querySelector('.skillbar') as HTMLElement;
+    this.bottomBar = this.root.querySelector('.bottombar') as HTMLElement;
     this.toolBar = this.root.querySelector('.toolbar') as HTMLElement;
     this.mapCanvas = this.root.querySelector('.mm-canvas') as HTMLCanvasElement;
     this.mapCtx = this.mapCanvas.getContext('2d');
@@ -205,6 +230,26 @@ export class GameUI {
     // 点遮罩空白处关闭
     this.modal.addEventListener('pointerdown', (e) => {
       if (e.target === this.modal) this.closeStageModal();
+    });
+
+    // 死亡弹窗：必须二选一，点遮罩不关闭（死亡不处理就不能继续玩）
+    this.deathModal = this.root.querySelector('.modal[data-modal="death"]') as HTMLElement;
+    this.deathLying = this.root.querySelector('.death-lying') as HTMLElement;
+    this.deathKiller = this.root.querySelector('[data-death-killer]') as HTMLElement;
+    this.root.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-death]') as HTMLElement | null;
+      if (!btn) return;
+      e.stopPropagation();
+      this.opts.sfx?.('click');
+      if (btn.dataset.death === 'revive') {
+        const cb = this.deathRevive;
+        this.hideDeath();
+        cb?.();
+      } else {
+        // 原地躺下：弹窗收起，留一条常驻入口随时可以反悔回城
+        this.deathModal.hidden = true;
+        this.deathLying.hidden = false;
+      }
     });
 
     this.buildSkillBar();
@@ -763,6 +808,33 @@ export class GameUI {
       el.badge = b;
     }
     el.badge.textContent = fmtNum(n);
+  }
+
+  // ---------------- 死亡弹窗 ----------------
+
+  /**
+   * 人物死亡时弹出。`onRevive` 由场景注入（回城满状态复活），
+   * 「原地躺下」只收起弹窗、不解除死亡状态，复活入口条常驻屏幕。
+   */
+  showDeath(
+    killer: { name: string; level: number; boss: boolean },
+    onRevive: () => void,
+  ): void {
+    this.deathRevive = onRevive;
+    this.deathKiller.textContent = `被 ${killer.boss ? 'BOSS ' : ''}Lv${killer.level} ${killer.name} 击杀`;
+    this.deathModal.hidden = false;
+    this.deathLying.hidden = true;
+    // 死亡期间技能与药水整体置灰、不可点（场景层同时吞掉对应输入，这里负责视觉与点击表达）；
+    // 右侧工具栏保持可用：面板是纯查看，设置里的重置/继续在躺尸时也应该点得动
+    this.bottomBar.classList.add('dead');
+  }
+
+  /** 解除死亡 UI（弹窗 + 躺尸复活条 + 底栏置灰）。场景复活 / 换档 / 重置时调用。 */
+  hideDeath(): void {
+    this.deathModal.hidden = true;
+    this.deathLying.hidden = true;
+    this.deathRevive = null;
+    this.bottomBar.classList.remove('dead');
   }
 
   // ---------------- toast ----------------

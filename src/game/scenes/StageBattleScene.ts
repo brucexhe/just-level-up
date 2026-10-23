@@ -422,6 +422,8 @@ export class StageBattleScene extends Phaser.Scene {
   private paused = false;
   private pausedAt = 0;
   private saveAt = 0;
+  /** 躺尸状态：true 期间人物不可操作、怪物停手，等玩家在弹窗里选择是否复活 */
+  private dead = false;
   /** 静态障碍坐标缓存（小地图用） */
   private obstaclePoints: { x: number; y: number }[] = [];
   /** 地面砖与地图边界（换关时重建） */
@@ -593,6 +595,13 @@ export class StageBattleScene extends Phaser.Scene {
         if (!m) return false;
         this.monsterAttack(m);
         return true;
+      },
+      /** 死亡 / 复活流程（冒烟测试用） */
+      dead: () => this.dead,
+      dieTest: (boss = false) =>
+        this.die({ name: '史莱姆', level: this.stageRange().hi, isBoss: boss }),
+      revive: () => {
+        if (this.dead) this.revive();
       },
       /** 怪物快照（调试用：距离 / 是否在追 / 等级标签与血条可见性） */
       monsters: () =>
@@ -1102,6 +1111,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.input.keyboard!.addCapture('SPACE,Q,W,E,F,Z,X');
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (this.dead) return; // 躺尸期间点击战场无效（弹窗/复活条接管输入）
       if (p.rightButtonDown()) {
         this.attackTarget = null;
         this.moveTarget = { x: p.worldX, y: p.worldY };
@@ -1441,6 +1451,12 @@ export class StageBattleScene extends Phaser.Scene {
     this.aura.setVisible(false);
     this.frenzyOn = false;
     this.hurtUntil = 0;
+    // 恢复备份 / 重置发生在躺尸期间时，把尸体姿势与弹窗一起还原
+    this.dead = false;
+    this.player.setRotation(0);
+    this.player.clearTint();
+    this.player.play('walk-player');
+    this.ui.hideDeath();
     if (this.frenzyGlow) {
       this.tweens.killTweensOf(this.frenzyGlow);
       this.frenzyGlow.outerStrength = 0;
@@ -1488,6 +1504,7 @@ export class StageBattleScene extends Phaser.Scene {
 
   /** 小地图点击 → 世界坐标移动 */
   private moveToWorld(x: number, y: number) {
+    if (this.dead) return;
     const tx = Phaser.Math.Clamp(x, 8, MAP_SIZE - 8);
     const ty = Phaser.Math.Clamp(y, 8, MAP_SIZE - 8);
     this.attackTarget = null;
@@ -1506,6 +1523,7 @@ export class StageBattleScene extends Phaser.Scene {
   // ---------- 技能 ----------
 
   private castSkill(id: SkillId) {
+    if (this.dead) return;
     const s = this.state;
     const lv = skillLevel(s, id);
     if (lv <= 0) {
@@ -1856,6 +1874,7 @@ export class StageBattleScene extends Phaser.Scene {
 
   /** 近战一次；返回是否真的砍出去了 */
   private tryMelee(time: number = this.time.now): boolean {
+    if (this.dead) return false;
     if (time < this.playerNextAttackAt) return false;
     const target = this.meleeTarget();
     if (!target) return false;
@@ -2203,7 +2222,7 @@ export class StageBattleScene extends Phaser.Scene {
 
   /** 走过去拾取：只对距离内的掉落物生效 */
   private updateGroundDrops() {
-    if (this.groundDrops.length === 0) return;
+    if (this.dead || this.groundDrops.length === 0) return;
     const px = this.player.x;
     const py = this.player.y;
     for (const g of [...this.groundDrops]) {
@@ -2303,6 +2322,7 @@ export class StageBattleScene extends Phaser.Scene {
    * 满血满蓝不消耗；没有库存时提示去商店。
    */
   private drinkPotion(kind: PotionKind): void {
+    if (this.dead) return;
     // 先算回复量（喝完之后 hp 变了，但上限不变，先取更直观）
     const heal = potionHealNow(this.state, kind);
     const res = usePotion(this.state, kind);
@@ -2725,6 +2745,13 @@ export class StageBattleScene extends Phaser.Scene {
       // 后面还要 setText，不跳出去就会渲染到已销毁的纹理上
       if (!m.sprite.active) continue;
 
+      // 躺尸期间全场怪停手：不追击、不攻击，原地待机（晃动/血条等照常，世界还在呼吸）
+      if (this.dead) {
+        m.sprite.setVelocity(0, 0);
+        if (m.sprite.anims.isPlaying) m.sprite.anims.stop();
+        continue;
+      }
+
       const d = Phaser.Math.Distance.Between(
         m.sprite.x,
         m.sprite.y,
@@ -2807,20 +2834,59 @@ export class StageBattleScene extends Phaser.Scene {
     // 闪红这 110ms 内：轮廓光压低（见 updateFrenzyGlow），也不要覆写本体 tint
     this.hurtUntil = this.time.now + FRENZY_GLOW.hurtMs;
     this.time.delayedCall(FRENZY_GLOW.hurtMs, () => {
-      if (this.player.active) this.player.clearTint();
+      // 这一击正好致死时，清掉的是 die() 刚铺上的尸体灰化，不能清
+      if (this.player.active && !this.dead) this.player.clearTint();
     });
     audio.play(magic ? 'magic' : 'hurt');
     if (this.state.hp <= 0) {
-      this.state.hp = maxHp(this.state);
-      this.state.mp = maxMp(this.state);
-      this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
-      this.cameras.main.shake(160, 0.006);
-      audio.play('die');
-      this.ui.toast(
-        `被 ${m.name} Lv${m.data.level} ${m.isBoss ? 'BOSS ' : ''}击杀，已回城复活`,
-        '#ff6b6b',
-      );
+      this.die({ name: m.name, level: m.data.level, isBoss: m.isBoss });
     }
+  }
+
+  // ---------- 死亡 / 复活 ----------
+
+  /**
+   * 被击杀：进入躺尸状态，弹窗交给玩家选择，不在场景里直接回城。
+   * 后续的死亡惩罚（掉落/降级之类）挂在这条链路上，只需要改 die() 与弹窗文案。
+   */
+  private die(killer: { name: string; level: number; isBoss: boolean }): void {
+    this.dead = true;
+    this.state.hp = 0;
+    this.attackTarget = null;
+    this.moveTarget = null;
+    this.player.setVelocity(0, 0);
+    // 躺下：定格站姿横倒 + 灰化；停掉动画，避免 update 把行走帧贴回来
+    this.player.anims.stop();
+    this.player.setTexture('player-a');
+    this.player.setRotation(Math.PI / 2);
+    this.player.setTint(0x8892a0);
+    // 狂暴随死亡熄灭：主动关一次立即生效（update 的边沿检测只是兜底）
+    this.frenzyUntil = 0;
+    this.toggleFrenzyFx(false);
+    this.cameras.main.shake(160, 0.006);
+    audio.play('die');
+    this.ui.showDeath(
+      { name: killer.name, level: killer.level, boss: killer.isBoss },
+      () => this.revive(),
+    );
+    // 血量归零要立刻落盘：拖到 20 秒后的自动保存才存，中途关页面读档会凭空回血
+    saveState(this.state);
+  }
+
+  /** 回城复活：满状态回到复活点（地图正中）。死亡惩罚将来加在这里。 */
+  private revive(): void {
+    this.dead = false;
+    this.state.hp = maxHp(this.state);
+    this.state.mp = maxMp(this.state);
+    this.player.setRotation(0);
+    this.player.clearTint();
+    this.player.play('walk-player');
+    this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
+    // 相机直接就位，不从尸体位置横跨整张地图慢慢飘
+    this.cameras.main.centerOn(this.player.x, this.player.y);
+    audio.play('heal');
+    this.ui.toast('已在复活点满状态复活', '#7ee787');
+    saveState(this.state);
   }
 
 }
