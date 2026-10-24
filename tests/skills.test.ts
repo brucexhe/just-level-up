@@ -164,6 +164,26 @@ describe('技能书 / 技能点', () => {
     expect(skillValue(poison)).toBe(5000);
   });
 
+  it('护盾成长：时长 6s→60s（Lv100 封顶）、减伤 2%→30%（Lv281 封顶）', () => {
+    const sh = SKILL_BY_ID.shield;
+    expect(skillValue(sh, 1)).toBe(6000);
+    expect(skillValue(sh, 14)).toBe(13150); // 6s + 0.55s × 13
+    expect(skillValue(sh, 100)).toBe(60000); // 60.45s → 夹到 60s
+    expect(skillValue(sh, 1000)).toBe(60000);
+
+    expect(skillPower(sh, 1)).toBeCloseTo(0.02, 6);
+    expect(skillPower(sh, 100)).toBeCloseTo(0.119, 6);
+    expect(skillPower(sh, 281)).toBeCloseTo(0.3, 6);
+    // 有硬上限才叫「不变态」：再高也不会滑到免伤
+    expect(skillPower(sh, 10000)).toBe(0.3);
+  });
+
+  it('没有 growth 的技能不受影响：仍走通用曲线，时长恒定', () => {
+    const poison = SKILL_BY_ID.poison;
+    expect(skillValue(poison, 200)).toBe(5000);
+    expect(skillPower(poison, 200)).toBeCloseTo(poison.power * 3, 6);
+  });
+
   it('毒刃每跳 = (10 + 等级/10)% 法攻：底数 10%，41 级 14.1%', () => {
     expect(SKILL_BY_ID.poison.power).toBe(0.1);
     expect(skillPower(SKILL_BY_ID.poison, 1)).toBeCloseTo(0.101, 5);

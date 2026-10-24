@@ -6,6 +6,7 @@ import { expToNext, isBreakthrough } from '../core/progression';
 import {
   describeSkill,
   skillMpCost,
+  skillPower,
   skillPowerCoef,
   skillValue,
   type SkillBook,
@@ -396,12 +397,16 @@ const skillsPanel: PanelDef = {
               <div class="kv"><span>冷却</span><b class="num">${
                 def.cdMs > 0 ? `${(def.cdMs / 1000).toFixed(1)}s` : '无'
               }</b></div>
-              <div class="kv"><span>威力系数</span><b class="num">×${skillPowerCoef(lv).toFixed(
-                2,
-              )}</b></div>
+              ${def.powerGrowth !== undefined
+                ? `<div class="kv"><span>减伤</span><b class="num">+${Math.round(
+                    skillPower(def, lv) * 100,
+                  )}%</b></div>`
+                : `<div class="kv"><span>威力系数</span><b class="num">×${skillPowerCoef(lv).toFixed(
+                    2,
+                  )}</b></div>`}
               <div class="kv"><span>附加数值</span><b class="num">${
                 def.school === 'buff' || def.school === 'dot' || def.school === 'ward'
-                  ? `${Math.round(skillValue(def) / 1000)} s`
+                  ? `${Math.round(skillValue(def, lv) / 1000)} s`
                   : '—'
               }</b></div>
             </div>

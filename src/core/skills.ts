@@ -49,13 +49,30 @@ export function skillPowerCoef(level: number): number {
   return SKILL_POWER_BASE + SKILL_POWER_PER_LEVEL * Math.max(0, level);
 }
 
+/**
+ * 技能当前等级的威力系数。
+ *
+ * 默认走通用曲线 `power × (1 + 等级/100)`；技能自带 powerGrowth 时改走
+ * `power + powerGrowth × (等级 − 1)` 并由 powerCap 封顶。
+ * 两条曲线并存是因为通用曲线只适合「伤害类」：护盾的 power 是减伤百分比，
+ * 按通用曲线 Lv800 就滚到 90%（= 免伤），必须给绝对值成长 + 硬上限。
+ */
 export function skillPower(def: SkillDef, level: number): number {
-  return def.power * skillPowerCoef(level);
+  const lv = Math.max(0, level);
+  if (def.powerGrowth === undefined) return def.power * skillPowerCoef(lv);
+  const raw = def.power + def.powerGrowth * Math.max(0, lv - 1);
+  return def.powerCap === undefined ? raw : Math.min(def.powerCap, raw);
 }
 
-/** 技能的固定附加数值（Buff / DoT 时长 ms）。时长不随等级成长 —— 等级只加威力（毒刃半径另走 POISON_RADIUS_*）。 */
-export function skillValue(def: SkillDef): number {
-  return def.value;
+/**
+ * 技能的附加数值（Buff / DoT 时长 ms）。
+ * 给了 valueGrowth 就随等级线性长大（1 级 = value），并受 valueCap 封顶；
+ * 没给就恒定返回 value（狂暴 / 毒刃仍是固定 5 秒，不传等级也一样）。
+ */
+export function skillValue(def: SkillDef, level = 0): number {
+  const lv = Math.max(0, level);
+  const raw = def.value + (def.valueGrowth ?? 0) * Math.max(0, lv - 1);
+  return def.valueCap === undefined ? raw : Math.min(def.valueCap, raw);
 }
 
 /** 技能当前等级的法力消耗 */
@@ -71,7 +88,8 @@ export function skillUpgradeCost(level: number): number {
 /** 技能当前等级的效果描述（百分比口径：威力 ×100 = 百分数） */
 export function describeSkill(def: SkillDef, level: number): string {
   const pct = Math.round(skillPower(def, level) * 100);
-  const dur = `${Math.round(def.value / 1000)} 秒`;
+  // 留一位小数：护盾的时长是 6 → 13.2 → 60 这样往上爬的，取整会把差别抹平
+  const dur = `${Math.round(skillValue(def, level) / 100) / 10} 秒`;
   switch (def.school) {
     case 'physical':
       return `造成 ${pct}% 物攻的物理伤害，攻速由敏捷决定。`;

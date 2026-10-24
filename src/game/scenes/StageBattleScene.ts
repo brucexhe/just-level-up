@@ -1669,10 +1669,10 @@ export class StageBattleScene extends Phaser.Scene {
     return skillPower(SKILL_BY_ID.shield, lv);
   }
 
-  /** 护盾：持续 5 秒（与狂暴同构），抗性随技能等级线性成长 */
+  /** 护盾：时长与减伤都随技能等级成长（曲线见 data/skills.ts 的 shield） */
   private castShield(lv: number) {
     const pct = Math.round(skillPower(SKILL_BY_ID.shield, lv) * 100);
-    this.shieldUntil = this.time.now + skillValue(SKILL_BY_ID.shield);
+    this.shieldUntil = this.time.now + skillValue(SKILL_BY_ID.shield, lv);
     // 金色推论：亮度与原蓝闪(120,200,255)持平≈182，直接给纯金会闪得更刺眼
     this.cameras.main.flash(140, 228, 179, 80);
     audio.play('magic');
