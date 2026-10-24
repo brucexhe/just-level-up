@@ -27,7 +27,7 @@ import {
 import { rollDrops, type GroundDrop } from '../../core/drops';
 import { goldDrop, type PotionKind } from '../../core/economy';
 import { expToNext, isBreakthrough, killExp } from '../../core/progression';
-import { skillMpCost, skillPower, skillValue } from '../../core/skills';
+import { skillCooldown, skillMpCost, skillPower, skillValue } from '../../core/skills';
 import { createMonster, isMagicHit, type Combatant } from '../combat';
 import {
   bakeGround,
@@ -1585,7 +1585,7 @@ export class StageBattleScene extends Phaser.Scene {
     const readyAt = this.cooldowns.get(id) ?? 0;
     return {
       remain: Math.max(0, readyAt - this.time.now),
-      total: SKILL_BY_ID[id].cdMs,
+      total: skillCooldown(SKILL_BY_ID[id], skillLevel(this.state, id)),
     };
   }
 
@@ -1634,7 +1634,7 @@ export class StageBattleScene extends Phaser.Scene {
         this.castShield(lv);
         break;
     }
-    this.cooldowns.set(id, now + def.cdMs);
+    this.cooldowns.set(id, now + skillCooldown(def, lv));
   }
 
   private frenzyActive(): boolean {

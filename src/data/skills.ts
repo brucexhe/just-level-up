@@ -11,7 +11,13 @@ export interface SkillDef {
   /** 1 级时的法力消耗，之后每级 +mpCostGrowth */
   mpCost: number;
   mpCostGrowth: number;
-  cdMs: number;
+  /** 冷却 ms（不填 = 无冷却）；cdEqualsDuration 的技能忽略本字段 */
+  cdMs?: number;
+  /**
+   * 冷却 = 本技能当前等级的时长（护盾）。
+   * 冷却条因此兼作 Buff 剩余时间：按下即开始转，转完正好盾碎。
+   */
+  cdEqualsDuration?: boolean;
   /** 威力系数（1 级）：没给 powerGrowth 就沿通用曲线「每级 +1% 基数，100 级翻倍」 */
   power: number;
   /**
@@ -92,7 +98,8 @@ export const SKILLS: SkillDef[] = [
     school: 'ward',
     mpCost: 3,
     mpCostGrowth: 0.5,
-    cdMs: 60000,
+    // 冷却 = 时长：技能栏上的倒计时就是护盾剩余时间
+    cdEqualsDuration: true,
     // 减伤 = 2% + 0.1%/级，Lv281 碰 30% 上限。不封顶的话后期就是免伤
     power: 0.02,
     powerGrowth: 0.001,

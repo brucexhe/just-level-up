@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dropSkillBook,
+  skillCooldown,
   skillMpCost,
   skillPower,
   skillPowerCoef,
@@ -182,6 +183,16 @@ describe('技能书 / 技能点', () => {
     const poison = SKILL_BY_ID.poison;
     expect(skillValue(poison, 200)).toBe(5000);
     expect(skillPower(poison, 200)).toBeCloseTo(poison.power * 3, 6);
+  });
+
+  it('护盾冷却 = 当前时长：技能栏的倒计时就是护盾剩余时间', () => {
+    const sh = SKILL_BY_ID.shield;
+    for (const lv of [1, 14, 60, 100, 500]) {
+      expect(skillCooldown(sh, lv)).toBe(skillValue(sh, lv));
+    }
+    // 其余技能照旧读固定冷却，普攻没有冷却
+    expect(skillCooldown(SKILL_BY_ID.fireball, 3)).toBe(2500);
+    expect(skillCooldown(SKILL_BY_ID.attack, 1)).toBe(0);
   });
 
   it('毒刃每跳 = (10 + 等级/10)% 法攻：底数 10%，41 级 14.1%', () => {

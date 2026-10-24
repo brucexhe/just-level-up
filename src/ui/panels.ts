@@ -5,6 +5,7 @@ import { attackIntervalMs, mitigationRate, moveSpeed } from '../core/formulas';
 import { expToNext, isBreakthrough } from '../core/progression';
 import {
   describeSkill,
+  skillCooldown,
   skillMpCost,
   skillPower,
   skillPowerCoef,
@@ -395,7 +396,9 @@ const skillsPanel: PanelDef = {
                 skillMpCost(def, lv) > 0 ? `${skillMpCost(def, lv)} MP` : '无'
               }</b></div>
               <div class="kv"><span>冷却</span><b class="num">${
-                def.cdMs > 0 ? `${(def.cdMs / 1000).toFixed(1)}s` : '无'
+                skillCooldown(def, lv) > 0
+                  ? `${(skillCooldown(def, lv) / 1000).toFixed(1)}s`
+                  : '无'
               }</b></div>
               ${def.powerGrowth !== undefined
                 ? `<div class="kv"><span>减伤</span><b class="num">+${Math.round(

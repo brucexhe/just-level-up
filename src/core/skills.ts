@@ -80,6 +80,15 @@ export function skillMpCost(def: SkillDef, level: number): number {
   return Math.max(0, Math.round(def.mpCost + def.mpCostGrowth * (level - 1)));
 }
 
+/**
+ * 技能冷却 ms。默认取 cdMs；cdEqualsDuration 的技能（护盾）直接等于当前时长 ——
+ * 冷却条因此兼作 Buff 剩余时间，转完正好盾碎。
+ */
+export function skillCooldown(def: SkillDef, level: number): number {
+  if (def.cdEqualsDuration) return skillValue(def, level);
+  return def.cdMs ?? 0;
+}
+
 /** 从 level 升到 level+1 需要的技能点 */
 export function skillUpgradeCost(level: number): number {
   return Math.max(1, level);
