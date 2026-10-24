@@ -1459,7 +1459,7 @@
 .announce {
   /* 上宽下窄的梯形，贴着屏幕顶边挂下来；底角带圆角，用 SVG mask 保证变宽时轮廓仍然平滑。
      边框和底色分成两层裁出来：金色层 + 内缩 1px 的面板底色 */
-  --trap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 28' preserveAspectRatio='none'%3E%3Cpath d='M0 0H200L186.5 21Q182 28 174 28H26Q18 28 13.5 21Z' fill='black'/%3E%3C/svg%3E");
+  --trap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 28' preserveAspectRatio='none'%3E%3Cpath d='M0 0H200L192.5 21Q190 28 182 28H18Q10 28 7.5 21Z' fill='black'/%3E%3C/svg%3E");
   position: absolute;
   left: 50%;
   top: 0;
