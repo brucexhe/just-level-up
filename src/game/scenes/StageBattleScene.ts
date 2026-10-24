@@ -21,6 +21,7 @@ import {
   dayKeyOf,
   levelBandOfStage,
   maxStageFromProgress,
+  recordStageKill,
   remainingOfLevel,
   resetDailyStages,
 } from '../../core/stage';
@@ -947,7 +948,7 @@ export class StageBattleScene extends Phaser.Scene {
 
   /**
    * 按关卡铺怪：每关 10 个等级 × 每级 10 只，外加 1 只该关顶格的 BOSS。
-   * 当天被杀掉的不再出现（进度存在 state.stages），跨天整关重刷（BOSS 也回归）。
+   * 当天被杀掉的不再出现（进度存在 state.stages），只有跨天 0 点整关重刷（BOSS 也回归）。
    */
   private spawnStageMonsters(): void {
     const prog = this.state.stages[this.stage] ?? { killed: {}, bossDead: false };
@@ -961,27 +962,18 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   /**
-   * 记录本关击杀。**BOSS 死 = 通关**：解锁下一关，同时把本关重置
-   * （普通怪全部回来），这样玩家既可以去新关，也能留在本关继续刷。
+   * 记录本关击杀。**BOSS 死 = 通关**：只解锁下一关，怪物一律不补。
+   * 被杀的普通怪、BOSS 都要等到第二天 0 点才回来（见 checkDailyRollover）。
    */
   private recordKill(level: number, isBoss: boolean): void {
     const prog = (this.state.stages[this.stage] ??= { killed: {}, bossDead: false });
-    if (isBoss) {
-      prog.bossDead = true;
-      prog.bossDay = dayKeyOf(Date.now());
-      prog.killed = {};
-      return;
-    }
-    prog.killed[level] = (prog.killed[level] ?? 0) + 1;
+    recordStageKill(prog, level, isBoss, dayKeyOf(Date.now()));
   }
 
-  /** BOSS 倒下后的通关结算：重置本关怪物 + 提示解锁 */
+  /** BOSS 倒下后的通关结算：只解锁下一关，本关剩下的怪保持原样 */
   private onStageCleared(): void {
     const next = this.stage + 1;
     this.time.delayedCall(900, () => {
-      this.clearMonsters();
-      this.spawnStageMonsters();
-      saveState(this.state);
       this.ui.toast(
         `第 ${this.stage} 关通关！已解锁第 ${next} 关 · ${stageLabel(next)}`,
         '#ffd93d',
@@ -2263,7 +2255,7 @@ export class StageBattleScene extends Phaser.Scene {
     }
     if (this.state.level > before) this.levelUpFx(before);
 
-    // 杀掉的怪不再刷新；BOSS 死则整关重置并解锁下一关
+    // 杀掉的怪不再刷新；BOSS 死只解锁下一关，不重置本关怪物
     this.recordKill(ml, isBoss);
     saveState(this.state);
     if (isBoss) this.onStageCleared();

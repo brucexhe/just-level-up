@@ -6,12 +6,13 @@ import {
   levelBandOfStage,
   maxStageFromProgress,
   maxUnlockedStage,
+  recordStageKill,
   remainingOfLevel,
   resetDailyStages,
   stageCapacity,
   stageIndexForLevel,
 } from '../src/core/stage';
-import { createInitialState } from '../src/state/gameState';
+import { createInitialState, type StageProgress } from '../src/state/gameState';
 import {
   STAGES,
   artStageOf,
@@ -129,6 +130,31 @@ describe('关卡与怪物刷新', () => {
     expect(maxStageFromProgress(s.stages)).toBe(2);
     // 再刷一次（同一天幂等）：没有东西可清，返回 false
     expect(resetDailyStages(s)).toBe(false);
+  });
+
+  it('杀 BOSS 只记通关，不清击杀进度：怪物不会在通关瞬间重刷', () => {
+    const s = createInitialState();
+    const prog: StageProgress = { killed: { 7: 3 }, bossDead: false };
+    s.stages[1] = prog;
+    const today = dayKeyOf(Date.now());
+
+    recordStageKill(prog, 7, false, today);
+    expect(prog.killed[7]).toBe(4);
+
+    recordStageKill(prog, 10, true, today);
+    expect(prog.bossDead).toBe(true);
+    expect(prog.bossDay).toBe(today);
+    // 关键：已经杀掉的普通怪保持「杀掉」状态，剩余数量按进度算，不会补满
+    expect(prog.killed).toEqual({ 7: 4 });
+    expect(remainingOfLevel(10, prog.killed[7]!)).toBe(6);
+    expect(maxStageFromProgress(s.stages)).toBe(2); // 下一关照常解锁
+
+    // 第二天 0 点才整关重刷
+    resetDailyStages(s);
+    expect(prog.killed).toEqual({});
+    expect(remainingOfLevel(10, prog.killed[7] ?? 0)).toBe(10);
+    expect(prog.bossDay).toBeUndefined(); // BOSS 回归
+    expect(prog.bossDead).toBe(true); // 通关标记永久保留
   });
 
   it('BOSS 刷新看 bossDay 不看 bossDead：通关过的关第二天 BOSS 也回归', () => {

@@ -60,6 +60,24 @@ export function isSameLocalDay(a: number, b: number): boolean {
 }
 
 /**
+ * 记录一次击杀。BOSS 死只写「通关 + 今天杀过」，**不动 killed**：
+ * 死了的怪（含 BOSS）都要等到次日 0 点才回来，通关不等于本关重刷。
+ */
+export function recordStageKill(
+  prog: { killed: Record<number, number>; bossDead: boolean; bossDay?: string },
+  level: number,
+  isBoss: boolean,
+  today: string,
+): void {
+  if (isBoss) {
+    prog.bossDead = true;
+    prog.bossDay = today;
+    return;
+  }
+  prog.killed[level] = (prog.killed[level] ?? 0) + 1;
+}
+
+/**
  * 每日 0 点刷新：已解锁关卡中的普通怪全部回来（killed 清零），BOSS 也回归（bossDay 清空）。
  * `bossDead` 保留 —— 「打过 BOSS」是永久通关进度，管的是解锁，刷的是怪不是解锁。
  * 返回是否真的清掉了东西（全空说明本来就满员，不算刷新）。
