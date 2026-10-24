@@ -125,7 +125,6 @@ export class GameUI {
       </div>
 
       <div class="announce" data-announce-box>
-        <span class="an-brand">无限升级 · LEVEL UP</span>
         <span class="an-msg" data-announce-msg></span>
       </div>
 
