@@ -1453,39 +1453,77 @@
 
 /* ============================ 提示 toast ============================ */
 
-/* ==================== 顶部正中 公告栏 ==================== */
-/* 只在有播报时出现；日常顶部中央留空给 BOSS 血条。品牌已移到人物卡上方。
-   与 toast（操作反馈）分开，避免调个音量就把公告顶掉 */
+/* ==================== 顶部正中 品牌/公告 ==================== */
+/* 常驻显示游戏名，播报时同一格里换成消息；背景与人物面板一致，只加一道描边。
+   与 toast（操作反馈）分开，避免调个音量就把游戏名顶掉 */
 .announce {
+  /* 上宽下窄的梯形，贴着屏幕顶边挂下来；底角带圆角，用 SVG mask 保证变宽时轮廓仍然平滑。
+     边框和底色分成两层裁出来：金色层 + 内缩 1px 的面板底色 */
+  --trap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 28' preserveAspectRatio='none'%3E%3Cpath d='M0 0H200L186.5 21Q182 28 174 28H26Q18 28 13.5 21Z' fill='black'/%3E%3C/svg%3E");
   position: absolute;
   left: 50%;
-  top: 12px;
+  top: 0;
   transform: translateX(-50%);
   width: max-content;
   max-width: 520px;
-  height: 30px;
-  padding: 0 20px;
-  display: none;
+  height: 28px;
+  padding: 0 34px;
+  display: grid;
   place-items: center;
   pointer-events: none;
   white-space: nowrap;
-  border-radius: 999px;
-  /* 草地/雪地都很亮，纯色文字会糊掉；一层很淡的玻璃底只负责可读性 */
-  background: linear-gradient(180deg, rgba(10, 15, 22, 0.58), rgba(10, 15, 22, 0.36));
-  box-shadow: inset 0 0 0 1px rgba(255, 217, 61, 0.1), 0 6px 16px rgba(0, 0, 0, 0.28);
   z-index: 7;
 }
-.announce.show {
-  display: grid;
+.announce::before,
+.announce::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: var(--trap);
+  mask-image: var(--trap);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.announce::before {
+  background: rgba(255, 217, 61, 0.55);
+}
+.announce::after {
+  inset: 1px;
+  background: linear-gradient(180deg, rgba(24, 31, 44, 0.97), rgba(14, 19, 28, 0.98));
+}
+.announce > span {
+  position: relative;
+  z-index: 1;
+  grid-area: 1 / 1;
+  transition: opacity 0.2s ease;
+}
+/* 字号/字重/颜色对齐小地图的关卡名（.mm-head .mm-stage），slogan 低一级 */
+.an-brand {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #ffe08a;
+}
+.an-slogan {
+  color: rgba(255, 224, 138, 0.6);
 }
 .an-msg {
-  font-size: 12px;
-  letter-spacing: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
   color: #ffe08a;
+  opacity: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+.announce.show .an-brand {
+  opacity: 0;
+}
+.announce.show .an-msg {
+  opacity: 1;
 }
 
 .toasts {
