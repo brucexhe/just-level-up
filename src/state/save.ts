@@ -1,6 +1,11 @@
 import { EQUIP_SLOTS, type EquipSlot, type EquipmentItem } from '../core/equipment';
 import { BASE_ATTRS, type AttrSet } from '../core/types';
-import { SKILLS, type SkillId } from '../data/skills';
+import {
+  SKILL_BY_ID,
+  SKILLS,
+  type BookSkillId,
+  type SkillId,
+} from '../data/skills';
 import {
   createInitialState,
   maxHp,
@@ -205,9 +210,11 @@ export function normalizeState(raw: unknown): GameState {
       if (!b || typeof b !== 'object') continue;
       const bb = b as Record<string, unknown>;
       if (typeof bb.id !== 'string' || typeof bb.skillId !== 'string') continue;
+      // 存档是外部数据：只认真正会掉书的技能，普攻/未知 id 直接丢掉
+      if (!(bb.skillId in SKILL_BY_ID) || bb.skillId === 'attack') continue;
       s.skillBooks.push({
         id: bb.id,
-        skillId: bb.skillId as SkillId,
+        skillId: bb.skillId as BookSkillId,
         points: Math.max(1, Math.floor(num(bb.points, 1))),
       });
     }

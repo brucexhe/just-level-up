@@ -1,9 +1,9 @@
 import { rollDropLevel } from './loot';
-import { BOOK_SKILLS, type SkillDef } from '../data/skills';
+import { BOOK_SKILLS, type BookSkillId, type SkillDef } from '../data/skills';
 
 export interface SkillBook {
   id: string;
-  skillId: SkillDef['id'];
+  skillId: BookSkillId;
   /** 书的等级 ∈ [所属关卡最低等级, 掉落怪等级]；穿上=把技能等级替换成它，卖出回收半数 → 技能点 */
   points: number;
 }
@@ -25,7 +25,7 @@ export function dropSkillBook(
 }
 
 /** 直接构造一本指定点数的技能书（换装时把旧等级退回背包用） */
-export function makeSkillBook(skillId: SkillDef['id'], points: number): SkillBook {
+export function makeSkillBook(skillId: BookSkillId, points: number): SkillBook {
   bookSeq += 1;
   return {
     id: `sb-${Date.now().toString(36)}-${bookSeq}`,

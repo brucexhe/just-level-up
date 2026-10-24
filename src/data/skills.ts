@@ -128,8 +128,9 @@ export const SKILL_BY_ID: Record<SkillId, SkillDef> = SKILLS.reduce(
   {} as Record<SkillId, SkillDef>,
 );
 
-/**
- * 能作为技能书掉落的技能。
- * 普攻人人自带、不是"技能"，所以不进掉落池 —— 只有火球 / 狂暴 / 毒刃三种书。
- */
-export const BOOK_SKILLS: SkillDef[] = SKILLS.filter((d) => d.id !== 'attack');
+/** 能掉技能书的技能：普攻人人自带、不是"技能"，永远不进掉落池 */
+export type BookSkillId = Exclude<SkillId, 'attack'>;
+
+export const BOOK_SKILLS = SKILLS.filter(
+  (d): d is SkillDef & { id: BookSkillId } => d.id !== 'attack',
+);

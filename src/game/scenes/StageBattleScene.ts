@@ -51,6 +51,7 @@ import {
   POISON_RADIUS_GROWTH,
   POISON_TICK_MS,
   SKILL_BY_ID,
+  type BookSkillId,
   type SkillId,
 } from '../../data/skills';
 import { ATTR_META } from '../../data/attrs';
@@ -138,10 +139,16 @@ const SPAWN_SAFE_RADIUS = 420;
 const OBSTACLE_COUNT = 180;
 
 /** 技能书在地上显示的颜色（与技能本身的气质对应） */
-const BOOK_COLOR: Record<string, string> = {
+/**
+ * 技能书在地面上的配色。类型写成「除普攻外的所有技能」是故意的：
+ * 新增一个能掉书的技能时忘了配色就是编译错误，而不是等某本书掉出来才在
+ * spawnGroundDrop 里炸 `.slice of undefined`（会卡死整局 update）。
+ */
+const BOOK_COLOR: Record<BookSkillId, string> = {
   fireball: '#ff9f43',
   frenzy: '#ff7bd5',
   poison: '#9ade6a',
+  shield: '#ffd07a',
 };
 
 /** 血量数值缩写（怪物后期血量会很大） */
