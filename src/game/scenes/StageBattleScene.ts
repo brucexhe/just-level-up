@@ -88,6 +88,12 @@ import {
 
 /** 地图边长（正方形）。5000 才装得下一关 100 只怪而不显得挤 */
 const MAP_SIZE = 5000;
+/**
+ * 相机至少要看到的世界范围（5:3）。窗口比例偏离 5:3 时，多出来的那条边多看一点，
+ * 短边不会留黑 —— 见 fitCamera()
+ */
+const VIEW_W = 1440;
+const VIEW_H = 864;
 const ATTACK_RANGE = 90;
 /** 警戒范围：超出这个距离怪物不再追击，血条也不亮起 */
 const CHASE_RANGE = 300;
@@ -588,6 +594,11 @@ export class StageBattleScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+    this.fitCamera();
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
+    });
 
     this.setupInput();
     this.setupUI();
@@ -799,6 +810,16 @@ export class StageBattleScene extends Phaser.Scene {
         return this.playerNextAttackAt !== before;
       },
     };
+  }
+
+  /**
+   * 画面铺满窗口：相机至少显示 VIEW_W×VIEW_H 的世界。
+   * 窗口比例偏离 5:3 时，多出来的那条边多看一点世界，短边不会留黑边
+   * （Scale.FIT 的做法是留黑边，ENVELOP 会在另一边裁掉视野，都不如直接多看点）
+   */
+  private fitCamera(): void {
+    const { width, height } = this.scale;
+    this.cameras.main.setZoom(Math.min(width / VIEW_W, height / VIEW_H));
   }
 
   /**
@@ -3009,17 +3030,17 @@ export class StageBattleScene extends Phaser.Scene {
 export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'app',
-  // 逻辑分辨率 = 一帧能看到的世界像素，不是画面大小（大小由 index.html 的 #app 决定）。
-  // 保持 5:3 与画布盒子同比例；HUD 尺寸已与它解耦（src/ui/index.ts bindScale 只缩不放）。
+  // 这里是**最小可见世界范围**，不是画面大小（画面由 index.html 的 #app 铺满窗口）。
+  // RESIZE + fitCamera()：窗口变大/比例不同时，相机自动缩放，永远铺满且不留黑边。
   // 1440 是折中：比 1200 多看 20% 的世界，比之前调过的 1680 让人物大 17%。
-  width: 1440,
-  height: 864,
+  width: VIEW_W,
+  height: VIEW_H,
   backgroundColor: '#10141a',
   disableContextMenu: true,
   pixelArt: true,
   roundPixels: true,
   scale: {
-    mode: Phaser.Scale.FIT,
+    mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
     // 默认 true：boot 时若 #app 高度为 0，Phaser 会把它改写成 100%×100%，
     // 而 #shell 是 fit-content 的 flex item → 整块画面塌成 0×0（实测踩过一次）

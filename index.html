@@ -12,69 +12,28 @@
         background: radial-gradient(1200px 700px at 50% 30%, #18222e 0%, #0b0f14 60%, #070a0d 100%);
         font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
         color: #c8d0e0;
-        display: flex; flex-direction: column;
+        display: flex;
         align-items: center; justify-content: center;
-        gap: 8px;
         overflow: hidden;
       }
-      header { text-align: center; user-select: none; }
-      header h1 {
-        font-size: 19px; letter-spacing: 6px; color: #ffd93d;
-        text-shadow: 0 0 18px rgba(255, 217, 61, 0.35);
-      }
-      header p { font-size: 11px; color: #5a6472; margin-top: 3px; letter-spacing: 1px; }
       #shell {
         position: relative;
-        border-radius: 12px;
-        box-shadow: 0 0 0 1px #2a3644, 0 0 40px rgba(0, 0, 0, 0.6), 0 0 90px rgba(56, 208, 90, 0.06);
         overflow: hidden;
         line-height: 0;
       }
       #app {
-        /* 锁 5:3 = 逻辑分辨率（1440×864）的比例，否则 Scale.FIT 会在上下留黑边；
-           HUD 大小已与盒子解耦（只缩不放），所以这里只管画面物理尺寸 */
-        width: min(96vw, calc((100vh - 96px) * 5 / 3));
-        aspect-ratio: 1200 / 720;
+        /* 铺满窗口：画布跟着窗口变形，相机在 scene.fitCamera() 里按比例缩放，
+           所以任何窗口比例都不会出现黑边（HUD 尺寸与盒子解耦，只缩不放） */
+        width: 100vw;
+        height: 100vh;
       }
-      footer {
-        display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-        justify-content: center; max-width: 96vw;
-        padding: 5px 14px; border-radius: 999px;
-        font-size: 11px; color: #8d99ad; letter-spacing: 1px;
-        background: rgba(12, 17, 25, 0.72);
-        border: 1px solid #24303f;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-        user-select: none;
-      }
-      footer kbd {
-        font: inherit; padding: 1px 6px; margin: 0 1px;
-        border-radius: 5px; font-weight: 600;
-        color: #ffe08a; background: rgba(255, 217, 61, 0.1);
-        border: 1px solid rgba(255, 217, 61, 0.28);
-      }
-      footer .sep { color: #3d4757; margin: 0 2px; }
     </style>
   </head>
   <body>
-    <header>
-      <h1>无限升级 · LEVEL UP</h1>
-      <p>打怪 → 掉落 → 加点 → 无限变强（怪物也在无限变强）</p>
-    </header>
     <div id="shell">
       <div id="app"></div>
       <div id="ui-root"></div>
     </div>
-    <footer>
-      <kbd>右键</kbd>/<kbd>方向键</kbd> 移动 <span class="sep">·</span>
-      <kbd>左键</kbd> 点怪攻击 <span class="sep">·</span>
-      <kbd>空格</kbd> 普攻 <span class="sep">·</span>
-      <kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd> 技能 <span class="sep">·</span>
-      <kbd>Z</kbd>回血·<kbd>X</kbd>回蓝 <span class="sep">·</span>
-      <kbd>C</kbd>人物·<kbd>B</kbd>装备·<kbd>K</kbd>技能·<kbd>I</kbd>背包·<kbd>P</kbd> 商店
-      <span class="sep">·</span>
-      <kbd>F</kbd> 一键穿装 <span class="sep">·</span>
-      <kbd>Esc</kbd> 关面板
-    </footer>
     <script type="module" src="/src/game/main.ts"></script>
   </body>
 </html>

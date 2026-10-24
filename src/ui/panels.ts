@@ -829,6 +829,16 @@ const settingsPanel: PanelDef = {
         <span class="vr-v num">${vol}</span>
       </div>
 
+      <div class="sec-title">操作 <em>全部热键</em></div>
+      <div class="keys">
+        <div><kbd>右键</kbd>/<kbd>方向键</kbd> 移动</div>
+        <div><kbd>左键</kbd> 点怪攻击 <kbd>空格</kbd> 普攻</div>
+        <div><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd> 技能 <kbd>Z</kbd>回血 <kbd>X</kbd>回蓝</div>
+        <div><kbd>C</kbd>人物 <kbd>B</kbd>装备 <kbd>K</kbd>技能 <kbd>I</kbd>背包</div>
+        <div><kbd>P</kbd>商店 <kbd>O</kbd>设置 <kbd>F</kbd> 一键穿装</div>
+        <div><kbd>1</kbd>–<kbd>9</kbd> 快捷加点 <kbd>Esc</kbd> 关面板</div>
+      </div>
+
       <div class="sec-title">存档 <em>每 20 秒自动保存</em></div>
       <div class="kv-grid">
         <div class="kv"><span>等级</span><b class="num">Lv ${fmtNum(s.level)}</b></div>

@@ -79,6 +79,7 @@ export class GameUI {
   private deathModal!: HTMLElement;
   private deathLying!: HTMLElement;
   private deathKiller!: HTMLElement;
+  private annTimer = 0;
   /** 复活回调由场景注入（复活 = 回城满状态，后续死亡惩罚也挂在这条链路上） */
   private deathRevive: (() => void) | null = null;
   private open: Record<DockSide, PanelId | null> = { left: null, right: null };
@@ -121,6 +122,11 @@ export class GameUI {
             <div class="bar exp"><i data-w="exp" style="width:0%"></i><span data-live="exp">EXP 0 / 0</span></div>
           </div>
         </div>
+      </div>
+
+      <div class="announce" data-announce-box>
+        <span class="an-brand">无限升级 · LEVEL UP</span>
+        <span class="an-msg" data-announce-msg></span>
       </div>
 
       <div class="minimap">
@@ -837,6 +843,22 @@ export class GameUI {
     this.deathLying.hidden = true;
     this.deathRevive = null;
     this.bottomBar.classList.remove('dead');
+  }
+
+  // ---------------- 公告栏 ----------------
+
+  /**
+   * 顶部公告：临时占用品牌位（成就/里程碑播报），到时自动恢复游戏名。
+   * 与 toast 分开：toast 是操作反馈，公告是叙事信息，共用槽位会互相顶掉。
+   */
+  announce(msg: string, holdMs = 4000): void {
+    const box = this.root.querySelector('[data-announce-box]') as HTMLElement | null;
+    const txt = this.root.querySelector('[data-announce-msg]') as HTMLElement | null;
+    if (!box || !txt || !msg) return;
+    txt.textContent = msg;
+    box.classList.add('show');
+    window.clearTimeout(this.annTimer);
+    this.annTimer = window.setTimeout(() => box.classList.remove('show'), holdMs);
   }
 
   // ---------------- toast ----------------
