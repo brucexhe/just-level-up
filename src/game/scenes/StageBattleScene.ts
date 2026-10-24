@@ -94,6 +94,15 @@ const MAP_SIZE = 5000;
  */
 const VIEW_W = 1440;
 const VIEW_H = 864;
+
+/**
+ * 画布按设备像素比渲染：Retina 上若只用 CSS 像素，整张画布会被浏览器放大 2 倍，
+ * 8~11px 的等级/血量数字会糊成一团。上限 2 倍，4K/外接屏已经够清晰。
+ */
+const pixelRatio = (): number => Math.min(window.devicePixelRatio || 1, 2);
+
+/** Text 贴图分辨率取整（Windows 125% 这类非整数缩放也能清晰） */
+const textResolution = (): number => Math.max(1, Math.ceil(pixelRatio()));
 const ATTACK_RANGE = 90;
 /** 警戒范围：超出这个距离怪物不再追击，血条也不亮起 */
 const CHASE_RANGE = 300;
@@ -580,6 +589,8 @@ export class StageBattleScene extends Phaser.Scene {
         color: '#ffe08a',
         stroke: '#000000',
         strokeThickness: 3,
+        // 小字号按 DPR 渲染，否则 Retina 上放大后糊成色块
+        resolution: textResolution(),
       })
       .setOrigin(0.5)
       .setDepth(9);
@@ -594,10 +605,10 @@ export class StageBattleScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
-    this.fitCamera();
-    this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
+    this.fitScreen();
+    window.addEventListener('resize', this.fitScreen);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.scale.off(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
+      window.removeEventListener('resize', this.fitScreen);
     });
 
     this.setupInput();
@@ -813,13 +824,29 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   /**
-   * 画面铺满窗口：相机至少显示 VIEW_W×VIEW_H 的世界。
-   * 窗口比例偏离 5:3 时，多出来的那条边多看一点世界，短边不会留黑边
-   * （Scale.FIT 的做法是留黑边，ENVELOP 会在另一边裁掉视野，都不如直接多看点）
+   * 画布 buffer 用物理像素（Retina 清晰），CSS 尺寸缩回窗口大小。
+   * 拖到另一块不同缩放比的屏幕上时 window 会触发 resize，这里一并跟上。
+   */
+  private fitScreen = (): void => {
+    const dpr = pixelRatio();
+    const w = Math.round(window.innerWidth * dpr);
+    const h = Math.round(window.innerHeight * dpr);
+    this.scale.setZoom(1 / dpr);
+    if (this.scale.width !== w || this.scale.height !== h) this.scale.resize(w, h);
+    this.fitCamera();
+  };
+
+  /**
+   * 相机至少显示 VIEW_W×VIEW_H（按 CSS 像素算），且世界不会缩到 1:1 以下 ——
+   * 窗口变小只少看点世界，不会把等级/血量数字一起缩小。
+   * 比例偏离 5:3 时多出来的方向多看一点世界，短边不留黑边。
    */
   private fitCamera(): void {
-    const { width, height } = this.scale;
-    this.cameras.main.setZoom(Math.min(width / VIEW_W, height / VIEW_H));
+    const dpr = pixelRatio();
+    const cssW = this.scale.width / dpr;
+    const cssH = this.scale.height / dpr;
+    const zoom = Math.max(1, Math.min(cssW / VIEW_W, cssH / VIEW_H));
+    this.cameras.main.setZoom(zoom * dpr);
   }
 
   /**
@@ -1132,6 +1159,7 @@ export class StageBattleScene extends Phaser.Scene {
         color: isBoss ? '#ff6b6b' : '#ffffff',
         stroke: '#000000',
         strokeThickness: 3,
+        resolution: textResolution(),
       })
       .setOrigin(0.5)
       .setDepth(y + 2)
@@ -1145,6 +1173,7 @@ export class StageBattleScene extends Phaser.Scene {
         fontFamily: 'ui-monospace, monospace',
         fontSize: '8px',
         color: '#ffffff',
+        resolution: textResolution(),
       })
       .setOrigin(0.5)
       .setDepth(y + 2)
@@ -1340,6 +1369,7 @@ export class StageBattleScene extends Phaser.Scene {
       // 草地改浅后，飘字/提示必须带描边才不会糊在背景里
       stroke: '#101820',
       strokeThickness: Math.max(3, Math.round(size * 0.2)),
+      resolution: textResolution(),
     });
   }
 
@@ -3030,18 +3060,20 @@ export class StageBattleScene extends Phaser.Scene {
 export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'app',
-  // 这里是**最小可见世界范围**，不是画面大小（画面由 index.html 的 #app 铺满窗口）。
-  // RESIZE + fitCamera()：窗口变大/比例不同时，相机自动缩放，永远铺满且不留黑边。
-  // 1440 是折中：比 1200 多看 20% 的世界，比之前调过的 1680 让人物大 17%。
-  width: VIEW_W,
-  height: VIEW_H,
+  // 逻辑尺寸是**物理像素** = 窗口 CSS 尺寸 × DPR；CSS 尺寸靠 scale.zoom 缩回窗口大小。
+  // 这样 Retina 上文字按 2 倍像素渲染，不会糊；窗口变化由 scene.fitScreen() 重新计算。
+  // 最小可见世界仍是 1440×864（见 fitCamera），比 1200 多看 20% 的世界。
+  width: Math.round(window.innerWidth * pixelRatio()),
+  height: Math.round(window.innerHeight * pixelRatio()),
   backgroundColor: '#10141a',
   disableContextMenu: true,
   pixelArt: true,
   roundPixels: true,
   scale: {
-    mode: Phaser.Scale.RESIZE,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    // NONE：不让 ScaleManager 自己跟随窗口（那会把 buffer 压成 CSS 像素），resize 由场景处理
+    mode: Phaser.Scale.NONE,
+    autoCenter: Phaser.Scale.NO_CENTER,
+    zoom: 1 / pixelRatio(),
     // 默认 true：boot 时若 #app 高度为 0，Phaser 会把它改写成 100%×100%，
     // 而 #shell 是 fit-content 的 flex item → 整块画面塌成 0×0（实测踩过一次）
     expandParent: false,
