@@ -162,6 +162,7 @@ export class OnlineSession implements Session {
     this.syncMap(st.players, this.playersT, (v, id) => ({
       id,
       name: String(v.name ?? ''),
+      job: num(v.job),
       x: num(v.x),
       y: num(v.y),
       hp: num(v.hp),

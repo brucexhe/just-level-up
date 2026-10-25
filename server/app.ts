@@ -39,7 +39,7 @@ export function createApp(opts: AppOptions) {
   const register = createEndpoint('/api/register', { method: 'POST' }, async (ctx) => {
     const b = body(ctx);
     if (limited(ctx.request!.headers, b.username)) return Response.json({ error: '操作太频繁，请稍后再试' }, { status: 429 });
-    const r = await auth.register(b.username, b.password, b.legacy);
+    const r = await auth.register(b.username, b.password, b.legacy, b.job);
     return r.ok
       ? Response.json({ token: r.token, uid: r.uid, name: r.name })
       : Response.json({ error: r.error }, { status: r.status });

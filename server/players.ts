@@ -96,7 +96,10 @@ export class PlayerHub {
   reset(uid: string): GameState | null {
     const e = this.entries.get(uid);
     if (!e) return null;
+    const job = e.state.job;
     e.state = createInitialState();
+    // 职业属于角色身份，不随数值一起重置
+    e.state.job = job;
     e.snap = undefined;
     e.dirty = true;
     return e.state;

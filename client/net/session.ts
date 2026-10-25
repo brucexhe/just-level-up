@@ -17,6 +17,8 @@ import type { GameState } from '../../shared/state/gameState';
 export interface PlayerView {
   id: string;
   name: string;
+  /** 职业 id：决定贴图配色与名字颜色 */
+  job: number;
   x: number;
   y: number;
   hp: number;

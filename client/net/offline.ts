@@ -88,6 +88,7 @@ export class OfflineSession implements Session {
       yield {
         id: p.id,
         name: p.name,
+        job: p.state.job,
         x: p.x,
         y: p.y,
         hp: Math.max(0, Math.round(p.state.hp)),
@@ -213,7 +214,10 @@ export class OfflineSession implements Session {
   }
   resetChar(): void {
     clearSave();
+    const job = this.s.job;
     this.s = createInitialState();
+    // 职业属于角色身份，不随数值一起重置
+    this.s.job = job;
     const moved = this.stage !== 1;
     this.enter(1);
     if (moved) this.stageFns.forEach((fn) => fn());

@@ -35,6 +35,7 @@ import { SKILL_BY_ID, type BookSkillId, type SkillId } from '../../../shared/dat
 import { ATTR_META } from '../../../shared/data/attrs';
 import { STAGES, artStageOf, stageDef, stageName as stageLabel } from '../../../shared/data/stages';
 import { RARITY_META, SLOT_META } from '../../../shared/data/items';
+import { JOBS, playerTexture, playerWalkAnim } from '../../../shared/data/jobs';
 import { BASE_ATTRS } from '../../../shared/core/types';
 import { GameUI } from '../../ui';
 import { fmtNum } from '../../ui/dom';
@@ -136,6 +137,8 @@ interface OtherView {
   shadow: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   aura: Phaser.GameObjects.Image;
+  /** 当前贴图对应的职业；Redis 改职业后重连会换 */
+  job: number;
   dead: boolean;
   shownLabel: string;
 }
@@ -495,9 +498,9 @@ export class StageBattleScene extends Phaser.Scene {
       .setAlpha(0)
       .setDepth(5)
       .setVisible(false);
-    this.player = this.add.sprite(SPAWN_X, SPAWN_Y, 'player-a');
+    this.player = this.add.sprite(SPAWN_X, SPAWN_Y, playerTexture(this.state.job, 'a'));
     this.player.setScale(PLAYER_SCALE).setDepth(5);
-    this.player.play('walk-player');
+    this.player.play(playerWalkAnim(this.state.job));
     this.fxOrigin = this.player;
     // 狂暴轮廓光：**整局只建一次**控制器，之后只动 strength（来回 add/remove 会重建管线，帧抖）。
     // knockout 必须 false —— true 会把人整个抠掉，只剩一圈光。
@@ -706,7 +709,9 @@ export class StageBattleScene extends Phaser.Scene {
         });
       }
     };
-    mk('walk-player', 'player-a', 'player-b');
+    for (const job of JOBS) {
+      mk(playerWalkAnim(job.id), playerTexture(job.id, 'a'), playerTexture(job.id, 'b'));
+    }
     for (const st of STAGES) mk(`walk-${st.monster}`, `${st.monster}-a`, `${st.monster}-b`);
   }
 
@@ -2109,10 +2114,10 @@ export class StageBattleScene extends Phaser.Scene {
     if (!this.dead) {
       this.player.setFlipX(me.flipX);
       if (me.moving) {
-        if (!this.player.anims.isPlaying) this.player.play('walk-player');
+        if (!this.player.anims.isPlaying) this.player.play(playerWalkAnim(this.state.job));
       } else if (this.player.anims.isPlaying) {
         this.player.anims.stop();
-        this.player.setTexture('player-a');
+        this.player.setTexture(playerTexture(this.state.job, 'a'));
       }
     }
     // 踩在投影里：位置贴脚底，深度压在人物下面一层（和怪物阴影同一套规则）
@@ -2151,11 +2156,11 @@ export class StageBattleScene extends Phaser.Scene {
     }
   }
 
-  /** 其他玩家：同一套主角贴图，名字用青色区分，躺尸时横倒灰化 */
+  /** 其他玩家：同一套主角网格，职业决定配色，名字统一用青色，躺尸时横倒灰化 */
   private syncOther(p: PlayerView): void {
     let o = this.otherViews.get(p.id);
     if (!o) {
-      const sprite = this.add.sprite(p.x, p.y, 'player-a').setScale(PLAYER_SCALE);
+      const sprite = this.add.sprite(p.x, p.y, playerTexture(p.job, 'a')).setScale(PLAYER_SCALE);
       const shadow = this.add.image(p.x, p.y, 'shadow').setScale(PLAYER_SHADOW.scaleX, PLAYER_SHADOW.scaleY);
       const label = this.add
         .text(p.x, p.y - 44, '', {
@@ -2174,8 +2179,13 @@ export class StageBattleScene extends Phaser.Scene {
         .setScale(FRENZY_RING.scaleX, FRENZY_RING.scaleY)
         .setAlpha(FRENZY_RING.alphaBase)
         .setVisible(false);
-      o = { sprite, shadow, label, aura, dead: false, shownLabel: '' };
+      o = { sprite, shadow, label, aura, job: p.job, dead: false, shownLabel: '' };
       this.otherViews.set(p.id, o);
+    }
+    if (o.job !== p.job) {
+      o.job = p.job;
+      o.sprite.anims.stop();
+      o.sprite.setTexture(playerTexture(p.job, 'a'));
     }
     o.sprite.setPosition(p.x, p.y).setDepth(p.y);
     o.shadow.setPosition(p.x, p.y + PLAYER_SHADOW.offsetY).setDepth(p.y - 0.1);
@@ -2193,7 +2203,7 @@ export class StageBattleScene extends Phaser.Scene {
       o.dead = p.dead;
       if (p.dead) {
         o.sprite.anims.stop();
-        o.sprite.setTexture('player-a').setRotation(Math.PI / 2).setTint(0x8892a0);
+        o.sprite.setTexture(playerTexture(p.job, 'a')).setRotation(Math.PI / 2).setTint(0x8892a0);
       } else {
         o.sprite.setRotation(0).clearTint();
       }
@@ -2201,10 +2211,10 @@ export class StageBattleScene extends Phaser.Scene {
     if (p.dead) return;
     o.sprite.setFlipX(p.flipX);
     if (p.moving) {
-      if (!o.sprite.anims.isPlaying) o.sprite.play('walk-player');
+      if (!o.sprite.anims.isPlaying) o.sprite.play(playerWalkAnim(p.job));
     } else if (o.sprite.anims.isPlaying) {
       o.sprite.anims.stop();
-      o.sprite.setTexture('player-a');
+      o.sprite.setTexture(playerTexture(p.job, 'a'));
     }
   }
 
@@ -2377,7 +2387,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.dead = true;
     // 躺下：定格站姿横倒 + 灰化；停掉动画，避免 update 把行走帧贴回来
     this.player.anims.stop();
-    this.player.setTexture('player-a');
+    this.player.setTexture(playerTexture(this.state.job, 'a'));
     this.player.setRotation(Math.PI / 2);
     this.player.setTint(0x8892a0);
     this.shieldFade = 0;
@@ -2396,7 +2406,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.dead = false;
     this.player.setRotation(0);
     this.player.clearTint();
-    this.player.play('walk-player');
+    this.player.play(playerWalkAnim(this.state.job));
     this.ui.hideDeath();
     // 相机直接就位，不从尸体位置横跨整张地图慢慢飘
     this.session.update(this.time.now);

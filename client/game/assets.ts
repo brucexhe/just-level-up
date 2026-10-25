@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { JOBS, playerTexture } from '../../shared/data/jobs';
 import { shieldShade } from './shieldGradient';
 import {
   STAGES,
@@ -420,31 +421,11 @@ export function propKey(stageId: number, shape: PropShape): string {
 }
 
 /**
- * 主角配色（24×24 网格专用，单字符 key 直接喂给 bakeGrid）。
- *
- * 沿用「左上亮 / 右下暗」的三段式，和怪物、场景一致：**没有黑色描边**。
- * E（深色）只用在五官上，避免到处出现黑边破坏像素统一感。
- */
-const PLAYER_PALETTE: Palette = {
-  H: 0xc8d0e0, // 头盔亮面
-  D: 0x6a7488, // 通用暗面（头盔边/护甲边/手臂内侧/颈甲边/腰带边/靴子）
-  S: 0xe8b890, // 面部皮肤
-  A: 0x8892a8, // 护甲主色
-  G: 0xe8c84a, // 金饰（盔带/胸甲条/肩甲外缘/剑格/剑柄头/腰带扣）
-  B: 0x5a4a3a, // 腰带皮带 + 剑柄缠皮
-  L: 0x4a5164, // 双腿
-  C: 0xa83240, // 披风主色
-  R: 0x6e1e2c, // 披风暗面 / 褶皱
-  P: 0xe85a6a, // 盔缨亮红
-  W: 0xf2f6ff, // 剑刃高光
-  M: 0x9aa6b8, // 剑刃主色
-  E: 0x2a303c, // 眼睛 + 嘴（唯一深色，只用于五官）
-};
-
-/**
  * 主角 24×24 像素网格：严格 24 列 × 24 行。
  * 脚底在第 22 行（索引 22 的靴子行），所以人物站立的"地面线"在 y+22 附近，
  * 场景里的 PLAYER_SHADOW.offsetY 按这个来配。
+ *
+ * 配色不在这里写死：每个职业一套颜色，见 shared/data/jobs.ts。
  */
 const PLAYER_GRID_A = [
   '........................',
@@ -502,8 +483,10 @@ const PLAYER_GRID_B = [
 ];
 
 export function bakePlayer(scene: Phaser.Scene): void {
-  bakeGrid(scene, 'player-a', PLAYER_GRID_A, PLAYER_PALETTE);
-  bakeGrid(scene, 'player-b', PLAYER_GRID_B, PLAYER_PALETTE);
+  for (const job of JOBS) {
+    bakeGrid(scene, playerTexture(job.id, 'a'), PLAYER_GRID_A, job.palette);
+    bakeGrid(scene, playerTexture(job.id, 'b'), PLAYER_GRID_B, job.palette);
+  }
 }
 
 /**

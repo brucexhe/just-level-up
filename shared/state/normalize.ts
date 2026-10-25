@@ -1,5 +1,6 @@
 import { EQUIP_SLOTS, type EquipSlot, type EquipmentItem } from '../core/equipment';
 import { BASE_ATTRS, type AttrSet } from '../core/types';
+import { clampJob } from '../data/jobs';
 import { SKILL_BY_ID, SKILLS, type BookSkillId, type SkillId } from '../data/skills';
 import { createInitialState, maxHp, maxMp, type GameState } from './gameState';
 
@@ -66,6 +67,8 @@ export function normalizeState(raw: unknown): GameState {
 
   const s: GameState = {
     ...base,
+    // 旧档没有 job → 0（法师）；非法 / 越界也回落到 0
+    job: clampJob(r.job),
     level: Math.max(1, Math.floor(num(r.level, 1))),
     exp: Math.max(0, num(r.exp, 0)),
     attrPoints: Math.max(0, Math.floor(num(r.attrPoints, 0))),

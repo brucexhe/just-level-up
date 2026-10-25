@@ -4,6 +4,7 @@ import { skillMpCost } from '../../shared/core/skills';
 import type { PotionKind } from '../../shared/core/economy';
 import { maxHp, maxMp, type GameState } from '../../shared/state/gameState';
 import { SKILLS, type SkillId } from '../../shared/data/skills';
+import { jobDef } from '../../shared/data/jobs';
 import type {
   Cooldown,
   DockSide,
@@ -87,6 +88,8 @@ export class GameUI {
   private open: Record<DockSide, PanelId | null> = { left: null, right: null };
   private skillEls = new Map<SkillId, { root: HTMLElement; cd: HTMLElement; num: HTMLElement }>();
   private toolEls = new Map<PanelId, { btn: HTMLElement; badge?: HTMLElement }>();
+  private hudAvatar!: HTMLElement;
+  private jobToolIcon: HTMLElement | null = null;
   private sig = '';
   private lastFocus: Partial<Record<PanelId, string>> = {};
   private view: UIView = { equipSlot: null, skillId: 'fireball', bagTab: 'equip' };
@@ -113,7 +116,7 @@ export class GameUI {
     this.root.innerHTML = `
       <div class="hud" data-open="character" title="打开人物面板（快捷键 C）">
         <div class="hero">
-          <div class="avatar">🧙</div>
+          <div class="avatar">${jobDef(this.opts.getState().job).avatar}</div>
           <div class="hud-main">
             <div class="hero-row">
               <span class="lv" data-live="level">Lv 1</span>
@@ -202,6 +205,7 @@ export class GameUI {
     this.skillBar = this.root.querySelector('.skillbar') as HTMLElement;
     this.bottomBar = this.root.querySelector('.bottombar') as HTMLElement;
     this.toolBar = this.root.querySelector('.toolbar') as HTMLElement;
+    this.hudAvatar = this.root.querySelector('.hud .avatar') as HTMLElement;
     this.mapCanvas = this.root.querySelector('.mm-canvas') as HTMLCanvasElement;
     this.mapCtx = this.mapCanvas.getContext('2d');
 
@@ -348,6 +352,7 @@ export class GameUI {
       btn.addEventListener('click', () => this.toggle(t.id));
       this.toolEls.set(t.id, { btn });
     });
+    this.jobToolIcon = this.toolBar.querySelector('[data-panel="character"] .t-ico') as HTMLElement | null;
   }
 
   /**
@@ -487,9 +492,10 @@ export class GameUI {
       panel.className = 'panel';
       panel.dataset.panel = id;
       const def = PANEL_BY_ID[id];
+      const icon = typeof def.icon === 'function' ? def.icon(this.opts.getState()) : def.icon;
       panel.innerHTML = `
         <div class="panel-head">
-          <span class="ph-ico">${def.icon}</span>
+          <span class="ph-ico">${icon}</span>
           <h3>${def.title}</h3>
           <span class="ph-sub" data-sub="${id}"></span>
           <button class="close" data-close="${id}" title="关闭（Esc）">✕</button>
@@ -513,6 +519,8 @@ export class GameUI {
     const def = PANEL_BY_ID[id];
     const s = this.opts.getState();
     const body = panel.querySelector('.panel-body') as HTMLElement;
+    const headIcon = panel.querySelector('.ph-ico') as HTMLElement | null;
+    if (headIcon) headIcon.textContent = typeof def.icon === 'function' ? def.icon(s) : def.icon;
     const scroll = body.scrollTop;
     body.innerHTML = def.render(s, this.api);
     body.scrollTop = scroll;
@@ -576,6 +584,7 @@ export class GameUI {
       .sort()
       .join(',');
     return [
+      s.job,
       s.level,
       s.exp,
       s.attrPoints,
@@ -628,6 +637,10 @@ export class GameUI {
       // 血量过低时呼吸提示（血条本身就是红色，靠明暗闪烁区分危险状态）
       if (k === 'hp') el.parentElement?.classList.toggle('low', w <= 30);
     });
+
+    const avatar = jobDef(s.job).avatar;
+    setTxt(this.hudAvatar, avatar);
+    setTxt(this.jobToolIcon, avatar);
 
     // 技能槽：CD / 等级 / 法力不足
     SKILLS.forEach((d) => {

@@ -14,6 +14,7 @@ import {
 } from '../../shared/core/skills';
 import { BASE_ATTRS, type BaseAttr } from '../../shared/core/types';
 import { ATTR_META } from '../../shared/data/attrs';
+import { jobDef } from '../../shared/data/jobs';
 import { RARITY_META, SLOT_META } from '../../shared/data/items';
 import { SKILLS, SKILL_BY_ID, type SkillId } from '../../shared/data/skills';
 import type { GameState } from '../../shared/state/gameState';
@@ -37,7 +38,8 @@ import { confirmDialog, esc, fmtNum, pct } from './dom';
 export interface PanelDef {
   id: PanelId;
   title: string;
-  icon: string;
+  /** 静态图标或按当前状态取（人物面板用职业头像） */
+  icon: string | ((s: GameState) => string);
   dock: DockSide;
   render(s: GameState, api: UIApi): string;
   action(act: string, arg: string, s: GameState, api: UIApi): void;
@@ -85,7 +87,7 @@ function liveBar(kind: 'hp' | 'mp', s: GameState): string {
 const characterPanel: PanelDef = {
   id: 'character',
   title: '人物',
-  icon: '🧙',
+  icon: (s) => jobDef(s.job).avatar,
   dock: 'left',
   render(s, api) {
     const agg = aggregatedStats(s);
@@ -119,7 +121,7 @@ const characterPanel: PanelDef = {
 
     return `
       <div class="hero">
-        <div class="avatar">🧙</div>
+        <div class="avatar">${jobDef(s.job).avatar}</div>
         <div class="hero-main">
           <div class="hero-row">
             <span class="lv">Lv ${fmtNum(s.level)}</span>

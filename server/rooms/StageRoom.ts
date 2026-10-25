@@ -275,6 +275,7 @@ export class StageRoom extends Room<{ state: StageState }> {
       let s = st.players.get(id);
       if (!s) st.players.set(id, (s = new PlayerPub()));
       if (s.name !== p.name) s.name = p.name;
+      if (s.job !== p.state.job) s.job = p.state.job;
       if (moved(s.x, p.x)) s.x = p.x;
       if (moved(s.y, p.y)) s.y = p.y;
       const hp = Math.max(0, Math.round(p.state.hp));

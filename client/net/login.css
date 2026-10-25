@@ -14,6 +14,8 @@
 }
 .login-box {
   width: min(360px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -23,6 +25,10 @@
   border: 1px solid #3a4761;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
   color: #c8d0e0;
+}
+/* 带 display 的类会盖掉 [hidden] 的 UA 默认值，这里显式兜底 */
+.login-box [hidden] {
+  display: none;
 }
 .login-title {
   font-size: 22px;
@@ -39,25 +45,6 @@
   text-align: center;
   font-size: 12px;
   color: #8d9ab0;
-}
-.login-tabs {
-  display: flex;
-  gap: 6px;
-}
-.login-tabs button {
-  flex: 1;
-  padding: 7px 0;
-  border-radius: 8px;
-  background: #1d2534;
-  border: 1px solid #2c3850;
-  color: #8d9ab0;
-  font: inherit;
-  cursor: pointer;
-}
-.login-tabs button.on {
-  color: #ffe08a;
-  border-color: #b8922e;
-  background: linear-gradient(180deg, #33405c, #232c3d);
 }
 .login-field {
   display: flex;
@@ -76,9 +63,8 @@
   font-size: 14px;
 }
 .login-field input:focus-visible,
-.login-tabs button:focus-visible,
 .login-go:focus-visible,
-.login-offline:focus-visible {
+.login-switch:focus-visible {
   outline: 2px solid #ffd93d;
   outline-offset: 2px;
 }
@@ -88,6 +74,75 @@
   align-items: center;
   font-size: 12px;
   color: #9ad06a;
+}
+.login-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.login-jobs-label {
+  font-size: 12px;
+  color: #aab4c6;
+}
+.login-jobs-label em {
+  margin-left: 6px;
+  font-style: normal;
+  font-size: 10px;
+  color: #7d8aa0;
+}
+.job-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.job-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px 7px;
+  border-radius: 9px;
+  border: 1px solid #2c3850;
+  background: #141b26;
+  color: #8d9ab0;
+  font: inherit;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.job-card .job-ico {
+  font-size: 24px;
+  line-height: 1.15;
+}
+.job-card .job-name {
+  font-size: 13px;
+  color: #c8d0e0;
+}
+.job-card .job-desc {
+  font-size: 11px;
+  color: #7d8aa0;
+  white-space: nowrap;
+}
+.job-card:hover {
+  border-color: #46587a;
+  background: #1a2331;
+}
+.job-card.on {
+  border-color: #b8922e;
+  background: linear-gradient(180deg, #33405c, #232c3d);
+}
+.job-card.on .job-name {
+  color: #ffe08a;
+}
+.job-card.on .job-desc {
+  color: #bfae86;
+}
+.job-card:focus-visible {
+  outline: 2px solid #ffd93d;
+  outline-offset: 2px;
+}
+.job-card:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 .login-err {
   min-height: 1.4em;
@@ -133,12 +188,20 @@
     transform: rotate(360deg);
   }
 }
-.login-tabs button:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-.login-offline {
-  text-align: center;
+.login-switch {
+  align-self: center;
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  font: inherit;
   font-size: 12px;
   color: #8d9ab0;
+  cursor: pointer;
+}
+.login-switch:hover {
+  color: #ffe08a;
+}
+.login-switch:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }

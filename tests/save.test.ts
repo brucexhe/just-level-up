@@ -77,6 +77,14 @@ describe('存档读写', () => {
     expect(neg.mp).toBe(maxMp(neg));
   });
 
+  it('职业：旧档默认 0，非法值回落 0，合法值保留', () => {
+    expect(createInitialState().job).toBe(0);
+    expect(normalizeState({ level: 5 }).job).toBe(0);
+    expect(normalizeState({ job: 3 }).job).toBe(3);
+    expect(normalizeState({ job: 99 }).job).toBe(0);
+    expect(normalizeState({ job: '2' }).job).toBe(0);
+  });
+
   it('恢复备份同样保留血蓝', () => {
     const s = createInitialState();
     s.baseStats.hp = 50;

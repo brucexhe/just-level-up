@@ -1,6 +1,7 @@
 import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
+import { clampJob } from '../shared/data/jobs';
 import { createInitialState, type GameState } from '../shared/state/gameState';
 import { normalizeState } from '../shared/state/normalize';
 import type { Repo } from './repo';
@@ -49,8 +50,14 @@ export class Auth {
   /**
    * 注册。`legacy` 是单机版 localStorage 里的旧存档：只在**新建账号**时导入一次，
    * 走 normalizeState 规整（缺字段补默认、非法字段丢弃）。
+   * `job` 是注册页选定的职业，优先级高于旧存档里自带的 job。
    */
-  async register(username: unknown, password: unknown, legacy?: unknown): Promise<AuthResult> {
+  async register(
+    username: unknown,
+    password: unknown,
+    legacy?: unknown,
+    job?: unknown,
+  ): Promise<AuthResult> {
     const bad = validate(username, password);
     if (bad) return bad;
     const name = username as string;
@@ -58,6 +65,7 @@ export class Auth {
     const pwd = await argon2.hash(password as string, { type: argon2.argon2id });
     const uid = randomUUID();
     const state: GameState = legacy ? normalizeState(legacy) : createInitialState();
+    state.job = clampJob(job);
     const created = await this.repo.createAccount({ uid, name, pwd, createdAt: Date.now() }, state);
     if (!created) return { ok: false, status: 409, error: '用户名已被占用' };
     return { ok: true, token: this.sign({ uid, name }), uid, name };

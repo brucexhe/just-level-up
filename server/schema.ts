@@ -8,6 +8,7 @@ import { schema, t, type SchemaType } from '@colyseus/schema';
 export const PlayerPub = schema(
   {
     name: t.string(),
+    job: t.uint8(),
     x: t.float32(),
     y: t.float32(),
     hp: t.number(),

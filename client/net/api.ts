@@ -83,11 +83,15 @@ export function login(username: string, password: string): Promise<AuthResp> {
   });
 }
 
-export function register(username: string, password: string, legacy?: unknown): Promise<AuthResp> {
+export function register(
+  username: string,
+  password: string,
+  opts: { job?: number; legacy?: unknown } = {},
+): Promise<AuthResp> {
   return call('/api/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username, password, legacy }),
+    body: JSON.stringify({ username, password, job: opts.job, legacy: opts.legacy }),
   });
 }
 

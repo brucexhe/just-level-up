@@ -144,6 +144,30 @@ describe('关卡房间', () => {
     await rb.leave();
   });
 
+  it('注册选择的职业写进存档并同步；旧账号默认法师', async () => {
+    const warrior = await post('/api/register', {
+      username: 'job_w',
+      password: 'password123',
+      job: 2,
+    });
+    const rw = await join(warrior.json.token!);
+    const sw = await next<SelfSync>(rw, 'self');
+    expect(sw.state.job).toBe(2);
+    await until(
+      () =>
+        (rw.state as { players?: Map<string, { job?: number }> }).players?.get(
+          warrior.json.uid!,
+        )?.job === 2,
+    );
+    await rw.leave();
+
+    const mage = await account('job_m');
+    const rm = await join(mage.token!);
+    const sm = await next<SelfSync>(rm, 'self');
+    expect(sm.state.job).toBe(0);
+    await rm.leave();
+  });
+
   it('离线写回 Redis：重新登录状态还在', async () => {
     const a = await account('saver1');
     const r1 = await join(a.token!);

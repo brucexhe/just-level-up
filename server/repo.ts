@@ -85,6 +85,7 @@ export class Repo {
     if (!h.ver) return null;
     const n = (k: string) => (h[k] === undefined ? undefined : Number(h[k]));
     const raw = {
+      job: n('job'),
       level: n('level'),
       exp: n('exp'),
       gold: n('gold'),
@@ -126,6 +127,7 @@ export class Repo {
           ver: String(PLAYER_VER),
           savedAt: String(Date.now()),
           name,
+          job: String(s.job),
           level: String(s.level),
           exp: String(s.exp),
           gold: String(s.gold),

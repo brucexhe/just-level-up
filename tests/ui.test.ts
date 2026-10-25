@@ -68,6 +68,15 @@ describe('面板渲染（headless 字符串校验）', () => {
     }
   });
 
+  it('人物面板头像跟随职业', () => {
+    const s = createInitialState();
+    s.job = 2;
+    const { api } = fakeApi(() => s);
+    const html = PANEL_BY_ID.character.render(s, api);
+    expect(html).toContain('⚔️');
+    expect(html).not.toContain('🧙');
+  });
+
   it('人物面板点击 [+] 会真的消耗属性点', () => {
     const s = createInitialState();
     gainExp(s, expToNext(1) + expToNext(2)); // 5+14=19 -> Lv3, 2 点

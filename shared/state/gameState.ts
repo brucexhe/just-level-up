@@ -19,6 +19,7 @@ import {
   type SkillBook,
 } from '../core/skills';
 import { SKILL_BY_ID, type SkillId } from '../data/skills';
+import { DEFAULT_JOB } from '../data/jobs';
 import { BASE_ATTRS, type AttrSet, type BaseAttr } from '../core/types';
 
 /** 某一关的击杀进度（当天清零，次日刷新） */
@@ -35,6 +36,8 @@ export interface StageProgress {
 export const BASE_ATTR_START = 10;
 
 export interface GameState {
+  /** 职业 id（见 shared/data/jobs.ts）：决定主角配色与头像，注册后固定 */
+  job: number;
   level: number;
   exp: number;
   /** 人物基础属性（手动加点 + 初始值） */
@@ -82,6 +85,7 @@ export function createInitialState(): GameState {
     baseStats[k] = BASE_ATTR_START;
   }
   const s: GameState = {
+    job: DEFAULT_JOB,
     level: 1,
     exp: 0,
     baseStats,

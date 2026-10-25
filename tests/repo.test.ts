@@ -44,6 +44,7 @@ describe.each(backends)('Repo（%s）', (_name, make) => {
 
   it('玩家存档往返：标量、背包、技能书、已穿戴、通关标记', async () => {
     const s = createInitialState();
+    s.job = 2;
     s.level = 12;
     s.gold = 345;
     const rng = seeded('repo');
@@ -57,6 +58,7 @@ describe.each(backends)('Repo（%s）', (_name, make) => {
 
     const back = (await repo.loadPlayer(uid))!;
     expect(back.name).toBe('测试');
+    expect(back.state.job).toBe(2);
     expect(back.state.level).toBe(12);
     expect(back.state.gold).toBe(345);
     expect(back.state.inventory.map((x) => x.id)).toEqual([b.id]);
