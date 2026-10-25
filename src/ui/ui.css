@@ -1491,7 +1491,7 @@
 }
 .announce::after {
   inset: 1px;
-  background: linear-gradient(180deg, rgba(24, 31, 44, 0.97), rgba(14, 19, 28, 0.98));
+  background: linear-gradient(180deg, rgba(24, 31, 44, 0.72), rgba(14, 19, 28, 0.66));
 }
 .announce > span {
   position: relative;
