@@ -144,6 +144,23 @@ describe('关卡房间', () => {
     await rb.leave();
   });
 
+  it('护盾状态同步给同房其他玩家', async () => {
+    const a = await account('sh_a');
+    const b = await account('sh_b');
+    const ra = await join(a.token!);
+    const rb = await join(b.token!);
+    await until(() => (rb.state as { players?: Map<string, unknown> }).players?.size === 2);
+    const pub = () =>
+      (rb.state as { players: Map<string, { shield?: boolean }> }).players.get(a.uid!)!;
+
+    expect(pub().shield).toBe(false);
+    ra.send('cast', { skill: 'shield' });
+    await until(() => pub().shield === true);
+
+    await ra.leave();
+    await rb.leave();
+  });
+
   it('注册选择的职业写进存档并同步；旧账号默认法师', async () => {
     const warrior = await post('/api/register', {
       username: 'job_w',

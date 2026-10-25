@@ -137,6 +137,8 @@ interface OtherView {
   shadow: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   aura: Phaser.GameObjects.Image;
+  shield: Phaser.GameObjects.Image;
+  shieldFade: number;
   /** 当前贴图对应的职业；Redis 改职业后重连会换 */
   job: number;
   dead: boolean;
@@ -904,6 +906,7 @@ export class StageBattleScene extends Phaser.Scene {
     o.shadow.destroy();
     o.label.destroy();
     o.aura.destroy();
+    o.shield.destroy();
     this.otherViews.delete(id);
   }
 
@@ -2056,7 +2059,7 @@ export class StageBattleScene extends Phaser.Scene {
         continue;
       }
       seenOthers.add(p.id);
-      this.syncOther(p);
+      this.syncOther(p, delta);
     }
     for (const id of [...this.otherViews.keys()]) if (!seenOthers.has(id)) this.destroyOtherView(id);
     if (me) this.syncSelf(me, time, delta);
@@ -2156,8 +2159,8 @@ export class StageBattleScene extends Phaser.Scene {
     }
   }
 
-  /** 其他玩家：同一套主角网格，职业决定配色，名字统一用青色，躺尸时横倒灰化 */
-  private syncOther(p: PlayerView): void {
+  /** 其他玩家：同一套主角网格，职业决定配色，名字统一用青色，护盾状态同步显示，躺尸时横倒灰化 */
+  private syncOther(p: PlayerView, delta: number): void {
     let o = this.otherViews.get(p.id);
     if (!o) {
       const sprite = this.add.sprite(p.x, p.y, playerTexture(p.job, 'a')).setScale(PLAYER_SCALE);
@@ -2179,7 +2182,14 @@ export class StageBattleScene extends Phaser.Scene {
         .setScale(FRENZY_RING.scaleX, FRENZY_RING.scaleY)
         .setAlpha(FRENZY_RING.alphaBase)
         .setVisible(false);
-      o = { sprite, shadow, label, aura, job: p.job, dead: false, shownLabel: '' };
+      const shield = this.add
+        .image(p.x, p.y, 'shield')
+        .setScale(1 / SHIELD_TEX_SS)
+        .setOrigin(0.5)
+        .setAlpha(0)
+        .setDepth(p.y + SHIELD_DOME.depthOffset)
+        .setVisible(false);
+      o = { sprite, shadow, label, aura, shield, shieldFade: 0, job: p.job, dead: false, shownLabel: '' };
       this.otherViews.set(p.id, o);
     }
     if (o.job !== p.job) {
@@ -2195,6 +2205,16 @@ export class StageBattleScene extends Phaser.Scene {
       o.label.setText(text);
     }
     o.label.setPosition(p.x, p.y - 44);
+    const shieldOn = p.shield && !p.dead;
+    const shieldStep = delta / (shieldOn ? SHIELD_DOME.fadeInMs : SHIELD_DOME.fadeOutMs);
+    o.shieldFade = Phaser.Math.Clamp(o.shieldFade + (shieldOn ? shieldStep : -shieldStep), 0, 1);
+    o.shield.setVisible(o.shieldFade > 0);
+    if (o.shieldFade > 0) {
+      o.shield
+        .setPosition(p.x, p.y + SHIELD_DOME.offsetY)
+        .setDepth(p.y + SHIELD_DOME.depthOffset)
+        .setAlpha(o.shieldFade);
+    }
     o.aura
       .setVisible(p.frenzy && !p.dead)
       .setPosition(p.x, p.y + FRENZY_RING.offsetY)
