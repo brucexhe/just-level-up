@@ -824,7 +824,13 @@ export class StageBattleScene extends Phaser.Scene {
     const target = Phaser.Math.Clamp(Math.floor(n), 1, this.maxStage());
     if (target === this.stage || this.switching) return;
     this.switching = true;
-    this.ui.showLoading(`正在进入第 ${target} 关…`);
+    const def = stageDef(target);
+    const { lo, hi } = this.stageRange(target);
+    this.ui.showLoading({
+      title: `第 ${target} 关 · ${stageLabel(target)}`,
+      sub: `${def.monsterName} Lv${lo}-${hi}`,
+      art: this.stageThumbs[artStageOf(target)] ?? this.stageThumbs[target],
+    });
     const startedAt = this.time.now;
     this.session
       .gotoStage(target)
@@ -843,8 +849,8 @@ export class StageBattleScene extends Phaser.Scene {
         this.rebuildStage();
       })
       .finally(() => {
-        // 本地/离线切换几乎是瞬间完成，留一小段最短展示时间，避免 loading 一闪而过
-        const wait = Math.max(0, 360 - (this.time.now - startedAt));
+        // 本地/离线切换几乎是瞬间完成，留一段最短展示时间让进度条走起来
+        const wait = Math.max(0, 650 - (this.time.now - startedAt));
         this.time.delayedCall(wait, () => {
           this.ui.hideLoading();
           this.switching = false;

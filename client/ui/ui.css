@@ -1773,45 +1773,119 @@
   display: none;
 }
 
-/* ---------- 切关卡过渡 ---------- */
+/* ---------- 切关卡过渡（魔兽式：关卡原画 + 底部进度条） ---------- */
 .stage-loading {
   position: absolute;
   inset: 0;
+  overflow: hidden;
   pointer-events: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(6, 9, 14, 0.78);
-  backdrop-filter: blur(3px);
+  background: #070a0d;
   z-index: 90;
 }
 .stage-loading[hidden] {
   display: none;
 }
-.sl-box {
+.sl-art {
+  position: absolute;
+  inset: -2px;
+  background-color: #131c27;
+  background-position: center;
+  background-size: cover;
+  image-rendering: pixelated;
+  filter: brightness(0.62) saturate(1.06);
+  transform: scale(1.02);
+}
+.sl-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(900px 480px at 50% 42%, rgba(6, 9, 14, 0) 0%, rgba(6, 9, 14, 0.22) 62%, rgba(6, 9, 14, 0.9) 100%),
+    linear-gradient(180deg, rgba(6, 9, 14, 0.78) 0%, rgba(6, 9, 14, 0) 26%, rgba(6, 9, 14, 0) 52%, rgba(6, 9, 14, 0.94) 100%);
+}
+.sl-head {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 98px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 5px;
+  text-align: center;
 }
-.sl-spin {
-  display: block;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 217, 61, 0.22);
-  border-top-color: #ffd93d;
-  animation: sl-spin 0.85s linear infinite;
+.sl-kicker {
+  font-size: 12px;
+  letter-spacing: 7px;
+  text-indent: 7px;
+  color: #d8c08a;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
-.sl-text {
+.sl-zone {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: #ffe9a8;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.92);
+}
+.sl-sub {
   font-size: 13px;
-  letter-spacing: 2px;
-  color: #ffe08a;
+  letter-spacing: 1px;
+  color: #c2ccdc;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
-@keyframes sl-spin {
-  to {
-    transform: rotate(360deg);
+.sl-foot {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  width: min(640px, 78%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+.sl-bar {
+  width: 100%;
+  height: 14px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid #8a6d24;
+  background: rgba(8, 12, 18, 0.88);
+  box-shadow:
+    inset 0 2px 7px rgba(0, 0, 0, 0.85),
+    0 0 16px rgba(255, 205, 80, 0.1);
+}
+.sl-fill {
+  position: relative;
+  display: block;
+  width: 0;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #ffe9a0, #e8b53a 55%, #a97a17);
+  box-shadow: 0 0 10px rgba(255, 205, 80, 0.55);
+  transition: width 0.12s linear;
+}
+.sl-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.45) 48%, transparent 62%);
+  animation: sl-shine 1.4s linear infinite;
+}
+@keyframes sl-shine {
+  from {
+    transform: translateX(-100%);
   }
+  to {
+    transform: translateX(100%);
+  }
+}
+.sl-tip {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #8d9ab0;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.9);
 }
 .modal-box {
   width: 640px;
