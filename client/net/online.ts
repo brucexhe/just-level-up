@@ -23,12 +23,12 @@ interface Tracked<V> {
 }
 
 type AnyState = {
-  stage: number;
-  resetLeft: number;
-  players: SchemaMap;
-  monsters: SchemaMap;
-  drops: SchemaMap;
-  fireballs: SchemaMap;
+  stage?: number;
+  resetLeft?: number;
+  players?: SchemaMap;
+  monsters?: SchemaMap;
+  drops?: SchemaMap;
+  fireballs?: SchemaMap;
 };
 type SchemaMap = { forEach(fn: (v: Record<string, unknown>, k: string) => void): void; has(k: string): boolean };
 
@@ -155,7 +155,8 @@ export class OnlineSession implements Session {
     const dt = this.lastUpdate ? Math.min(0.1, (now - this.lastUpdate) / 1000) : 0;
     this.lastUpdate = now;
     const st = this.st();
-    if (!st) return;
+    // 切关卡时 this.room 已经指向新房间，但首份 state 还没解码完，各 map 会短暂为 undefined
+    if (!st?.players || !st.monsters || !st.drops || !st.fireballs) return;
     const k = 1 - Math.exp(-SMOOTH * dt);
     if (typeof st.resetLeft === 'number' && st.resetLeft > 0) this.resetAt = now + st.resetLeft;
 
