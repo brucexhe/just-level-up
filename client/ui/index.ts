@@ -15,6 +15,7 @@ import type {
   UIView,
 } from './api';
 import { fmtNum, makeDraggable } from './dom';
+import { LoadingScreen, type StageLoadingInfo } from './loading';
 import { STAGES, artStageOf, stageDef, stageStars } from '../../shared/data/stages';
 import { levelBandOfStage } from '../../shared/core/stage';
 import { PANEL_BY_ID, PANELS } from './panels';
@@ -83,14 +84,7 @@ export class GameUI {
   private deathLying!: HTMLElement;
   private deathKiller!: HTMLElement;
   private annTimer = 0;
-  private loadingEl!: HTMLElement;
-  private loadingArt!: HTMLElement;
-  private loadingTitle!: HTMLElement;
-  private loadingSub!: HTMLElement;
-  private loadingFill!: HTMLElement;
-  private loadTimer = 0;
-  private loadHideTimer = 0;
-  private loadProgress = 0;
+  private loading!: LoadingScreen;
   /** 复活回调由场景注入（复活 = 回城满状态，后续死亡惩罚也挂在这条链路上） */
   private deathRevive: (() => void) | null = null;
   private open: Record<DockSide, PanelId | null> = { left: null, right: null };
@@ -185,19 +179,6 @@ export class GameUI {
         </div>
       </div>
       <div class="toasts"></div>
-      <div class="stage-loading" data-loading hidden role="status" aria-live="polite">
-        <div class="sl-art" data-loading-art></div>
-        <div class="sl-veil"></div>
-        <div class="sl-head">
-          <span class="sl-kicker">正在进入</span>
-          <b class="sl-zone" data-loading-title>第 1 关</b>
-          <span class="sl-sub" data-loading-sub></span>
-        </div>
-        <div class="sl-foot">
-          <div class="sl-bar"><i class="sl-fill" data-loading-fill></i></div>
-          <span class="sl-tip">连接关卡中…</span>
-        </div>
-      </div>
       <div class="modal death" data-modal="death" hidden>
         <div class="modal-box death-box">
           <div class="death-body">
@@ -223,11 +204,7 @@ export class GameUI {
       right: this.root.querySelector('.dock-right') as HTMLElement,
     };
     this.toasts = this.root.querySelector('.toasts') as HTMLElement;
-    this.loadingEl = this.root.querySelector('[data-loading]') as HTMLElement;
-    this.loadingArt = this.root.querySelector('[data-loading-art]') as HTMLElement;
-    this.loadingTitle = this.root.querySelector('[data-loading-title]') as HTMLElement;
-    this.loadingSub = this.root.querySelector('[data-loading-sub]') as HTMLElement;
-    this.loadingFill = this.root.querySelector('[data-loading-fill]') as HTMLElement;
+    this.loading = new LoadingScreen(this.root);
     this.skillBar = this.root.querySelector('.skillbar') as HTMLElement;
     this.bottomBar = this.root.querySelector('.bottombar') as HTMLElement;
     this.toolBar = this.root.querySelector('.toolbar') as HTMLElement;
@@ -897,39 +874,12 @@ export class GameUI {
 
   // ---------------- 切关卡 loading ----------------
 
-  showLoading(info: { title: string; sub?: string; art?: string }): void {
-    window.clearInterval(this.loadTimer);
-    window.clearTimeout(this.loadHideTimer);
-    this.loadingTitle.textContent = info.title;
-    this.loadingSub.textContent = info.sub ?? '';
-    this.loadingArt.style.backgroundImage = info.art ? `url(${info.art})` : '';
-    this.loadingEl.hidden = false;
-
-    // 无真实进度可拿：先快速爬向 90%，等真正切完再补满
-    this.loadProgress = 0;
-    this.loadingFill.style.transition = 'none';
-    this.loadingFill.style.width = '0%';
-    void this.loadingFill.offsetWidth;
-    this.loadingFill.style.transition = '';
-    this.loadTimer = window.setInterval(() => {
-      this.loadProgress = Math.min(90, this.loadProgress + (92 - this.loadProgress) * 0.16 + 1.2);
-      this.loadingFill.style.width = `${this.loadProgress.toFixed(1)}%`;
-    }, 70);
+  showLoading(info: StageLoadingInfo): void {
+    this.loading.show(info);
   }
 
   hideLoading(): void {
-    window.clearInterval(this.loadTimer);
-    this.loadProgress = 100;
-    this.loadingFill.style.width = '100%';
-    window.clearTimeout(this.loadHideTimer);
-    this.loadHideTimer = window.setTimeout(() => {
-      this.loadingEl.hidden = true;
-      // 下一次打开从 0 开始，且不要让 100% → 0% 回抽
-      this.loadingFill.style.transition = 'none';
-      this.loadingFill.style.width = '0%';
-      void this.loadingFill.offsetWidth;
-      this.loadingFill.style.transition = '';
-    }, 240);
+    this.loading.hide(650);
   }
 
   // ---------------- toast ----------------

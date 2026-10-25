@@ -7,30 +7,41 @@ import { showBlocking, showLogin } from '../net/login';
 import { OfflineSession } from '../net/offline';
 import { OnlineSession } from '../net/online';
 import type { Session } from '../net/session';
+import { LoadingScreen, stageLoadingInfo } from '../ui/loading';
 
 /**
  * 入口：先拿到会话（登录 → 连上关卡房间，或 ?offline 本地模拟），再启动 Phaser。
  * 场景本身不关心世界跑在哪里。
  */
-async function connect(): Promise<Session> {
-  if (new URLSearchParams(location.search).has('offline')) return new OfflineSession();
+async function connect(): Promise<{ session: Session; loading: LoadingScreen | null }> {
+  if (new URLSearchParams(location.search).has('offline')) {
+    return { session: new OfflineSession(), loading: null };
+  }
 
   let notice: string | undefined;
   for (;;) {
     let token = loadToken();
+    let loading: LoadingScreen | null = null;
     try {
       if (!token) token = (await showLogin(notice)).token;
       const who = await me(token);
+      // 连房间期间先铺上进场页；缩略图等场景建好后再补
+      loading = new LoadingScreen(document.body);
+      loading.show(stageLoadingInfo(who.stage));
       try {
-        return await OnlineSession.connect(token, who.uid, who.name, who.stage);
+        const session = await OnlineSession.connect(token, who.uid, who.name, who.stage);
+        return { session, loading };
       } catch (e) {
         // 存档里记的关卡已经进不去（比如重置过角色）：回第 1 关
         if (e instanceof Error && /尚未解锁/.test(e.message)) {
-          return await OnlineSession.connect(token, who.uid, who.name, 1);
+          loading.show(stageLoadingInfo(1));
+          const session = await OnlineSession.connect(token, who.uid, who.name, 1);
+          return { session, loading };
         }
         throw e;
       }
     } catch (e) {
+      loading?.destroy();
       // 登录态失效 → 回登录页；连不上服务器 → 提示后重试
       if (e instanceof ApiError && e.status === 401) {
         clearToken();
@@ -49,9 +60,15 @@ async function connect(): Promise<Session> {
 }
 
 async function boot() {
-  const session = await connect();
+  const { session, loading } = await connect();
   setSession(session);
   const game = new Phaser.Game(GAME_CONFIG);
+  if (loading) {
+    game.events.once('lvup:scene-ready', (e: { art?: string }) => {
+      loading.setArt(e?.art);
+      loading.hide(650, () => loading.destroy());
+    });
+  }
 
   const scene = () => (game.scene.getScene('StageBattle') as StageBattleScene | null) ?? null;
 

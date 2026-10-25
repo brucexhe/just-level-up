@@ -557,6 +557,12 @@ export class StageBattleScene extends Phaser.Scene {
     );
 
     (window as unknown as Record<string, unknown>).__demo = this.demoHooks();
+
+    // 登录进场的 loading 等这张缩略图：场景彻底建好后再交接
+    this.game.events.emit('lvup:scene-ready', {
+      stage: this.stage,
+      art: this.stageThumbs[artStageOf(this.stage)] ?? this.stageThumbs[this.stage],
+    });
   }
 
   /** 调试 / e2e 钩子（见 memory: just-level-up-e2e-harness） */
@@ -831,7 +837,6 @@ export class StageBattleScene extends Phaser.Scene {
       sub: `${def.monsterName} Lv${lo}-${hi}`,
       art: this.stageThumbs[artStageOf(target)] ?? this.stageThumbs[target],
     });
-    const startedAt = this.time.now;
     this.session
       .gotoStage(target)
       .then((moved) => {
@@ -849,12 +854,8 @@ export class StageBattleScene extends Phaser.Scene {
         this.rebuildStage();
       })
       .finally(() => {
-        // 本地/离线切换几乎是瞬间完成，留一段最短展示时间让进度条走起来
-        const wait = Math.max(0, 650 - (this.time.now - startedAt));
-        this.time.delayedCall(wait, () => {
-          this.ui.hideLoading();
-          this.switching = false;
-        });
+        this.ui.hideLoading();
+        this.switching = false;
       });
   }
 

@@ -1780,6 +1780,9 @@
   overflow: hidden;
   pointer-events: auto;
   background: #070a0d;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  color: #c8d0e0;
   z-index: 90;
 }
 .stage-loading[hidden] {
