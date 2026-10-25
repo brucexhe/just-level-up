@@ -16,9 +16,9 @@ export const PICKUP_RANGE = 36;
 export const CAST_RANGE = 1200;
 /** 火球飞行超时（ms）：飞过头 / 目标中途死了，火球不会一直留在场上 */
 export const FIREBALL_TTL_MS = 2200;
-/** 受击击退 */
-export const KNOCK_SPEED = 130;
-export const KNOCK_MS = 130;
+/** 受击击退：位移 = 速度 × 时长 = 4px。再大一点，高攻速下怪会被永远顶在攻击距离外 */
+export const KNOCK_SPEED = 40;
+export const KNOCK_MS = 100;
 
 /** 每关每个等级各刷几只（10 个等级 × 10 只 = 一关 100 只） */
 export const STAGE_MONSTERS_PER_LEVEL = 10;
