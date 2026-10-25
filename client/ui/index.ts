@@ -83,6 +83,8 @@ export class GameUI {
   private deathLying!: HTMLElement;
   private deathKiller!: HTMLElement;
   private annTimer = 0;
+  private loadingEl!: HTMLElement;
+  private loadingText!: HTMLElement;
   /** 复活回调由场景注入（复活 = 回城满状态，后续死亡惩罚也挂在这条链路上） */
   private deathRevive: (() => void) | null = null;
   private open: Record<DockSide, PanelId | null> = { left: null, right: null };
@@ -177,6 +179,12 @@ export class GameUI {
         </div>
       </div>
       <div class="toasts"></div>
+      <div class="stage-loading" data-loading hidden role="status" aria-live="polite">
+        <div class="sl-box">
+          <i class="sl-spin"></i>
+          <span class="sl-text" data-loading-text>正在进入…</span>
+        </div>
+      </div>
       <div class="modal death" data-modal="death" hidden>
         <div class="modal-box death-box">
           <div class="death-body">
@@ -202,6 +210,8 @@ export class GameUI {
       right: this.root.querySelector('.dock-right') as HTMLElement,
     };
     this.toasts = this.root.querySelector('.toasts') as HTMLElement;
+    this.loadingEl = this.root.querySelector('[data-loading]') as HTMLElement;
+    this.loadingText = this.root.querySelector('[data-loading-text]') as HTMLElement;
     this.skillBar = this.root.querySelector('.skillbar') as HTMLElement;
     this.bottomBar = this.root.querySelector('.bottombar') as HTMLElement;
     this.toolBar = this.root.querySelector('.toolbar') as HTMLElement;
@@ -867,6 +877,17 @@ export class GameUI {
     box.classList.add('show');
     window.clearTimeout(this.annTimer);
     this.annTimer = window.setTimeout(() => box.classList.remove('show'), holdMs);
+  }
+
+  // ---------------- 切关卡 loading ----------------
+
+  showLoading(text = '正在进入…'): void {
+    this.loadingText.textContent = text;
+    this.loadingEl.hidden = false;
+  }
+
+  hideLoading(): void {
+    this.loadingEl.hidden = true;
   }
 
   // ---------------- toast ----------------

@@ -824,6 +824,8 @@ export class StageBattleScene extends Phaser.Scene {
     const target = Phaser.Math.Clamp(Math.floor(n), 1, this.maxStage());
     if (target === this.stage || this.switching) return;
     this.switching = true;
+    this.ui.showLoading(`正在进入第 ${target} 关…`);
+    const startedAt = this.time.now;
     this.session
       .gotoStage(target)
       .then((moved) => {
@@ -841,7 +843,12 @@ export class StageBattleScene extends Phaser.Scene {
         this.rebuildStage();
       })
       .finally(() => {
-        this.switching = false;
+        // 本地/离线切换几乎是瞬间完成，留一小段最短展示时间，避免 loading 一闪而过
+        const wait = Math.max(0, 360 - (this.time.now - startedAt));
+        this.time.delayedCall(wait, () => {
+          this.ui.hideLoading();
+          this.switching = false;
+        });
       });
   }
 

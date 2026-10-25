@@ -1772,6 +1772,47 @@
 .modal[hidden] {
   display: none;
 }
+
+/* ---------- 切关卡过渡 ---------- */
+.stage-loading {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 9, 14, 0.78);
+  backdrop-filter: blur(3px);
+  z-index: 90;
+}
+.stage-loading[hidden] {
+  display: none;
+}
+.sl-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.sl-spin {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 217, 61, 0.22);
+  border-top-color: #ffd93d;
+  animation: sl-spin 0.85s linear infinite;
+}
+.sl-text {
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: #ffe08a;
+}
+@keyframes sl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .modal-box {
   width: 640px;
   max-width: 96%;
