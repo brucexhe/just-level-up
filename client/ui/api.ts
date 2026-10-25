@@ -72,8 +72,6 @@ export interface SettingsApi {
   account(): string | null;
   /** 退出登录（回到登录页） */
   logout(): void;
-  /** 重置角色：清空进度从头开始（在线由服务端执行） */
-  reset(): void;
   /** 本关剩余怪物数 */
   monstersLeft(): number;
   /** 本关在线人数 */

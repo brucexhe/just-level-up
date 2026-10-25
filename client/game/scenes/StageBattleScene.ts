@@ -1150,10 +1150,6 @@ export class StageBattleScene extends Phaser.Scene {
       mode: () => this.session.mode,
       account: () => this.session.account,
       logout: () => window.dispatchEvent(new CustomEvent('lvup:logout')),
-      reset: () => {
-        this.session.resetChar();
-        audio.play('die');
-      },
       monstersLeft: () => this.monsterViews.size,
       online: () => [...this.session.players()].length,
       resetLeft: () => this.session.resetLeft(),

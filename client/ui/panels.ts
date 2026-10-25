@@ -32,7 +32,7 @@ import {
   skillUpgradeCostOf,
 } from '../../shared/state/gameState';
 import type { DockSide, PanelId, UIApi } from './api';
-import { esc, fmtNum, pct } from './dom';
+import { confirmDialog, esc, fmtNum, pct } from './dom';
 
 export interface PanelDef {
   id: PanelId;
@@ -764,9 +764,6 @@ const shopPanel: PanelDef = {
 
 // ----------------------------- 设置 -----------------------------
 
-/** 重置按钮的二次确认（5 秒内再点一次才生效） */
-let resetArmedAt = 0;
-
 /** 倒计时：x 小时 y 分 / y 分 z 秒 */
 function leftStr(ms: number): string {
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -794,7 +791,6 @@ const settingsPanel: PanelDef = {
   dock: 'right',
   render(s, api) {
     const st = api.settings;
-    const armed = Date.now() - resetArmedAt < 5000;
     const vol = Math.round(st.volume() * 100);
     const online = st.mode() === 'online';
 
@@ -809,16 +805,6 @@ const settingsPanel: PanelDef = {
         <span class="vr-v num">${vol}</span>
       </div>
 
-      <div class="sec-title">操作 <em>全部热键</em></div>
-      <div class="keys">
-        <div><kbd>右键</kbd>/<kbd>方向键</kbd> 移动</div>
-        <div><kbd>左键</kbd> 点怪攻击 <kbd>空格</kbd> 普攻</div>
-        <div><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd> 技能 <kbd>Z</kbd>回血 <kbd>X</kbd>回蓝</div>
-        <div><kbd>C</kbd>人物 <kbd>B</kbd>装备 <kbd>K</kbd>技能 <kbd>I</kbd>背包</div>
-        <div><kbd>P</kbd>商店 <kbd>O</kbd>设置 <kbd>F</kbd> 一键穿装</div>
-        <div><kbd>1</kbd>–<kbd>9</kbd> 快捷加点 <kbd>Esc</kbd> 关面板</div>
-      </div>
-
       <div class="sec-title">${online ? '账号 <em>服务端自动保存</em>' : '离线模式 <em>本机存档</em>'}</div>
       <div class="kv-grid">
         ${online ? `<div class="kv wide"><span>账号</span><b>${esc(st.account() ?? '')}</b></div>` : ''}
@@ -829,9 +815,6 @@ const settingsPanel: PanelDef = {
         <div class="kv wide"><span>整关重刷</span><b class="num">${leftStr(st.resetLeft())}后</b></div>
       </div>
       ${online ? '<button class="btn big" data-act="logout" style="margin-top:8px">🚪 退出登录</button>' : ''}
-      <button class="btn big danger" data-act="reset" style="margin-top:8px">
-        ${armed ? '⚠ 再点一次确认重置' : '🗑 重置角色（清空全部进度）'}
-      </button>
     `;
   },
   action(act, _arg, _s, api) {
@@ -853,19 +836,16 @@ const settingsPanel: PanelDef = {
       case 'vol':
         return; // 由 input 事件处理（见 fillPanel 的 oninput 委托）
       case 'logout':
-        st.logout();
+        void confirmDialog({
+          title: '退出登录',
+          message: '确定退出当前账号吗？',
+          confirmText: '退出',
+          cancelText: '取消',
+          danger: true,
+        }).then((ok) => {
+          if (ok) st.logout();
+        });
         return;
-      case 'reset': {
-        if (Date.now() - resetArmedAt > 5000) {
-          resetArmedAt = Date.now();
-          api.toast('再点一次「确认重置」才会真的清空进度', '#ff8a8a');
-          break;
-        }
-        resetArmedAt = 0;
-        st.reset();
-        api.toast('角色已重置，从头开始', '#ff8a8a');
-        break;
-      }
     }
     api.refresh();
   },

@@ -110,3 +110,68 @@ export function makeDraggable(handle: HTMLElement, target: HTMLElement): void {
   handle.addEventListener('pointerdown', down);
   handle.addEventListener('lostpointercapture', up);
 }
+
+export interface ConfirmOptions {
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  danger?: boolean;
+}
+
+/**
+ * 通用确认弹窗，点「确定」resolve true，其余路径（取消 / 关闭 / 点遮罩 / Esc）resolve false。
+ * 挂在 #ui-root 下，跟着 1200×720 的整体缩放走，样式复用 .modal / .modal-box / .btn。
+ */
+export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
+  const host = document.getElementById('ui-root') ?? document.body;
+  const veil = document.createElement('div');
+  veil.className = 'modal confirm';
+  veil.innerHTML = `
+    <div class="modal-box" role="dialog" aria-modal="true" aria-label="${esc(opts.title)}">
+      <div class="modal-head">
+        <h3>${esc(opts.title)}</h3>
+        <button class="close" type="button" data-confirm="no" aria-label="关闭">✕</button>
+      </div>
+      <div class="confirm-body">${esc(opts.message)}</div>
+      <div class="confirm-actions">
+        <button class="btn" type="button" data-confirm="no">${esc(opts.cancelText ?? '取消')}</button>
+        <button class="btn ${opts.danger ? 'danger' : 'gold'}" type="button" data-confirm="yes">
+          ${esc(opts.confirmText ?? '确定')}
+        </button>
+      </div>
+    </div>`;
+
+  const prev = document.activeElement as HTMLElement | null;
+  host.appendChild(veil);
+  const yes = veil.querySelector<HTMLButtonElement>('[data-confirm="yes"]');
+  yes?.focus();
+
+  return new Promise((resolve) => {
+    let done = false;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      finish(false);
+    }
+    function finish(ok: boolean) {
+      if (done) return;
+      done = true;
+      window.removeEventListener('keydown', onKey, true);
+      veil.remove();
+      // 焦点还给打开弹窗的按钮，键盘操作不会丢位置
+      if (prev?.isConnected) prev.focus();
+      resolve(ok);
+    }
+    veil.addEventListener('click', (e) => {
+      if (e.target === veil) {
+        finish(false);
+        return;
+      }
+      const btn = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-confirm]');
+      if (btn) finish(btn.dataset.confirm === 'yes');
+    });
+    window.addEventListener('keydown', onKey, true);
+  });
+}

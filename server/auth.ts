@@ -5,8 +5,8 @@ import { createInitialState, type GameState } from '../shared/state/gameState';
 import { normalizeState } from '../shared/state/normalize';
 import type { Repo } from './repo';
 
-/** 用户名：3–16 位，字母 / 数字 / 下划线 / 中文 */
-const USERNAME_RE = /^[\p{Script=Han}A-Za-z0-9_]{3,16}$/u;
+/** 用户名：3–6 位，字母 / 数字 / 下划线 / 中文 */
+const USERNAME_RE = /^[\p{Script=Han}A-Za-z0-9_]{3,6}$/u;
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 
@@ -81,7 +81,7 @@ export class Auth {
 
 function validate(username: unknown, password: unknown): AuthResult | null {
   if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
-    return { ok: false, status: 400, error: '用户名需为 3–16 位字母、数字、下划线或中文' };
+    return { ok: false, status: 400, error: '用户名需为 3–6 位字母、数字、下划线或中文' };
   }
   if (typeof password !== 'string' || password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
     return { ok: false, status: 400, error: `密码长度需为 ${PASSWORD_MIN}–${PASSWORD_MAX} 位` };

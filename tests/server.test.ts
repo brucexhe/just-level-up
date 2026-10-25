@@ -79,9 +79,18 @@ describe('账号接口', () => {
     expect((await post('/api/login', { username: 'alice', password: 'password123' })).status).toBe(200);
   });
 
+  it('用户名最长 6 个字（中文按字算）', async () => {
+    expect((await post('/api/register', { username: 'abcdef', password: 'password123' })).status).toBe(200);
+    expect((await post('/api/register', { username: '一二三四五六', password: 'password123' })).status).toBe(200);
+    expect((await post('/api/register', { username: 'abcdefg', password: 'password123' })).status).toBe(400);
+    const long = await post('/api/register', { username: '一二三四五六七', password: 'password123' });
+    expect(long.status).toBe(400);
+    expect(long.json.error).toContain('3–6');
+  });
+
   it('注册时可以一次性导入单机旧存档', async () => {
     const r = await post('/api/register', {
-      username: 'legacy1',
+      username: 'legacy',
       password: 'password123',
       legacy: { level: 7, gold: 42 },
     });
@@ -97,7 +106,7 @@ describe('关卡房间', () => {
   });
 
   it('未解锁的关卡进不去', async () => {
-    const a = await account('locked1');
+    const a = await account('locked');
     await expect(join(a.token!, 2)).rejects.toThrow(/尚未解锁/);
   });
 

@@ -56,9 +56,25 @@ export function showLogin(notice?: string): Promise<AuthResp> {
   const go = root.querySelector('.login-go') as HTMLButtonElement;
   const user = form.elements.namedItem('username') as HTMLInputElement;
   const pass = form.elements.namedItem('password') as HTMLInputElement;
+  const legacyBox = form.elements.namedItem('legacy') as HTMLInputElement | null;
   let mode: 'login' | 'register' = 'login';
+  let busy = false;
+
+  const idleText = () => (mode === 'register' ? '注册并进入' : '进入游戏');
+
+  const setBusy = (b: boolean) => {
+    busy = b;
+    go.disabled = b;
+    go.classList.toggle('loading', b);
+    go.textContent = b ? (mode === 'register' ? '注册中…' : '登录中…') : idleText();
+    for (const t of root.querySelectorAll<HTMLButtonElement>('[data-tab]')) t.disabled = b;
+    user.readOnly = b;
+    pass.readOnly = b;
+    if (legacyBox) legacyBox.disabled = b;
+  };
 
   const setMode = (m: typeof mode) => {
+    if (busy) return;
     mode = m;
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
       const on = b.dataset.tab === m;
@@ -67,7 +83,10 @@ export function showLogin(notice?: string): Promise<AuthResp> {
     }
     for (const el of root.querySelectorAll<HTMLElement>('[data-only="register"]')) el.hidden = m !== 'register';
     pass.autocomplete = m === 'register' ? 'new-password' : 'current-password';
-    go.textContent = m === 'register' ? '注册并进入' : '进入游戏';
+    // 注册限 6 个字；登录放宽到 16，老账号（改造前最长 16 位）仍能登进来
+    user.maxLength = m === 'register' ? 6 : 16;
+    user.placeholder = m === 'register' ? '3–6 位字母、数字、下划线或中文' : '3–16 位字母、数字、下划线或中文';
+    go.textContent = idleText();
     err.textContent = '';
   };
   for (const b of root.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
@@ -78,22 +97,28 @@ export function showLogin(notice?: string): Promise<AuthResp> {
   return new Promise((resolve) => {
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
+      if (busy) return;
       err.textContent = '';
-      go.disabled = true;
+      const name = user.value.trim();
+      // maxlength 按 UTF-16 计数，这里按「字」再兜一次底（中文 / 表情都算 1 个）
+      if (mode === 'register' && Array.from(name).length > 6) {
+        err.textContent = '用户名最多 6 个字';
+        return;
+      }
+      setBusy(true);
       try {
-        const importLegacy =
-          mode === 'register' && !!legacy && (form.elements.namedItem('legacy') as HTMLInputElement | null)?.checked;
+        const importLegacy = mode === 'register' && !!legacy && !!legacyBox?.checked;
         const r =
           mode === 'register'
-            ? await register(user.value.trim(), pass.value, importLegacy ? legacy : undefined)
-            : await login(user.value.trim(), pass.value);
+            ? await register(name, pass.value, importLegacy ? legacy : undefined)
+            : await login(name, pass.value);
         if (importLegacy) markLegacyMigrated();
         saveToken(r.token);
         root.remove();
         resolve(r);
       } catch (e) {
         err.textContent = e instanceof ApiError ? e.message : '出错了，请稍后再试';
-        go.disabled = false;
+        setBusy(false);
       }
     });
   });

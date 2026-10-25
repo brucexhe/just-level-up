@@ -95,6 +95,10 @@
   color: #ff8a8a;
 }
 .login-go {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 10px 0;
   border-radius: 10px;
   border: 1px solid #b8922e;
@@ -107,6 +111,29 @@
   cursor: pointer;
 }
 .login-go:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.login-go.loading {
+  opacity: 0.9;
+  cursor: progress;
+}
+.login-go.loading::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: login-spin 0.7s linear infinite;
+}
+@keyframes login-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.login-tabs button:disabled {
   opacity: 0.6;
   cursor: wait;
 }

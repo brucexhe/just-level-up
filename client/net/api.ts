@@ -1,22 +1,28 @@
 /**
  * 账号接口 + 登录态（token 存 localStorage）。
  *
- * 服务端地址：构建时用 VITE_SERVER_URL 指定（如 https://game.example.com），
- * 不配置就连「当前页面同主机的 2567 端口」，本地开发开箱即用。
+ * 服务端地址：
+ * - 生产构建走同源：HTTP 在 /api 下，Colyseus 在 /api 下（由 Nginx 反代）；
+ * - 开发时连「当前页面同主机的 2567 端口」，开箱即用；
+ * - 也可以用 VITE_SERVER_URL 覆盖（origin 形式，如 https://game.example.com）。
  */
 
 const TOKEN_KEY = 'level-up/token/v1';
 const MIGRATED_KEY = 'level-up/migrated/v1';
 
+const env = (import.meta as unknown as { env?: { PROD?: boolean; VITE_SERVER_URL?: string } }).env;
+
 export function serverHttpUrl(): string {
-  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
   const fromEnv = env?.VITE_SERVER_URL;
   if (fromEnv) return fromEnv.replace(/\/$/, '');
+  if (env?.PROD) return location.origin;
   return `${location.protocol}//${location.hostname}:2567`;
 }
 
 export function serverWsUrl(): string {
-  return serverHttpUrl().replace(/^http/, 'ws');
+  const base = serverHttpUrl().replace(/^http/, 'ws');
+  // 线上统一挂在 /api 下，和账号接口共用一个反代前缀；开发直连时保持根路径
+  return env?.PROD ? `${base}/api` : base;
 }
 
 export interface Me {
