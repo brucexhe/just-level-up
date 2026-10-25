@@ -1,9 +1,9 @@
-import { EQUIP_SLOTS, totalPoints } from '../core/equipment';
-import { expToNext } from '../core/progression';
-import { skillMpCost } from '../core/skills';
-import type { PotionKind } from '../core/economy';
-import { maxHp, maxMp, type GameState } from '../state/gameState';
-import { SKILLS, type SkillId } from '../data/skills';
+import { EQUIP_SLOTS, totalPoints } from '../../shared/core/equipment';
+import { expToNext } from '../../shared/core/progression';
+import { skillMpCost } from '../../shared/core/skills';
+import type { PotionKind } from '../../shared/core/economy';
+import { maxHp, maxMp, type GameState } from '../../shared/state/gameState';
+import { SKILLS, type SkillId } from '../../shared/data/skills';
 import type {
   Cooldown,
   DockSide,
@@ -14,8 +14,8 @@ import type {
   UIView,
 } from './api';
 import { fmtNum, makeDraggable } from './dom';
-import { STAGES, artStageOf, stageDef, stageStars } from '../data/stages';
-import { levelBandOfStage } from '../core/stage';
+import { STAGES, artStageOf, stageDef, stageStars } from '../../shared/data/stages';
+import { levelBandOfStage } from '../../shared/core/stage';
 import { PANEL_BY_ID, PANELS } from './panels';
 import type { SfxName } from '../game/audio';
 
@@ -40,7 +40,9 @@ export interface GameUIOptions {
   stageThumbs(): Record<number, string>;
   /** 切换关卡（不会自动跳关，由玩家手动选择） */
   gotoStage(stage: number): void;
-  /** 设置面板能力（暂停 / 音频 / 存档） */
+  /** 面板操作（见 UIApi.cmd） */
+  cmd: UIApi['cmd'];
+  /** 设置面板能力（音频 / 账号 / 角色） */
   settings: SettingsApi;
   /** UI 音效回调（由场景注入，避免 UI 直接依赖音频实现） */
   sfx?(name: SfxName): void;
@@ -104,6 +106,7 @@ export class GameUI {
       cooldownOf: (id) => this.opts.cooldownOf(id),
       now: () => this.opts.now(),
       close: (id) => this.close(id),
+      cmd: (st, c) => this.opts.cmd(st, c),
       settings: opts.settings,
     };
 
@@ -171,13 +174,6 @@ export class GameUI {
         </div>
       </div>
       <div class="toasts"></div>
-      <div class="pause-veil" hidden>
-        <div class="pv-box">
-          <span class="pv-ico">⏸</span>
-          <b>游戏已暂停</b>
-          <em>底部工具栏 ⚙ 设置 → 继续游戏</em>
-        </div>
-      </div>
       <div class="modal death" data-modal="death" hidden>
         <div class="modal-box death-box">
           <div class="death-body">
@@ -568,15 +564,6 @@ export class GameUI {
     }
     this.updateLive(s);
     this.drawMinimap();
-    this.updateVeil();
-  }
-
-  /** 暂停遮罩 */
-  private updateVeil(): void {
-    const veil = this.root.querySelector('.pause-veil') as HTMLElement | null;
-    if (!veil) return;
-    const paused = this.opts.settings.paused();
-    if (veil.hidden === paused) veil.hidden = !paused;
   }
 
   private signature(s: GameState): string {
@@ -765,6 +752,14 @@ export class GameUI {
       ctx.lineTo(x, y + 5);
       ctx.lineTo(x - 5, y);
       ctx.closePath();
+      ctx.fill();
+    }
+
+    // 同房间的其他玩家：青色小圆点（比自己低调，但和怪物的红 / 黄点分得开）
+    ctx.fillStyle = '#8be9fd';
+    for (const o of d.others ?? []) {
+      ctx.beginPath();
+      ctx.arc(at(o.x), at(o.y), 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
 

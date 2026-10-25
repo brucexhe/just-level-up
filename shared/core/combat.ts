@@ -1,10 +1,10 @@
-import { BALANCE } from '../core/balance';
+import { BALANCE } from './balance';
 import {
   attackIntervalMs,
   computeDamage,
   moveSpeed,
-} from '../core/formulas';
-import type { AttrSet, DamageType } from '../core/types';
+} from './formulas';
+import type { AttrSet, DamageType } from './types';
 
 export interface Combatant {
   name: string;

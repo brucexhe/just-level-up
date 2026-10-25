@@ -8,8 +8,8 @@ import {
   hitRate,
   mitigationRate,
   moveSpeed,
-} from '../src/core/formulas';
-import { BALANCE } from '../src/core/balance';
+} from '../shared/core/formulas';
+import { BALANCE } from '../shared/core/balance';
 import {
   breakthroughBonusRange,
   cumulativeExp,
@@ -17,7 +17,7 @@ import {
   isBreakthrough,
   killExp,
   rollBreakthroughBonus,
-} from '../src/core/progression';
+} from '../shared/core/progression';
 import {
   canBuyPotion,
   goldDrop,
@@ -27,14 +27,14 @@ import {
   potionTier,
   sellGold,
   sellRefundPoints,
-} from '../src/core/economy';
-import { distributePoints, rollDropLevel } from '../src/core/loot';
+} from '../shared/core/economy';
+import { distributePoints, rollDropLevel } from '../shared/core/loot';
 import {
   levelBandOfStage,
   maxUnlockedStage,
   stageIndexForLevel,
-} from '../src/core/stage';
-import { migratesOnLevelUp, mutates, onKilled } from '../src/core/monster';
+} from '../shared/core/stage';
+import { migratesOnLevelUp, mutates, onKilled } from '../shared/core/monster';
 
 const fixed = (v: number) => () => v;
 

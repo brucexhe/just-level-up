@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { PANEL_BY_ID } from '../src/ui/panels';
-import { dropEquipment, totalPoints } from '../src/core/equipment';
-import { dropSkillBook } from '../src/core/skills';
-import { expToNext } from '../src/core/progression';
+import { PANEL_BY_ID } from '../client/ui/panels';
+import { dropEquipment, totalPoints } from '../shared/core/equipment';
+import { dropSkillBook } from '../shared/core/skills';
+import { expToNext } from '../shared/core/progression';
 import {
   createInitialState,
   equipItem,
@@ -11,15 +11,16 @@ import {
   potionHealNow,
   usePotion,
   type GameState,
-} from '../src/state/gameState';
-import { BASE_ATTR_START } from '../src/state/gameState';
-import { BALANCE } from '../src/core/balance';
-import type { UIApi, UIView } from '../src/ui/api';
+} from '../shared/state/gameState';
+import { BASE_ATTR_START } from '../shared/state/gameState';
+import { BALANCE } from '../shared/core/balance';
+import type { UIApi, UIView } from '../client/ui/api';
+import { applyCommand } from '../shared/state/commands';
 
 function fakeApi(state: () => GameState) {
   const view: UIView = { equipSlot: null, skillId: 'fireball', bagTab: 'equip' };
   const toasts: string[] = [];
-  const flags = { paused: false, music: true, sfx: true, volume: 0.6, backups: 0 };
+  const flags = { music: true, sfx: true, volume: 0.6, resets: 0 };
   const api: UIApi = {
     view,
     toast: (m: string) => toasts.push(m),
@@ -29,11 +30,9 @@ function fakeApi(state: () => GameState) {
     cooldownOf: () => ({ remain: 0, total: 0 }),
     now: () => 0,
     close: () => undefined,
+    // 和离线会话一致：直接在传入的状态上执行同一份指令
+    cmd: (st, c) => applyCommand(st, c),
     settings: {
-      paused: () => flags.paused,
-      togglePause: () => {
-        flags.paused = !flags.paused;
-      },
       music: () => flags.music,
       sfx: () => flags.sfx,
       volume: () => flags.volume,
@@ -46,15 +45,15 @@ function fakeApi(state: () => GameState) {
       setVolume: (v) => {
         flags.volume = v;
       },
-      backup: () => {
-        flags.backups++;
-        return Date.now();
+      mode: () => 'online',
+      account: () => 'tester',
+      logout: () => undefined,
+      reset: () => {
+        flags.resets++;
       },
-      restore: () => flags.backups > 0,
-      reset: () => undefined,
-      savedAt: () => null,
-      backupAt: () => null,
       monstersLeft: () => 101,
+      online: () => 2,
+      resetLeft: () => 3_600_000,
     },
   };
   return { api, view, toasts, state, flags };

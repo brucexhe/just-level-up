@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_INNER_ALPHA, shieldShade } from '../src/game/shieldGradient';
+import { MIN_INNER_ALPHA, shieldShade } from '../client/game/shieldGradient';
 
 /**
  * 护盾罩的着色是纯函数，所以这部分能自动化验证。

@@ -14,7 +14,7 @@ import {
   musicThemeForStage,
   stepEvents,
   type SfxName,
-} from '../src/game/audio';
+} from '../client/game/audio';
 
 // ---------------- 极简 AudioContext 替身 ----------------
 

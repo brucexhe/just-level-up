@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { computeDamage } from '../src/core/formulas';
-import { expToNext, killExp } from '../src/core/progression';
+import { computeDamage } from '../shared/core/formulas';
+import { expToNext, killExp } from '../shared/core/progression';
 import {
   aggregatedStats,
   allocateAttrPoint,
   createInitialState,
   gainExp,
   maxHp,
-} from '../src/state/gameState';
-import { BASE_ATTR_START } from '../src/state/gameState';
-import { BALANCE } from '../src/core/balance';
-import { createMonster } from '../src/game/combat';
+} from '../shared/state/gameState';
+import { BASE_ATTR_START } from '../shared/state/gameState';
+import { BALANCE } from '../shared/core/balance';
+import { createMonster } from '../shared/core/combat';
 
 const fixed = (v: number) => () => v;
 

@@ -6,7 +6,7 @@ import {
   type PropShape,
   type PropStyle,
   type StageDef,
-} from '../data/stages';
+} from '../../shared/data/stages';
 
 type Grid = string[];
 type Palette = Record<string, number>;
@@ -289,7 +289,7 @@ export function groundKey(stageId: number): string {
 }
 
 /** 障碍形状：共用一套像素骨架，按关卡上色（M=主 D=暗 W=高光 T=辅） */
-const PROP_SHAPES: Record<PropShape, string[]> = {
+export const PROP_SHAPES: Record<PropShape, string[]> = {
   tree: [
     '.....MM.....',
     '...MMMMMM...',

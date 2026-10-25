@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { EQUIP_SLOTS, dropEquipment } from '../src/core/equipment';
-import { dropSkillBook } from '../src/core/skills';
-import { createInitialState, gainExp, maxHp, maxMp } from '../src/state/gameState';
+import { EQUIP_SLOTS, dropEquipment } from '../shared/core/equipment';
+import { dropSkillBook } from '../shared/core/skills';
+import { createInitialState, gainExp, maxHp, maxMp } from '../shared/state/gameState';
 import {
   DEFAULT_PREFS,
   backupAt,
@@ -15,7 +15,7 @@ import {
   savePrefs,
   saveState,
   savedAt,
-} from '../src/state/save';
+} from '../client/state/save';
 
 beforeEach(() => {
   clearSave();

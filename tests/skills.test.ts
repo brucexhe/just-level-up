@@ -7,15 +7,15 @@ import {
   skillPowerCoef,
   skillValue,
   skillUpgradeCost,
-} from '../src/core/skills';
+} from '../shared/core/skills';
 import {
   dropEquipment,
   maxRarityOfLevel,
   rollRarity,
   TIER_ORDER,
   totalPoints,
-} from '../src/core/equipment';
-import { BALANCE } from '../src/core/balance';
+} from '../shared/core/equipment';
+import { BALANCE } from '../shared/core/balance';
 import {
   createInitialState,
   equipBest,
@@ -24,8 +24,8 @@ import {
   sellSkillBook,
   skillLevel,
   upgradeSkill,
-} from '../src/state/gameState';
-import { SKILL_BY_ID } from '../src/data/skills';
+} from '../shared/state/gameState';
+import { SKILL_BY_ID } from '../shared/data/skills';
 
 const fixed = (v: number) => () => v;
 

@@ -14,14 +14,14 @@ import {
   maxHp,
   sellInventoryItem,
   unequipItem,
-} from '../src/state/gameState';
+} from '../shared/state/gameState';
 import {
   dropEquipment,
   effectiveStats,
   totalPoints,
-} from '../src/core/equipment';
-import { expToNext } from '../src/core/progression';
-import type { BaseAttr } from '../src/core/types';
+} from '../shared/core/equipment';
+import { expToNext } from '../shared/core/progression';
+import type { BaseAttr } from '../shared/core/types';
 
 const fixed = (v: number) => () => v;
 

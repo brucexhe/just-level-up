@@ -11,16 +11,16 @@ import {
   resetDailyStages,
   stageCapacity,
   stageIndexForLevel,
-} from '../src/core/stage';
-import { createInitialState, type StageProgress } from '../src/state/gameState';
+} from '../shared/core/stage';
+import { createInitialState, type StageProgress } from '../shared/state/gameState';
 import {
   STAGES,
   artStageOf,
   stageDef,
   stageName,
   stageStars,
-} from '../src/data/stages';
-import { normalizeState } from '../src/state/save';
+} from '../shared/data/stages';
+import { normalizeState } from '../client/state/save';
 
 describe('关卡与怪物刷新', () => {
   it('第 k 关 = 等级段 [(k-1)*10+1, k*10]', () => {

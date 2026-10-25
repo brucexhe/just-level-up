@@ -1,0 +1,117 @@
+/* 登录 / 断线遮罩：沿用游戏面板的深蓝底 + 金色强调 */
+.login-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: radial-gradient(900px 600px at 50% 35%, rgba(24, 34, 46, 0.92), rgba(7, 10, 13, 0.96));
+  backdrop-filter: blur(3px);
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Segoe UI', sans-serif;
+  line-height: 1.4;
+}
+.login-box {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 22px 18px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #1b2433, #121822);
+  border: 1px solid #3a4761;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  color: #c8d0e0;
+}
+.login-title {
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: #ffd93d;
+  text-align: center;
+}
+.login-title span {
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: #8d9ab0;
+}
+.login-sub {
+  text-align: center;
+  font-size: 12px;
+  color: #8d9ab0;
+}
+.login-tabs {
+  display: flex;
+  gap: 6px;
+}
+.login-tabs button {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 8px;
+  background: #1d2534;
+  border: 1px solid #2c3850;
+  color: #8d9ab0;
+  font: inherit;
+  cursor: pointer;
+}
+.login-tabs button.on {
+  color: #ffe08a;
+  border-color: #b8922e;
+  background: linear-gradient(180deg, #33405c, #232c3d);
+}
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #aab4c6;
+}
+.login-field input {
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid #3a4761;
+  background: #0d121a;
+  color: #e6edf3;
+  font: inherit;
+  font-size: 14px;
+}
+.login-field input:focus-visible,
+.login-tabs button:focus-visible,
+.login-go:focus-visible,
+.login-offline:focus-visible {
+  outline: 2px solid #ffd93d;
+  outline-offset: 2px;
+}
+.login-legacy {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: #9ad06a;
+}
+.login-err {
+  min-height: 1.4em;
+  font-size: 12px;
+  color: #ff8a8a;
+}
+.login-go {
+  padding: 10px 0;
+  border-radius: 10px;
+  border: 1px solid #b8922e;
+  background: linear-gradient(180deg, #d9a93a, #a87a1c);
+  color: #1a1206;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+.login-go:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.login-offline {
+  text-align: center;
+  font-size: 12px;
+  color: #8d9ab0;
+}

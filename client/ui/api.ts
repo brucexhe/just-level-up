@@ -1,5 +1,7 @@
-import type { SkillId } from '../data/skills';
-import type { EquipSlot } from '../core/equipment';
+import type { SkillId } from '../../shared/data/skills';
+import type { EquipSlot } from '../../shared/core/equipment';
+import type { Command, CommandResult } from '../../shared/state/commands';
+import type { GameState } from '../../shared/state/gameState';
 
 export type PanelId =
   | 'character'
@@ -40,6 +42,8 @@ export interface MinimapData {
   /** 世界边长（正方形地图） */
   world: number;
   player: MinimapPoint;
+  /** 同房间的其他玩家 */
+  others: MinimapPoint[];
   monsters: MinimapMonster[];
   obstacles: MinimapPoint[];
   /** 地上的掉落物 */
@@ -54,27 +58,28 @@ export interface MinimapData {
   monstersLeft: number;
 }
 
-/** 设置面板需要的能力（暂停 / 音频 / 存档），由场景实现 */
+/** 设置面板需要的能力（音频 / 账号 / 角色），由场景实现 */
 export interface SettingsApi {
-  /** 当前是否暂停 */
-  paused(): boolean;
-  togglePause(): void;
   music(): boolean;
   sfx(): boolean;
   volume(): number;
   setMusic(on: boolean): void;
   setSfx(on: boolean): void;
   setVolume(v: number): void;
-  /** 备份当前进度，返回时间戳 */
-  backup(): number;
-  /** 从备份恢复，返回是否成功 */
-  restore(): boolean;
-  /** 重置存档（会重开一局） */
+  /** 'online' = 连着服务端；'offline' = 浏览器本地模拟（?offline） */
+  mode(): 'online' | 'offline';
+  /** 当前登录的账号名（离线为 null） */
+  account(): string | null;
+  /** 退出登录（回到登录页） */
+  logout(): void;
+  /** 重置角色：清空进度从头开始（在线由服务端执行） */
   reset(): void;
-  savedAt(): number | null;
-  backupAt(): number | null;
   /** 本关剩余怪物数 */
   monstersLeft(): number;
+  /** 本关在线人数 */
+  online(): number;
+  /** 下次整关重刷还剩多少 ms */
+  resetLeft(): number;
 }
 
 export interface UIApi {
@@ -86,5 +91,10 @@ export interface UIApi {
   cooldownOf(id: SkillId): Cooldown;
   now(): number;
   close(id: PanelId): void;
+  /**
+   * 面板操作（加点 / 穿装 / 卖 / 买药 / 学技能）：本地立即执行并返回结果，
+   * 在线模式同时发给服务端权威执行。面板**不要**直接调用 gameState 的修改函数。
+   */
+  cmd<C extends Command>(s: GameState, c: C): CommandResult[C['t']];
   settings: SettingsApi;
 }

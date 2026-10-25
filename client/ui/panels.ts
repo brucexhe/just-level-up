@@ -1,8 +1,8 @@
-import { BALANCE } from '../core/balance';
-import { EQUIP_SLOTS, totalPoints, type EquipSlot, type EquipmentItem } from '../core/equipment';
-import { potionPrice, potionTier } from '../core/economy';
-import { attackIntervalMs, mitigationRate, moveSpeed } from '../core/formulas';
-import { expToNext, isBreakthrough } from '../core/progression';
+import { BALANCE } from '../../shared/core/balance';
+import { EQUIP_SLOTS, totalPoints, type EquipSlot, type EquipmentItem } from '../../shared/core/equipment';
+import { potionPrice, potionTier } from '../../shared/core/economy';
+import { attackIntervalMs, mitigationRate, moveSpeed } from '../../shared/core/formulas';
+import { expToNext, isBreakthrough } from '../../shared/core/progression';
 import {
   describeSkill,
   skillCooldown,
@@ -11,37 +11,26 @@ import {
   skillPowerCoef,
   skillValue,
   type SkillBook,
-} from '../core/skills';
-import { BASE_ATTRS, type BaseAttr } from '../core/types';
-import { ATTR_META } from '../data/attrs';
-import { RARITY_META, SLOT_META } from '../data/items';
-import { SKILLS, SKILL_BY_ID, type SkillId } from '../data/skills';
-import type { GameState } from '../state/gameState';
+} from '../../shared/core/skills';
+import { BASE_ATTRS, type BaseAttr } from '../../shared/core/types';
+import { ATTR_META } from '../../shared/data/attrs';
+import { RARITY_META, SLOT_META } from '../../shared/data/items';
+import { SKILLS, SKILL_BY_ID, type SkillId } from '../../shared/data/skills';
+import type { GameState } from '../../shared/state/gameState';
 import {
-  allocateAttrPoints,
-  allocateEquipPoints,
   bookPoints,
-  buyPotion,
   canEquip,
   canEquipSkillBook,
   equipAllocCap,
   equipAllocLeft,
-  equipBest,
-  equipItem,
   equipmentStats,
   aggregatedStats,
   maxHp,
   maxMp,
-  sellAllSkillBooks,
-  sellInventoryItem,
-  sellSkillBook,
   skillLevel,
   skillLevelCap,
   skillUpgradeCostOf,
-  unequipItem,
-  upgradeSkill,
-  equipSkillBook,
-} from '../state/gameState';
+} from '../../shared/state/gameState';
 import type { DockSide, PanelId, UIApi } from './api';
 import { esc, fmtNum, pct } from './dom';
 
@@ -178,7 +167,7 @@ const characterPanel: PanelDef = {
     const key = arg as BaseAttr;
     if (act === 'attr' || act === 'attr10' || act === 'attrmax') {
       const n = act === 'attr' ? 1 : act === 'attr10' ? 10 : s.attrPoints;
-      const got = allocateAttrPoints(s, key, n);
+      const got = api.cmd(s, { t: 'allocAttr', key, n });
       if (got > 0) api.toast(`+${fmtNum(got)} ${ATTR_META[key].name}`, '#7ee787');
       else api.toast('属性点不足', '#ff8a8a');
       api.refresh();
@@ -291,7 +280,7 @@ const equipmentPanel: PanelDef = {
         api.refresh();
         break;
       case 'auto': {
-        const n = equipBest(s);
+        const n = api.cmd(s, { t: 'equipBest' });
         const locked = s.inventory.filter((x) => !canEquip(s, x)).length;
         api.toast(
           `${n > 0 ? `已穿戴 ${n} 件更优装备` : '当前装备已是最优'}${locked ? `（${locked} 件等级不足）` : ''}`,
@@ -303,7 +292,7 @@ const equipmentPanel: PanelDef = {
       case 'unequip':
         if (slot && s.equipped[slot]) {
           const nm = s.equipped[slot]!.name;
-          unequipItem(s, slot);
+          api.cmd(s, { t: 'unequip', slot });
           api.toast(`卸下 ${nm}，可在「背包」里卖出`, '#9aa4b2');
           api.refresh();
         }
@@ -328,7 +317,7 @@ const equipmentPanel: PanelDef = {
           break;
         }
         const want = act === 'alloc1' ? 1 : act === 'alloc10' ? 10 : s.equipPoints;
-        const got = allocateEquipPoints(s, target, key, Math.min(want, left));
+        const got = api.cmd(s, { t: 'allocEquip', slot: target, key, n: Math.min(want, left) });
         if (got > 0) {
           const now = item.freeAllocated[key] ?? 0;
           // 投满时顺带点明上限，玩家不用去别处找规则
@@ -441,7 +430,7 @@ const skillsPanel: PanelDef = {
     if (act === 'upgrade') {
       const id = api.view.skillId;
       const before = skillLevel(s, id);
-      if (upgradeSkill(s, id)) {
+      if (api.cmd(s, { t: 'upgradeSkill', skill: id })) {
         api.toast(`${SKILL_BY_ID[id].name} 提升到 Lv${before + 1}`, '#ffd93d');
       } else if (before >= skillLevelCap(s)) {
         api.toast(`已达技能上限 Lv${skillLevelCap(s)}，提升角色等级后才能继续升级`, '#ff8a8a');
@@ -612,7 +601,7 @@ const bagPanel: PanelDef = {
         api.refresh();
         break;
       case 'auto': {
-        const n = equipBest(s);
+        const n = api.cmd(s, { t: 'equipBest' });
         const locked = s.inventory.filter((x) => !canEquip(s, x)).length;
         api.toast(
           `${n > 0 ? `已穿戴 ${n} 件更优装备` : '当前装备已是最优'}${locked ? `（${locked} 件等级不足）` : ''}`,
@@ -624,7 +613,7 @@ const bagPanel: PanelDef = {
       case 'equip': {
         const it = s.inventory.find((x) => x.id === arg);
         if (it) {
-          if (!equipItem(s, it)) {
+          if (!api.cmd(s, { t: 'equip', itemId: it.id })) {
             api.toast(`等级不足：${it.name} 需要 Lv${fmtNum(it.level)}`, '#ff8a8a');
             break;
           }
@@ -644,7 +633,7 @@ const bagPanel: PanelDef = {
             break;
           }
           mythSellArmed = null;
-          const got = sellInventoryItem(s, it);
+          const got = api.cmd(s, { t: 'sellItem', itemId: it.id });
           api.toast(`卖出 ${it.name}，+${got} 自由装备点`, '#ffd93d');
           api.refresh();
         }
@@ -658,7 +647,8 @@ const bagPanel: PanelDef = {
       case 'use-book': {
         const b = s.skillBooks.find((x) => x.id === arg);
         if (b) {
-          const r = equipSkillBook(s, b);
+          const r = api.cmd(s, { t: 'useBook', bookId: b.id });
+          if (!r) break;
           if (r.kind === 'blocked') {
             api.toast(
               `等级不足：技能书 Lv${fmtNum(r.need)}，当前角色 Lv${fmtNum(
@@ -685,14 +675,14 @@ const bagPanel: PanelDef = {
       case 'sell-book': {
         const b = s.skillBooks.find((x) => x.id === arg);
         if (b) {
-          const got = sellSkillBook(s, b);
+          const got = api.cmd(s, { t: 'sellBook', bookId: b.id });
           api.toast(`卖出技能书，+${got} 技能点`, '#ffd93d');
           api.refresh();
         }
         break;
       }
       case 'sell-all-books': {
-        const got = sellAllSkillBooks(s);
+        const got = api.cmd(s, { t: 'sellAllBooks' });
         api.toast(got > 0 ? `卖出全部技能书，+${got} 技能点` : '没有可卖的技能书', '#ffd93d');
         api.refresh();
         break;
@@ -761,7 +751,7 @@ const shopPanel: PanelDef = {
       return;
     }
     const want = Math.max(1, Math.floor(Number(qtyRaw) || 1));
-    const got = buyPotion(s, kind, want);
+    const got = api.cmd(s, { t: 'buyPotion', kind, n: want });
     const nm = kind === 'hp' ? '回血药' : '回蓝药';
     if (got > 0) {
       api.toast(`买到 ${fmtNum(got)} 瓶${nm}（现有 ${fmtNum(s.potions[kind])} 瓶）`, '#7ee787');
@@ -777,17 +767,12 @@ const shopPanel: PanelDef = {
 /** 重置按钮的二次确认（5 秒内再点一次才生效） */
 let resetArmedAt = 0;
 
-function timeStr(ts: number | null): string {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  const p = (n: number) => `${n}`.padStart(2, '0');
-  const today = new Date();
-  const sameDay =
-    d.getFullYear() === today.getFullYear() &&
-    d.getMonth() === today.getMonth() &&
-    d.getDate() === today.getDate();
-  const hm = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-  return sameDay ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+/** 倒计时：x 小时 y 分 / y 分 z 秒 */
+function leftStr(ms: number): string {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h} 小时 ${m} 分` : `${m} 分 ${sec % 60} 秒`;
 }
 
 function toggleRow(
@@ -809,16 +794,11 @@ const settingsPanel: PanelDef = {
   dock: 'right',
   render(s, api) {
     const st = api.settings;
-    const paused = st.paused();
     const armed = Date.now() - resetArmedAt < 5000;
     const vol = Math.round(st.volume() * 100);
+    const online = st.mode() === 'online';
 
     return `
-      <div class="sec-title">游戏 <em>${paused ? '已暂停' : '运行中'}</em></div>
-      <button class="btn big ${paused ? 'gold' : ''}" data-act="pause">
-        ${paused ? '▶ 继续游戏' : '⏸ 暂停游戏'}
-      </button>
-
       <div class="sec-title">音频 <em>代码合成</em></div>
       ${toggleRow('music', '背景音乐', '每关一首：琶音 + 长音铺底的实时合成循环', st.music())}
       ${toggleRow('sfx', '战斗音效', '挥砍 / 命中 / 升级 / 技能', st.sfx())}
@@ -839,30 +819,24 @@ const settingsPanel: PanelDef = {
         <div><kbd>1</kbd>–<kbd>9</kbd> 快捷加点 <kbd>Esc</kbd> 关面板</div>
       </div>
 
-      <div class="sec-title">存档 <em>每 20 秒自动保存</em></div>
+      <div class="sec-title">${online ? '账号 <em>服务端自动保存</em>' : '离线模式 <em>本机存档</em>'}</div>
       <div class="kv-grid">
+        ${online ? `<div class="kv wide"><span>账号</span><b>${esc(st.account() ?? '')}</b></div>` : ''}
         <div class="kv"><span>等级</span><b class="num">Lv ${fmtNum(s.level)}</b></div>
         <div class="kv"><span>金币</span><b class="num">${fmtNum(s.gold)}</b></div>
         <div class="kv"><span>本关剩余</span><b class="num">${fmtNum(st.monstersLeft())}</b></div>
-        <div class="kv"><span>上次保存</span><b class="num">${timeStr(st.savedAt())}</b></div>
-        <div class="kv wide"><span>备份时间</span><b class="num">${timeStr(st.backupAt())}</b></div>
+        <div class="kv"><span>本关在线</span><b class="num">${fmtNum(st.online())} 人</b></div>
+        <div class="kv wide"><span>整关重刷</span><b class="num">${leftStr(st.resetLeft())}后</b></div>
       </div>
-      <div class="ic-foot" style="padding:9px 0 0">
-        <button class="btn" data-act="backup">📦 备份进度</button>
-        <button class="btn" data-act="restore">♻ 恢复备份</button>
-      </div>
+      ${online ? '<button class="btn big" data-act="logout" style="margin-top:8px">🚪 退出登录</button>' : ''}
       <button class="btn big danger" data-act="reset" style="margin-top:8px">
-        ${armed ? '⚠ 再点一次确认清空' : '🗑 重置存档（清空进度与备份）'}
+        ${armed ? '⚠ 再点一次确认重置' : '🗑 重置角色（清空全部进度）'}
       </button>
     `;
   },
   action(act, _arg, _s, api) {
     const st = api.settings;
     switch (act) {
-      case 'pause':
-        st.togglePause();
-        api.toast(st.paused() ? '已暂停' : '继续游戏', '#ffd93d');
-        break;
       case 'music': {
         const on = !st.music();
         st.setMusic(on);
@@ -878,25 +852,18 @@ const settingsPanel: PanelDef = {
       }
       case 'vol':
         return; // 由 input 事件处理（见 fillPanel 的 oninput 委托）
-      case 'backup': {
-        const at = st.backup();
-        api.toast(at ? `已备份（${timeStr(at)}）` : '备份失败', at ? '#7ee787' : '#ff8a8a');
-        break;
-      }
-      case 'restore': {
-        const ok = st.restore();
-        api.toast(ok ? '已从备份恢复进度' : '还没有备份', ok ? '#7ee787' : '#ff8a8a');
-        break;
-      }
+      case 'logout':
+        st.logout();
+        return;
       case 'reset': {
         if (Date.now() - resetArmedAt > 5000) {
           resetArmedAt = Date.now();
-          api.toast('再点一次「确认清空」才会真的重置', '#ff8a8a');
+          api.toast('再点一次「确认重置」才会真的清空进度', '#ff8a8a');
           break;
         }
         resetArmedAt = 0;
         st.reset();
-        api.toast('存档已清空，从头开始', '#ff8a8a');
+        api.toast('角色已重置，从头开始', '#ff8a8a');
         break;
       }
     }

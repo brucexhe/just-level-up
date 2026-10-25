@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE } from '../src/core/balance';
-import { rollDrops } from '../src/core/drops';
+import { BALANCE } from '../shared/core/balance';
+import { rollDrops } from '../shared/core/drops';
 
 /** 真随机跑 n 次，统计掉落率 */
 function sampleDropRates(n: number, isBoss: boolean) {

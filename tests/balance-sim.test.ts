@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { createMonster } from '../src/game/combat';
-import { attackIntervalMs, computeDamage, mitigationRate } from '../src/core/formulas';
-import { expToNext, killExp } from '../src/core/progression';
+import { createMonster } from '../shared/core/combat';
+import { attackIntervalMs, computeDamage, mitigationRate } from '../shared/core/formulas';
+import { expToNext, killExp } from '../shared/core/progression';
 import {
   BASE_ATTR_START,
   aggregatedStats,
   createInitialState,
   maxHp,
-} from '../src/state/gameState';
-import { BALANCE } from '../src/core/balance';
-import type { AttrSet, BaseAttr } from '../src/core/types';
+} from '../shared/state/gameState';
+import { BALANCE } from '../shared/core/balance';
+import type { AttrSet, BaseAttr } from '../shared/core/types';
 
 const KEYS: BaseAttr[] = [
   'hp',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createMonster, isMagicHit } from '../src/game/combat';
-import { computeDamage, mitigationRate } from '../src/core/formulas';
-import { BALANCE } from '../src/core/balance';
+import { createMonster, isMagicHit } from '../shared/core/combat';
+import { computeDamage, mitigationRate } from '../shared/core/formulas';
+import { BALANCE } from '../shared/core/balance';
 
 const fixed = (v: number) => () => v;
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { SLOT_META } from '../src/data/items';
-import { SKILLS } from '../src/data/skills';
-import { ATTR_META } from '../src/data/attrs';
+import { SLOT_META } from '../shared/data/items';
+import { SKILLS } from '../shared/data/skills';
+import { ATTR_META } from '../shared/data/attrs';
 
 /**
  * Windows 10（Segoe UI Emoji）只覆盖到 Emoji 12，13.0 的字符会显示成空方框。
