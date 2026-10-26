@@ -242,8 +242,7 @@ export class OnlineSession implements Session {
       me.y = t.ty;
       me.moveTarget = null;
     } else {
-      const sel = this.myTarget ? this.monstersT.get(this.myTarget)?.view ?? null : null;
-      const dir = steerDir(me, sel);
+      const dir = steerDir(me);
       const speed = moveSpeed(aggregatedStats(this.s).speed ?? 0);
       advance(me, dir, speed, dt, this.obstacles);
       const err = dist(me.x, me.y, t.tx, t.ty);
@@ -257,7 +256,8 @@ export class OnlineSession implements Session {
         me.y += (t.ty - me.y) * pull;
       }
       if (dir !== null && Math.cos(dir) !== 0) t.view.flipX = Math.cos(dir) < 0;
-      t.view.moving = dir !== null;
+      // 本地没在动时保留服务端同步的 moving：施法自动接近由服务端驱动，不能被预测覆盖成 false
+      if (dir !== null) t.view.moving = true;
     }
     t.view.x = me.x;
     t.view.y = me.y;

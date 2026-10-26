@@ -12,8 +12,13 @@ export const ATTACK_RANGE = 90;
 export const CHASE_RANGE = 300;
 /** 掉落物拾取半径 */
 export const PICKUP_RANGE = 36;
-/** 火球 / 毒刃的施法距离上限（选中的怪必须在这个范围内，大约一屏） */
-export const CAST_RANGE = 1200;
+/**
+ * 火球 / 毒刃的施法距离上限（选中的怪必须在这个范围内）。
+ * 与 CHASE_RANGE 相同：你能在怪的警戒圈内选到它，它走进来也会打你 —— 站在圈外白嫖是不允许的
+ */
+export const CAST_RANGE = CHASE_RANGE;
+/** 施法自动接近的放弃时限：走向目标超过这么久还没进圈（怪一直风筝）就作废 */
+export const CAST_APPROACH_TIMEOUT = 5000;
 /** 火球飞行超时（ms）：飞过头 / 目标中途死了，火球不会一直留在场上 */
 export const FIREBALL_TTL_MS = 2200;
 /** 受击击退：位移 = 速度 × 时长 = 4px。再大一点，高攻速下怪会被永远顶在攻击距离外 */

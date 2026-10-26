@@ -178,11 +178,12 @@ export function normalizeState(raw: unknown): GameState {
 }
 
 /**
- * 读档时的当前值：合法就夹到 [1, 上限]，缺失 / 非法（≤0）则按满值处理。
+ * 读档时的当前值：合法就夹到 [0, 上限]，缺失 / 非法（负数垃圾）则按满值处理。
  * 判断要基于「原值是否存在」，不能用 num(...) 的默认值兜 —— 否则旧存档会读成初始值 10。
+ * 0 是合法值（空蓝 / 倒地）：联机 self 同步每次都过 normalizeState，把 0 当非法会回满蓝条。
  */
 function clampCurrent(raw: unknown, max: number): number {
   const top = Math.max(1, max);
-  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return top;
-  return Math.max(1, Math.min(Math.floor(raw), top));
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) return top;
+  return Math.min(Math.floor(raw), top);
 }

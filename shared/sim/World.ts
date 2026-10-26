@@ -31,6 +31,7 @@ import {
 import {
   ATTACK_RANGE,
   BOSS_RADIUS,
+  CAST_APPROACH_TIMEOUT,
   CAST_RANGE,
   CHASE_RANGE,
   FIREBALL_RADIUS,
@@ -80,6 +81,8 @@ export interface PlayerEnt {
   moveTarget: { x: number; y: number } | null;
   /** 左键选中的怪 */
   targetId: string | null;
+  /** 待释放的目标技能：目标超出施法距离时先走向它，进圈后真正释放 */
+  pendingCast: { skill: SkillId; since: number } | null;
   nextAttackAt: number;
   cooldowns: Partial<Record<SkillId, number>>;
   frenzyUntil: number;
@@ -286,6 +289,7 @@ export class World {
       keyDir: null,
       moveTarget: null,
       targetId: null,
+      pendingCast: null,
       nextAttackAt: 0,
       cooldowns: {},
       frenzyUntil: 0,
@@ -311,7 +315,10 @@ export class World {
     const p = this.players.get(id);
     if (!p || p.dead) return;
     p.keyDir = dir === null || !Number.isFinite(dir) ? null : dir;
-    if (p.keyDir !== null) p.moveTarget = null;
+    if (p.keyDir !== null) {
+      p.moveTarget = null;
+      p.pendingCast = null; // 玩家手动走位，取消待释放技能
+    }
   }
 
   /** 右键 / 小地图点击移动：取消选中的怪 */
@@ -319,6 +326,7 @@ export class World {
     const p = this.players.get(id);
     if (!p || p.dead || !Number.isFinite(x) || !Number.isFinite(y)) return;
     p.targetId = null;
+    p.pendingCast = null;
     p.moveTarget = {
       x: Math.max(8, Math.min(MAP_SIZE - 8, x)),
       y: Math.max(8, Math.min(MAP_SIZE - 8, y)),
@@ -388,7 +396,13 @@ export class World {
     if (skill === 'fireball' || skill === 'poison') {
       target = this.selected(p);
       if (!target) return fail('needTarget');
-      if (dist(p.x, p.y, target.x, target.y) > CAST_RANGE) return fail('tooFar');
+      const cost0 = skillMpCost(def, lv);
+      if (cost0 > 0 && s.mp < cost0) return fail('noMp');
+      if (dist(p.x, p.y, target.x, target.y) > CAST_RANGE) {
+        // 超施法距离：不提示也不扣蓝，先走向目标，进圈后由 stepPlayer 真正释放
+        p.pendingCast = { skill, since: this.now };
+        return true;
+      }
     }
     const cost = skillMpCost(def, lv);
     if (cost > 0 && !spendMp(s, cost)) return fail('noMp');
@@ -659,6 +673,7 @@ export class World {
     p.dead = true;
     p.state.hp = 0;
     p.targetId = null;
+    p.pendingCast = null;
     p.moveTarget = null;
     p.keyDir = null;
     p.frenzyUntil = 0;
@@ -687,9 +702,21 @@ export class World {
       p.moving = false;
       return;
     }
-    const sel = this.selected(p);
+    const sel = this.selected(p); // 每帧校验选中目标仍存在，失效就清掉
+    // 施法自动接近：进圈真正释放；目标没了 / 超时作废
+    if (p.pendingCast) {
+      if (!sel) {
+        p.pendingCast = null;
+      } else if (dist(p.x, p.y, sel.x, sel.y) <= CAST_RANGE) {
+        const pc = p.pendingCast;
+        p.pendingCast = null;
+        this.cast(p.id, pc.skill);
+      } else if (this.now - p.pendingCast.since > CAST_APPROACH_TIMEOUT) {
+        p.pendingCast = null;
+      }
+    }
     const speed = moveSpeed(aggregatedStats(p.state).speed ?? 0);
-    const dir = steerDir(p, sel);
+    const dir = steerDir(p, p.pendingCast && sel ? sel : null);
     const ox = p.x;
     const oy = p.y;
     advance(p, dir, speed, dt, this.obstacles);
@@ -710,6 +737,7 @@ export class World {
         if (moved < 2) {
           p.moveTarget = null;
           p.targetId = null;
+          p.pendingCast = null;
         }
       }
     } else {
@@ -869,17 +897,17 @@ export class World {
 }
 
 /**
- * 本帧移动方向（弧度），null = 不动。方向键优先；其次追选中的怪（够不着才走）；最后是点击移动目标。
+ * 本帧移动方向（弧度），null = 不动。方向键优先；其次施法自动接近（走向目标直到进施法圈）；最后是点击移动目标。
  * 导出给客户端做本地预测。
  */
 export function steerDir(
   p: { x: number; y: number; keyDir: number | null; moveTarget: { x: number; y: number } | null },
-  target: { x: number; y: number } | null,
+  pending: { x: number; y: number } | null = null,
 ): number | null {
   if (p.keyDir !== null) return p.keyDir;
-  if (target) {
-    return dist(p.x, p.y, target.x, target.y) > ATTACK_RANGE * 0.8
-      ? angleTo(p.x, p.y, target.x, target.y)
+  if (pending) {
+    return dist(p.x, p.y, pending.x, pending.y) > CAST_RANGE
+      ? angleTo(p.x, p.y, pending.x, pending.y)
       : null;
   }
   const mv = p.moveTarget;
