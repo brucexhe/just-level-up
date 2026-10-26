@@ -178,6 +178,13 @@ export function bakeSimple(scene: Phaser.Scene): void {
     g.lineStyle(3, 0xffffff, 1).strokeCircle(24, 24, 20);
     g.generateTexture('ring', 48, 48);
     g.clear();
+    // BOSS 死亡冲击波：大尺寸薄环。128px 高分辨率 + LINEAR，
+    // 扩散到 ~900px 时边缘仍是光滑弧线（NEAREST 会放大成一圈锯齿方块）
+    g.lineStyle(3, 0xffffff, 1).strokeCircle(64, 64, 60);
+    g.generateTexture('shock', 128, 128);
+    g.clear();
+    // pixelArt 会把新纹理压成 NEAREST，冲击波是放大显示的特效，单独开 LINEAR
+    scene.textures.get('shock')?.setFilter(Phaser.Textures.FilterMode.LINEAR);
     g.destroy();
   }
 }
