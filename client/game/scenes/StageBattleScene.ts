@@ -663,6 +663,7 @@ export class StageBattleScene extends Phaser.Scene {
       cooldownOf: (id: SkillId) => this.cooldownOf(id),
       cast: (id: SkillId) => this.castSkill(id),
       attack: () => this.castSkill('attack'),
+      levelUp: () => this.levelUpFx(this.state.level, this.state.level + 1),
     };
   }
 
@@ -1889,20 +1890,63 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   private levelUpFx(before: number, after: number, at: Phaser.GameObjects.Sprite = this.player) {
+    const groundY = at.y + 10;
+    // 热血江湖式光柱：白色炽热内芯 + 金色宽光晕，从脚下冲天。
+    // ADD 叠亮 + 放人物后面（4.5 < 5），轮廓不被洗白；两层共用同一张贴图、同一组补间
+    for (const [w, tint, alpha] of [
+      [2.1, 0xffd93d, 0.85],
+      [0.85, 0xffffff, 1],
+    ] as const) {
+      const img = this.add
+        .image(at.x, groundY, 'pillar')
+        .setOrigin(0.5, 1)
+        .setTint(tint)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(4.5)
+        .setScale(w * 0.75, 0.1)
+        .setAlpha(alpha);
+      this.tweens.add({
+        targets: img,
+        scaleY: 0.85,
+        duration: 280,
+        ease: 'Quad.Out',
+      });
+      this.tweens.add({
+        targets: img,
+        alpha: 0,
+        delay: 380,
+        duration: 800,
+        onComplete: () => img.destroy(),
+      });
+    }
     const ring = this.add
-      .image(at.x, at.y, 'ring')
+      .image(at.x, groundY, 'ring')
       .setTint(0xffd93d)
       .setScale(0.5)
       .setAlpha(1)
-      .setDepth(6);
+      .setDepth(6)
+      .setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({
       targets: ring,
       scale: 2.8,
       alpha: 0,
-      duration: 500,
+      duration: 700,
       onComplete: () => ring.destroy(),
     });
-    if (at !== this.player) return; // 别人升级只给一圈光
+    if (at !== this.player) return; // 别人升级：光柱 + 一圈光，没有文字和金屑
+    const sparks = this.add
+      .particles(at.x, groundY, 'dot', {
+        speedY: { min: -170, max: -70 },
+        speedX: { min: -45, max: 45 },
+        lifespan: { min: 700, max: 1300 },
+        scale: { start: 2.2, end: 0 },
+        tint: [0xffd93d, 0xfff3c0],
+        blendMode: Phaser.BlendModes.ADD,
+        emitting: false,
+      })
+      .setDepth(7);
+    sparks.explode(24);
+    this.time.delayedCall(1400, () => sparks.destroy());
     const t = this.text(at.x, at.y - 60, `LEVEL UP! Lv${after}`, '#ffd93d', 22)
       .setOrigin(0.5)
       .setDepth(9);

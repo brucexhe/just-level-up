@@ -186,6 +186,31 @@ export function bakeSimple(scene: Phaser.Scene): void {
     // pixelArt 会把新纹理压成 NEAREST，冲击波是放大显示的特效，单独开 LINEAR
     scene.textures.get('shock')?.setFilter(Phaser.Textures.FilterMode.LINEAR);
     g.destroy();
+    // 升级光柱（热血江湖式）：白色贴图，中心白热、边缘柔化、顶部渐隐，运行时染金色。
+    // canvas 渐变烘焙 —— graphics 画不出平滑的双向渐变，放大显示后会有色阶。
+    const pw = 64;
+    const ph = 256;
+    const ptex = scene.textures.createCanvas('pillar', pw, ph);
+    if (ptex) {
+      const ctx = ptex.getContext();
+      const hg = ctx.createLinearGradient(0, 0, pw, 0);
+      hg.addColorStop(0, 'rgba(255,255,255,0)');
+      hg.addColorStop(0.28, 'rgba(255,255,255,0.5)');
+      hg.addColorStop(0.5, 'rgba(255,255,255,1)');
+      hg.addColorStop(0.72, 'rgba(255,255,255,0.5)');
+      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = hg;
+      ctx.fillRect(0, 0, pw, ph);
+      ctx.globalCompositeOperation = 'destination-in';
+      const vg = ctx.createLinearGradient(0, ph, 0, 0);
+      vg.addColorStop(0, 'rgba(255,255,255,1)');
+      vg.addColorStop(0.7, 'rgba(255,255,255,1)');
+      vg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, pw, ph);
+      ptex.refresh();
+      ptex.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    }
   }
 }
 
