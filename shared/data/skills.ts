@@ -1,3 +1,5 @@
+import { JOBS } from './jobs';
+
 export type SkillId = 'attack' | 'fireball' | 'frenzy' | 'poison' | 'shield';
 
 export type SkillSchool = 'physical' | 'magical' | 'buff' | 'dot' | 'ward';
@@ -37,79 +39,13 @@ export interface SkillDef {
   desc: string;
 }
 
+/**
+ * 全职业技能总表：由各职业文件（shared/data/jobs/mage.ts …）的 skills 拼接而成。
+ * 同 id 只保留第一个职业的定义 —— 普攻 attack 各职业各有一份（当前内容一致，
+ * 弓手改成射箭后要走「按职业查技能」，见 jobDef(job).skills）。
+ */
 export const SKILLS: SkillDef[] = [
-  {
-    id: 'attack',
-    name: '普攻',
-    icon: '⚔',
-    hotkey: '空格',
-    school: 'physical',
-    mpCost: 0,
-    mpCostGrowth: 0,
-    cdMs: 0,
-    power: 1,
-    value: 0,
-    desc: '点怪锁定后自动走近挥砍，攻速由敏捷决定。',
-  },
-  {
-    id: 'fireball',
-    name: '火球术',
-    icon: '🔥',
-    hotkey: 'Q',
-    school: 'magical',
-    mpCost: 2,
-    mpCostGrowth: 0.6,
-    cdMs: 2500,
-    power: 1,
-    value: 0,
-    desc: '需先用左键选中一只怪：火球会自动追向它，命中后造成单体法术伤害。',
-  },
-  {
-    id: 'frenzy',
-    name: '狂暴',
-    icon: '🌀',
-    hotkey: 'W',
-    school: 'buff',
-    mpCost: 3,
-    mpCostGrowth: 0.5,
-    cdMs: 60000,
-    power: 0.1,
-    value: 5000,
-    desc: '短时间内提升攻击力与攻击/施法速度。',
-  },
-  {
-    id: 'poison',
-    name: '毒刃',
-    icon: '☠',
-    hotkey: 'E',
-    school: 'dot',
-    mpCost: 3,
-    mpCostGrowth: 0.5,
-    cdMs: 6000,
-    power: 0.1,
-    value: 5000,
-    desc: '需先选中一只怪：以它为中心撒出毒雾（半径随技能等级扩大），5 秒内范围内所有怪每 0.5 秒受到法术伤害。',
-  },
-  {
-    id: 'shield',
-    name: '护盾',
-    icon: '🛡',
-    hotkey: 'R',
-    school: 'ward',
-    mpCost: 3,
-    mpCostGrowth: 0.5,
-    // 冷却 = 时长：技能栏上的倒计时就是护盾剩余时间
-    cdEqualsDuration: true,
-    // 减伤 = 2% + 0.1%/级，Lv281 碰 30% 上限。不封顶的话后期就是免伤
-    power: 0.02,
-    powerGrowth: 0.001,
-    powerCap: 0.3,
-    // 时长 = 6s + 0.55s/级，Lv100 碰 60s 上限（CD 同为 60s → 此后常驻）
-    value: 6000,
-    valueGrowth: 550,
-    valueCap: 60000,
-    desc: '展开球形护盾（参考魔法盾），短时间内提升物理抗性与法术抗性。',
-  },
+  ...new Map(JOBS.flatMap((j) => j.skills).map((s) => [s.id, s])).values(),
 ];
 
 /** 火球飞行速度 px/s */

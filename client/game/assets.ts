@@ -453,71 +453,13 @@ export function propKey(stageId: number, shape: PropShape): string {
 }
 
 /**
- * 主角 24×24 像素网格：严格 24 列 × 24 行。
- * 脚底在第 22 行（索引 22 的靴子行），所以人物站立的"地面线"在 y+22 附近，
- * 场景里的 PLAYER_SHADOW.offsetY 按这个来配。
- *
- * 配色不在这里写死：每个职业一套颜色，见 shared/data/jobs.ts。
+ * 主角贴图：每个职业自己的 24×24 像素网格（见 shared/data/jobs/*.ts 的 grids），
+ * 这里只负责按职业烘焙成纹理。
  */
-const PLAYER_GRID_A = [
-  '........................',
-  '...........PP...........',
-  '..........PPCC..........',
-  '..........HHHH.....WM...',
-  '.........HHHHHH....WM...',
-  '........DGHHHHGD...WM...',
-  '.......DSSSSSSSSD..WM...',
-  '.......DSEESSEESD..WM...',
-  '.......DSEESSEESD..WM...',
-  '.......DSSSEESSSD..WM...',
-  '........DAAAAAAD...WM...',
-  '...CC.GADAAGGAADAG.WM...',
-  '..CCC.AADAAGGAADAA.WM...',
-  '.CCCC.AD.AAGGAA.ADGGGG..',
-  '.CCCR.AD.AAGGAD.ADABB...',
-  'CCCRR.AD.AAGGAD.ADDBB...',
-  'CCRRR.DD.AAGGDD.DD.GG...',
-  'CCRRR...DBBGGBBD........',
-  '.CCRR...LL...LD.........',
-  '..CCR...LL...LD.........',
-  '...CR...LL...LD.........',
-  '........LL...LD.........',
-  '.......DDD...DDD........',
-  '........................',
-];
-
-/** 走路第二帧：手臂换另一侧、披风收拢、双腿并步 */
-const PLAYER_GRID_B = [
-  '........................',
-  '...........PP...........',
-  '..........PPCC..........',
-  '..........HHHH.....WM...',
-  '.........HHHHHH....WM...',
-  '........DGHHHHGD...WM...',
-  '.......DSSSSSSSSD..WM...',
-  '.......DSEESSEESD..WM...',
-  '.......DSEESSEESD..WM...',
-  '.......DSSSEESSSD..WM...',
-  '........DAAAAAAD...WM...',
-  '...CC.GADAAGGAADAG.WM...',
-  '..CCC.AADAAGGAADAA.WM...',
-  '..CCC.AD.AAGGAA.ADGGGG..',
-  '..CCR.AD.AAGGAD.ADABB...',
-  '..CCR.AD.AAGGAD.ADDBB...',
-  '...CR.DD.AAGGDD.DD.GG...',
-  '...CR...DBBGGBBD........',
-  '...CR.....LLLD..........',
-  '..........LLLD..........',
-  '..........LLLD..........',
-  '..........LLLD..........',
-  '.........DDDDDD.........',
-  '........................',
-];
-
 export function bakePlayer(scene: Phaser.Scene): void {
   for (const job of JOBS) {
-    bakeGrid(scene, playerTexture(job.id, 'a'), PLAYER_GRID_A, job.palette);
-    bakeGrid(scene, playerTexture(job.id, 'b'), PLAYER_GRID_B, job.palette);
+    bakeGrid(scene, playerTexture(job.id, 'a'), job.grids.a, job.palette);
+    bakeGrid(scene, playerTexture(job.id, 'b'), job.grids.b, job.palette);
   }
 }
 
@@ -877,6 +819,13 @@ export function bakeProps(scene: Phaser.Scene): void {
     '.GDDDDG.',
     '..DDDD..',
   ], { G: 0xe8c84a, D: 0xb08a2a, W: 0xfff2b0 });
+
+  // 弓手的箭：水平朝右（rotation 对准目标），箭头在右、箭羽在左
+  bakeGrid(scene, 'arrow', [
+    'P.........WW.',
+    'PBBBBBBBBBWWW',
+    'P.........WW.',
+  ], { P: 0xd8d0b0, B: 0x8a6a3a, W: 0xfff2b0 });
 
   bakeGrid(scene, 'fireball', [
     '............',

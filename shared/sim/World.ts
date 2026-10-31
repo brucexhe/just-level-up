@@ -7,6 +7,7 @@ import { goldDrop, type PotionKind } from '../core/economy';
 import { killExp } from '../core/progression';
 import { skillCooldown, skillMpCost, skillPower, skillValue } from '../core/skills';
 import { levelBandOfStage, remainingOfLevel } from '../core/stage';
+import { jobDef } from '../data/jobs';
 import {
   FIREBALL_SPEED,
   POISON_RADIUS_BASE,
@@ -345,7 +346,12 @@ export class World {
     if (!m) return;
     p.moveTarget = null;
     p.targetId = mid;
-    if (dist(p.x, p.y, m.x, m.y) <= ATTACK_RANGE) this.tryMelee(p);
+    if (dist(p.x, p.y, m.x, m.y) <= this.attackRange(p)) this.tryMelee(p);
+  }
+
+  /** 该玩家的普攻距离：职业可覆盖（弓箭手远程），默认近战 ATTACK_RANGE */
+  private attackRange(p: PlayerEnt): number {
+    return jobDef(p.state.job).attackRange ?? ATTACK_RANGE;
   }
 
   private selected(p: PlayerEnt): MonsterEnt | null {
@@ -514,12 +520,12 @@ export class World {
     return bestD <= maxDist ? best : null;
   }
 
-  /** 近战一次：优先打选中的怪（需在攻击距离内），否则就近；返回是否真的砍出去了 */
+  /** 普攻一次（近战挥砍 / 远程放箭都走这里）：优先打选中的怪（需在攻击距离内），否则就近；返回是否真的出手了 */
   tryMelee(p: PlayerEnt): boolean {
     if (p.dead || this.now < p.nextAttackAt) return false;
+    const range = this.attackRange(p);
     const sel = this.selected(p);
-    const target =
-      sel && dist(p.x, p.y, sel.x, sel.y) <= ATTACK_RANGE ? sel : this.nearestMonster(p, ATTACK_RANGE);
+    const target = sel && dist(p.x, p.y, sel.x, sel.y) <= range ? sel : this.nearestMonster(p, range);
     if (!target) return false;
     p.nextAttackAt = this.now + this.meleeInterval(p);
     const stats = aggregatedStats(p.state);
@@ -541,7 +547,7 @@ export class World {
 
   /** 空挥：只有动画（攻击间隔没到 / 够不着时按空格也要有反馈） */
   private emptySwing(p: PlayerEnt): void {
-    const t = this.selected(p) ?? this.nearestMonster(p, ATTACK_RANGE * 3);
+    const t = this.selected(p) ?? this.nearestMonster(p, this.attackRange(p) * 3);
     const angle = t ? angleTo(p.x, p.y, t.x, t.y) : p.flipX ? Math.PI : 0;
     if (t) p.flipX = t.x < p.x;
     this.events.push({ k: 'swing', pid: p.id, angle, empty: true });

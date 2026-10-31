@@ -12,7 +12,7 @@ import { levelBandOfStage, maxStageFromProgress } from '../../../shared/core/sta
 import type { GroundDrop } from '../../../shared/core/drops';
 import type { PotionKind } from '../../../shared/core/economy';
 import type { EquipSlot, RarityKey } from '../../../shared/core/equipment';
-import { expToNext, isBreakthrough } from '../../../shared/core/progression';
+import { expToNext } from '../../../shared/core/progression';
 import { skillCooldown } from '../../../shared/core/skills';
 import { CHASE_RANGE, MAP_SIZE, PROP_SCALE, SPAWN_X, SPAWN_Y } from '../../../shared/sim/map';
 import type { CastFail, WorldEvent } from '../../../shared/sim/World';
@@ -26,11 +26,16 @@ import {
   bakeProps,
   bakeSimple,
   skinForStage,
-  SLASH_TEX_SIZE,
   SHIELD_DISP_W,
   SHIELD_DISP_H,
   SHIELD_TEX_SS,
 } from '../assets';
+import { mkAttackFx, type AttackFx } from '../fx/attackFx';
+import { FrenzyFx, FRENZY_GLOW, FRENZY_RING } from '../fx/frenzyFx';
+import { FireballFx } from '../fx/fireballFx';
+import { poisonFx } from '../fx/poisonFx';
+import { bossDeathFx } from '../fx/bossDeathFx';
+import { levelUpFx } from '../fx/levelUpFx';
 import { SKILL_BY_ID, type BookSkillId, type SkillId } from '../../../shared/data/skills';
 import { ATTR_META } from '../../../shared/data/attrs';
 import { STAGES, artStageOf, stageDef, stageName as stageLabel } from '../../../shared/data/stages';
@@ -43,7 +48,7 @@ import type { Cooldown, MinimapData, MinimapMonster, SettingsApi } from '../../u
 import { audio } from '../audio';
 import { loadPrefs, savePrefs } from '../../state/save';
 import { currentSession } from '../../net/current';
-import type { DropView, FireballView, MonsterView, PlayerView, Session } from '../../net/session';
+import type { DropView, MonsterView, PlayerView, Session } from '../../net/session';
 
 /**
  * 相机至少要看到的世界范围（5:3）。窗口比例偏离 5:3 时，多出来的那条边多看一点，
@@ -145,11 +150,6 @@ interface OtherView {
   shownLabel: string;
 }
 
-interface FireballSprite {
-  img: Phaser.GameObjects.Image;
-  trail: Phaser.GameObjects.Particles.ParticleEmitter;
-}
-
 /** 怪物脚下的地面投影：普通怪 / BOSS 尺寸不同 */
 const MONSTER_SHADOW = {
   // 'shadow' 贴图本身就是 24×12、0.35 透明度的软椭圆，
@@ -178,52 +178,6 @@ const PLAYER_SCALE = 2;
 const PLAYER_HIT_SCALE = 2.15;
 
 /**
- * 狂暴：preFX Glow 轮廓光。
- *
- * 只 **WebGL** 有效 —— Canvas 下 `FX.enable()` 拿不到 `renderer.pipelines`，
- * 会静默把 enabled 置 false（不报错），所以脚下光圈 + 本体脉动必须是独立可用的降级通道。
- */
-const FRENZY_GLOW = {
-  color: 0xff7bd5,
-  /** 呼吸周期（ms） */
-  periodMs: 520,
-  outerBase: 3.0,
-  outerAmp: 1.1,
-  innerBase: 0.7,
-  innerAmp: 0.15,
-  fadeInMs: 260,
-  fadeOutMs: 320,
-  /**
-   * preFX 渲染目标四周的留白：Glow 片元最多向外采样 10 个纹素，
-   * padding 不够光晕会被 sprite 边界硬切成方方块。
-   */
-  padding: 10,
-  /** 受击闪红那 110ms 压住外发光，粉色轮廓光和红色会互相打架 */
-  hurtOuter: 1.0,
-  hurtMs: 110,
-  /** 降级脉动：角色本体叠一层粉，幅度 [0.30, 0.60] */
-  tintMin: 0.3,
-  tintMax: 0.6,
-};
-
-/** 狂暴脚下光圈：贴地椭圆，比轮廓光暗一档，压在阴影下面一层 */
-const FRENZY_RING = {
-  color: 0xd94fb0,
-  scaleX: 1.7,
-  scaleY: 0.62,
-  offsetY: 18,
-  alphaBase: 0.3,
-  alphaAmp: 0.12,
-  /** 呼吸周期（ms）：错开 glow 的 520，两者此消彼长 */
-  periodMs: 420,
-  /** 角色阴影是 −0.1，光圈再低一点，读起来才像躺在地上 */
-  depthOffset: -0.4,
-  /** preFX 不可用时（Canvas）把呼吸幅度加大，替 Glow 顶上提示作用 */
-  alphaBaseFallback: 0.34,
-  alphaAmpFallback: 0.18,
-};
-
-/**
  * 护盾罩（参考热血传奇法师的魔法盾）：金色椭圆 + 从外到内的渐变。
  *
  * 和旧的蓝色圆球比有四处改动：
@@ -249,100 +203,6 @@ const SHIELD_DOME = {
   /** 展开 / 消散只动 alpha，绝不动缩放 */
   fadeInMs: 140,
   fadeOutMs: 220,
-};
-
-/** ------- 普攻刀光：六层的数值都集中在这里，方便对着美术表逐行核对 ------- */
-
-/**
- * 月牙贴图从 28px 超采样到 112px（为了弧线光滑），显示尺寸不变，
- * 所以下面两道弧的 scale 要同比除以 4 —— 写死数字将来改分辨率会忘，这里换算。
- */
-const SLASH_TEX_SCALE = 28 / SLASH_TEX_SIZE;
-
-/** 1 刀本体（沿用原 swingBlade 的那把刀）：fadeDelay 是开始淡出的时刻，不是整段时长 */
-const BLADE_LAYER = {
-  tint: 0xfff3c8,
-  tintFrenzy: 0xffc0e8,
-  dist: 14,
-  rotFrom: -1.5,
-  rotTo: 0.9,
-  scaleFrom: 2.6,
-  scaleTo: 3.0,
-  sweepMs: 260,
-  fadeMs: 110,
-  fadeDelay: 130,
-  depth: 5,
-};
-
-/** 2 刀残影：rotation 读刀本体当前值，跟在刀屁股后面 */
-const TRAIL_LAYER = {
-  tint: 0xbfe0ff,
-  tintFrenzy: 0xff8fd0,
-  dist: 14,
-  count: 4,
-  countFrenzy: 6,
-  spacing: 42,
-  spacingFrenzy: 30,
-  scaleFrom: 2.55,
-  scaleTo: 2.75,
-  alpha: 0.45,
-  ms: 170,
-  depth: 4,
-};
-
-/** 3 月牙外弧（宽 / 暖）：给白弧垫一层暖光 */
-const ARC_OUTER = {
-  tint: 0xffd07a,
-  tintFrenzy: 0xff7bd5,
-  dist: 24,
-  rot: -0.3,
-  scaleFrom: 2.4 * SLASH_TEX_SCALE,
-  scaleTo: 3.6 * SLASH_TEX_SCALE,
-  alpha: 0.55,
-  ms: 230,
-  delay: 30,
-  depth: 3,
-};
-
-/** 4 月牙主弧（白）：真正表达「砍到哪」的那道 */
-const ARC_CORE = {
-  tint: 0xfff8e0,
-  tintFrenzy: 0xffd0f0,
-  dist: 20,
-  rot: -0.25,
-  scaleFrom: 2.0 * SLASH_TEX_SCALE,
-  scaleTo: 3.1 * SLASH_TEX_SCALE,
-  alpha: 1,
-  ms: 180,
-  delay: 55,
-  depth: 4,
-};
-
-/** 5 命中环 */
-const HIT_RING_LAYER = {
-  tint: 0xfff6d8,
-  tintFrenzy: 0xffc0e8,
-  /** 命中点向砍的方向退回这么多，环才落在受击面上 */
-  pullBack: 12,
-  scaleFrom: 0.28,
-  scaleTo: 0.95,
-  alpha: 0.95,
-  ms: 170,
-  depth: 3,
-};
-
-/** 6 命中火花（复用 castPoison 那套 dot 粒子管线） */
-const HIT_SPARK_LAYER = {
-  tints: [0xfff2c8, 0xffffff],
-  tintsFrenzy: [0xffd0f0, 0xffffff],
-  count: 6,
-  speedMin: 90,
-  speedMax: 190,
-  lifespan: 200,
-  scale: 1.8,
-  alpha: 0.9,
-  depth: 4,
-  ttlMs: 300,
 };
 
 /**
@@ -393,27 +253,17 @@ interface MonsterSprite {
 export class StageBattleScene extends Phaser.Scene {
   private session!: Session;
   private player!: Phaser.GameObjects.Sprite;
-  /** 挥砍特效的出发点：默认是自己，别人的 swing 事件临时换成他的贴图 */
-  private fxOrigin!: Phaser.GameObjects.Sprite;
   private shadow!: Phaser.GameObjects.Image;
-  private aura!: Phaser.GameObjects.Image;
+  /** 普攻特效（按职业：剑 = 刀光六层，弓 = 飞箭）+ 命中反馈，见 fx/attackFx.ts */
+  private attackFxs = new Map<number, AttackFx>();
+  /** 狂暴特效：脚下光圈 + preFX 轮廓光，见 fx/frenzyFx.ts */
+  private frenzyFx!: FrenzyFx;
+  /** 火球飞行视图，见 fx/fireballFx.ts */
+  private fireballFx!: FireballFx;
   private playerLabel!: Phaser.GameObjects.Text;
-  /** 狂暴轮廓光（preFX Glow）。Canvas 下对象存在但不生效，见 glowAvailable */
-  private frenzyGlow: Phaser.FX.Glow | null = null;
-  /** preFX 是否真的接管了渲染（Canvas 下 false，走本体降级脉动） */
-  private glowAvailable = false;
-  /** 狂暴边沿状态位：进出场补间需要边沿 */
-  private frenzyOn = false;
-  /** 进 / 出场补间进行中时，update 不要逐帧覆写 glow 的 strength */
-  private glowTweening = false;
-  /** 本体降级脉动是否生效（退出时只清一次 tint） */
-  private frenzyTintOn = false;
-  /** 受击闪红的截止时刻：这段时间内压低轮廓光，且不覆写本体 tint */
-  private hurtUntil = 0;
   private monsterViews = new Map<string, MonsterSprite>();
   private otherViews = new Map<string, OtherView>();
   private dropViews = new Map<string, DropSprite>();
-  private fireballViews = new Map<string, FireballSprite>();
   private obstacleImgs: Phaser.GameObjects.Image[] = [];
   /** 方向键（↑↓←→）：按住即手动移动，和右键点击移动并存，按键优先 */
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -478,13 +328,6 @@ export class StageBattleScene extends Phaser.Scene {
       .image(0, 0, 'shadow')
       .setScale(PLAYER_SHADOW.scaleX, PLAYER_SHADOW.scaleY)
       .setDepth(4);
-    this.aura = this.add
-      .image(0, 0, 'ring')
-      .setTint(FRENZY_RING.color)
-      .setScale(FRENZY_RING.scaleX, FRENZY_RING.scaleY)
-      .setAlpha(FRENZY_RING.alphaBase)
-      .setDepth(4)
-      .setVisible(false);
     this.targetRing = this.add
       .image(0, 0, 'ring')
       .setTint(0xe05656)
@@ -503,17 +346,8 @@ export class StageBattleScene extends Phaser.Scene {
     this.player = this.add.sprite(SPAWN_X, SPAWN_Y, playerTexture(this.state.job, 'a'));
     this.player.setScale(PLAYER_SCALE).setDepth(5);
     this.player.play(playerWalkAnim(this.state.job));
-    this.fxOrigin = this.player;
-    // 狂暴轮廓光：**整局只建一次**控制器，之后只动 strength（来回 add/remove 会重建管线，帧抖）。
-    // knockout 必须 false —— true 会把人整个抠掉，只剩一圈光。
-    // Canvas 下 addGlow 内部的 enable() 拿不到 renderer.pipelines，会静默失败、enabled 保持 false。
-    const preFX = this.player.preFX;
-    if (preFX) {
-      // 留白要在第一次绘制前给：光晕最多向外铺 10 个纹素，没留白就被贴图边界切成方块
-      preFX.setPadding(FRENZY_GLOW.padding);
-      this.frenzyGlow = preFX.addGlow(FRENZY_GLOW.color, 0, 0, false);
-      this.glowAvailable = preFX.enabled;
-    }
+    this.frenzyFx = new FrenzyFx(this, this.player);
+    this.fireballFx = new FireballFx(this);
     this.playerLabel = this.add
       .text(0, 0, '', {
         fontFamily: 'ui-monospace, monospace',
@@ -659,11 +493,13 @@ export class StageBattleScene extends Phaser.Scene {
         const c = this.cameras.main;
         return { sx: (x - c.worldView.x) * c.zoom, sy: (y - c.worldView.y) * c.zoom };
       },
-      fireballInfo: () => ({ flying: this.fireballViews.size }),
+      fireballInfo: () => ({ flying: this.fireballFx.count }),
+      /** 空中的箭矢数（弓手普攻特效），e2e 用 */
+      arrows: () => this.children.list.filter((o) => (o as Phaser.GameObjects.Image).texture?.key === 'arrow').length,
       cooldownOf: (id: SkillId) => this.cooldownOf(id),
       cast: (id: SkillId) => this.castSkill(id),
       attack: () => this.castSkill('attack'),
-      levelUp: () => this.levelUpFx(this.state.level, this.state.level + 1),
+      levelUp: () => this.spawnLevelUpFx(this.state.level, this.state.level + 1),
     };
   }
 
@@ -877,7 +713,7 @@ export class StageBattleScene extends Phaser.Scene {
   private clearWorldViews(): void {
     for (const id of [...this.monsterViews.keys()]) this.destroyMonsterView(id);
     for (const id of [...this.dropViews.keys()]) this.destroyDropView(id);
-    for (const id of [...this.fireballViews.keys()]) this.destroyFireballView(id);
+    this.fireballFx.clear();
     for (const id of [...this.otherViews.keys()]) this.destroyOtherView(id);
   }
 
@@ -903,15 +739,6 @@ export class StageBattleScene extends Phaser.Scene {
     g.label.destroy();
     g.owner.destroy();
     this.dropViews.delete(id);
-  }
-
-  private destroyFireballView(id: string): void {
-    const f = this.fireballViews.get(id);
-    if (!f) return;
-    f.trail.stop();
-    f.trail.destroy();
-    f.img.destroy();
-    this.fireballViews.delete(id);
   }
 
   private destroyOtherView(id: string): void {
@@ -1033,8 +860,9 @@ export class StageBattleScene extends Phaser.Scene {
       const ty = hit ? hit.src.y : p.worldY;
       const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, tx, ty);
       this.player.setFlipX(tx < this.player.x);
-      this.slashEffect(angle);
-      this.swingBlade(angle);
+      const fx = this.attackFxOf(this.state.job);
+      fx.primary(angle);
+      fx.secondary(angle);
       audio.play('swing');
       if (hit) this.session.target(hit.src.id);
     });
@@ -1281,7 +1109,7 @@ export class StageBattleScene extends Phaser.Scene {
         audio.play('frenzy');
         this.ui.toast(`狂暴！攻击与攻速 +${Math.round(((e.value ?? 1) - 1) * 100)}%`, '#ff9fd8');
         // 直接推一把：update 里的边沿检测是兜底，主动释放时不该等到私有状态同步才亮
-        this.toggleFrenzyFx(true);
+        this.frenzyFx.toggle(true);
         return;
       case 'shield':
         if (!mine) return;
@@ -1294,7 +1122,7 @@ export class StageBattleScene extends Phaser.Scene {
         if (mine) audio.play('fire');
         return;
       case 'poison':
-        this.poisonFx(e.x ?? 0, e.y ?? 0, e.radius ?? 100);
+        poisonFx(this, e.x ?? 0, e.y ?? 0, e.radius ?? 100);
         if (!mine) return;
         audio.play('poison');
         this.ui.toast(
@@ -1313,132 +1141,10 @@ export class StageBattleScene extends Phaser.Scene {
     return this.session.shieldLeft() > 0;
   }
 
-  /**
-   * 狂暴特效的边沿处理：进出场各补间一次到基准值，稳态交给 update 逐帧脉动。
-   * 退出时不 remove 控制器 —— strength=0 时画面上没有差别，省掉管线来回重建的抖动。
-   */
-  private toggleFrenzyFx(frenzy: boolean): void {
-    this.frenzyOn = frenzy;
-    const g = this.frenzyGlow;
-    if (g) {
-      this.tweens.killTweensOf(g);
-      this.glowTweening = true;
-      this.tweens.add({
-        targets: g,
-        outerStrength: frenzy ? FRENZY_GLOW.outerBase : 0,
-        innerStrength: frenzy ? FRENZY_GLOW.innerBase : 0,
-        duration: frenzy ? FRENZY_GLOW.fadeInMs : FRENZY_GLOW.fadeOutMs,
-        ease: frenzy ? 'Sine.Out' : 'Sine.In',
-        onComplete: () => {
-          this.glowTweening = false;
-        },
-      });
-    }
-    if (!frenzy && this.frenzyTintOn) {
-      this.frenzyTintOn = false;
-      this.player.clearTint();
-    }
-  }
-
-  /** 每帧的轮廓光脉动；补间在跑的时候不要覆写，否则进出场被抹平 */
-  private updateFrenzyGlow(time: number, frenzy: boolean, pulse: number): void {
-    const g = this.frenzyGlow;
-    if (g && this.glowAvailable) {
-      if (!frenzy || this.glowTweening) return;
-      let outer = FRENZY_GLOW.outerBase + FRENZY_GLOW.outerAmp * pulse;
-      // 受击闪红那 110ms：粉轮廓光和红闪会撞色，先把外发光压到最低档
-      if (time < this.hurtUntil) outer = Math.min(outer, FRENZY_GLOW.hurtOuter);
-      g.outerStrength = outer;
-      g.innerStrength = FRENZY_GLOW.innerBase + FRENZY_GLOW.innerAmp * pulse;
-      return;
-    }
-    // 降级路径（Canvas / preFX 没接管）：本体叠一层粉色脉动，状态照样一眼可见
-    if (!frenzy) {
-      if (this.frenzyTintOn) {
-        this.frenzyTintOn = false;
-        this.player.clearTint();
-      }
-      return;
-    }
-    if (time < this.hurtUntil) return; // 让受击闪红那 110ms 完整播完
-    const k = 0.5 + 0.5 * pulse;
-    const amt = FRENZY_GLOW.tintMin + (FRENZY_GLOW.tintMax - FRENZY_GLOW.tintMin) * k;
-    this.player.setTint(this.tintMix(0xffffff, FRENZY_GLOW.color, amt));
-    this.frenzyTintOn = true;
-  }
-
-  /** 两色调和（降级脉动用）：amt=0 取 from，amt=1 取 to */
-  private tintMix(from: number, to: number, amt: number): number {
-    const lerp = (a: number, b: number) => Math.round(a + (b - a) * amt);
-    const r = lerp((from >> 16) & 0xff, (to >> 16) & 0xff);
-    const g = lerp((from >> 8) & 0xff, (to >> 8) & 0xff);
-    const b = lerp(from & 0xff, to & 0xff);
-    return (r << 16) | (g << 8) | b;
-  }
-
-  /** 毒雾：一圈扩散的绿环 + 上升的毒泡（伤害由世界结算） */
-  private poisonFx(cx: number, cy: number, radius: number) {
-    const cloud = this.add
-      .image(cx, cy + 8, 'ring')
-      .setTint(0x9ade6a)
-      .setScale(0.3)
-      .setAlpha(0.9)
-      .setDepth(cy + 1);
-    this.tweens.add({
-      targets: cloud,
-      scale: radius / 20,
-      alpha: 0,
-      duration: 420,
-      ease: 'Quad.Out',
-      onComplete: () => cloud.destroy(),
-    });
-    const puff = this.add.particles(cx, cy, 'dot', {
-      speed: { min: 20, max: 70 },
-      lifespan: 620,
-      scale: { start: 1.8, end: 0 },
-      tint: [0x9ade6a, 0x6fae5c, 0xd6f58a],
-      alpha: { start: 0.75, end: 0 },
-      emitting: false,
-    });
-    puff.setDepth(cy + 2);
-    puff.explode(22);
-    this.time.delayedCall(700, () => puff.destroy());
-  }
-
   /** 当前被左键选中的怪物（脚下有光圈的那个）；没有就是 null */
   private selectedTarget(): MonsterSprite | null {
     const id = this.session.targetId();
     return (id && this.monsterViews.get(id)) || null;
-  }
-
-  /** 新出现的火球：本体 + 拖尾；位置每帧取世界里的坐标（追踪逻辑在世界里） */
-  private createFireballView(src: FireballView): void {
-    const img = this.add.image(src.x, src.y, 'fireball').setScale(2.5).setDepth(6).setRotation(src.angle);
-    const trail = this.add.particles(0, 0, 'dot', {
-      follow: img,
-      speed: { min: 10, max: 40 },
-      lifespan: 260,
-      scale: { start: 1.4, end: 0 },
-      tint: [0xff8a2a, 0xffd23a],
-      alpha: { start: 0.9, end: 0 },
-    });
-    trail.setDepth(5);
-    this.fireballViews.set(src.id, { img, trail });
-  }
-
-  /** 火球爆裂：只有特效，伤害由 hit 事件飘字 */
-  private fireExplodeFx(px: number, py: number): void {
-    const burst = this.add.particles(px, py, 'dot', {
-      speed: { min: 80, max: 220 },
-      lifespan: 420,
-      scale: { start: 2.2, end: 0 },
-      tint: [0xff8a2a, 0xffd23a, 0xd84a1a],
-      emitting: false,
-    });
-    burst.explode(26);
-    burst.setDepth(7);
-    this.time.delayedCall(600, () => burst.destroy());
-    if (this.nearCamera(px, py)) this.cameras.main.shake(90, 0.005);
   }
 
   /** 是否在镜头附近：别人在地图另一头打怪，不该震我的屏 */
@@ -1453,6 +1159,16 @@ export class StageBattleScene extends Phaser.Scene {
    * hit 事件：飘字 + 闪白 + 受击形变。击退位移由世界结算，这里只做表现。
    * 持续伤害（毒）用「轻微」档：不形变弹跳、音效压低，否则中毒的怪会一直抖个不停。
    */
+  /** 按职业取普攻特效（懒创建缓存；出发点和狂暴判定都在调用时才生效） */
+  private attackFxOf(job: number): AttackFx {
+    let fx = this.attackFxs.get(job);
+    if (!fx) {
+      fx = mkAttackFx(this, this.player, () => this.frenzyActive(), job);
+      this.attackFxs.set(job, fx);
+    }
+    return fx;
+  }
+
   private onHit(e: Extract<WorldEvent, { k: 'hit' }>): void {
     const m = this.monsterViews.get(e.mid);
     const mine = e.by === this.session.selfId;
@@ -1463,7 +1179,7 @@ export class StageBattleScene extends Phaser.Scene {
     const color = gentle ? '#9ade6a' : mine ? '#ffd93d' : '#c9d1d9';
     this.floatText(x, y - 30, `${e.dmg}`, color, e.heavy ? 24 : gentle || !mine ? 14 : 17);
     if (mine || this.nearCamera(x, y)) audio.play(e.heavy ? 'crit' : 'hit', gentle || !mine ? 0.35 : 1);
-    if (mine && e.kind === 'melee') this.hitFeedback(x, y, e.angle);
+    if (mine && e.kind === 'melee') this.attackFxOf(this.state.job).hitFeedback(x, y, e.angle);
     if (!m) return;
     m.sprite.setTintFill(gentle ? 0x9ade6a : 0xffffff);
     const baseScale = m.isBoss ? 5.5 : 3;
@@ -1575,7 +1291,7 @@ export class StageBattleScene extends Phaser.Scene {
     // BOSS 走专属大特效；先取到贴图键再销毁视图（碎片要用本体贴图来"碎"）
     const bossTex = e.isBoss ? m?.sprite.texture.key : undefined;
     if (m) this.destroyMonsterView(e.mid);
-    if (e.isBoss) this.bossDeathFx(px, py, bossTex);
+    if (e.isBoss) bossDeathFx(this, px, py, bossTex);
     const burst = this.add.particles(px, py, 'dot', {
       speed: { min: 60, max: 180 },
       lifespan: 500,
@@ -1589,164 +1305,6 @@ export class StageBattleScene extends Phaser.Scene {
     if (this.nearCamera(px, py)) {
       this.cameras.main.shake(e.isBoss ? 200 : 70, e.isBoss ? 0.012 : 0.004);
       audio.play(e.isBoss ? 'boss' : 'kill');
-    }
-  }
-
-  /**
-   * BOSS 死亡专属大特效：慢节奏的大范围爆炸碎裂。
-   *
-   * 时间轴（全片约 2.4s，比普通怪的 0.65s 慢一个量级，靠"快出慢收"的缓动制造慢镜感）：
-   *   0ms    白色核心闪光瞬胀 + 余温光晕 + 本体碎片开始四散
-   *   60ms   内圈冲击波扩散（亮而快）
-   *   220ms  外圈冲击波扩散（大而淡）
-   *   全程   火花慢速飞散上浮、深色碎屑带重力砸落
-   *   相机   轻推近再弹回 + 长震屏（只在死亡点处于视野内时）
-   */
-  private bossDeathFx(px: number, py: number, bossTex?: string): void {
-    const DEPTH = 7;
-    const cy = py - 18; // 爆心取怪的躯干位置，不在脚底
-
-    // ---- 核心闪光：一团亮斑先瞬胀后熄灭，撑起爆炸的第一眼 ----
-    const core = this.add
-      .image(px, cy, 'dot')
-      .setDepth(DEPTH + 1)
-      .setTint(0xfff3c0)
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setScale(1.5);
-    this.tweens.add({
-      targets: core,
-      scale: 30,
-      alpha: 0,
-      duration: 640,
-      ease: 'Cubic.out',
-      onComplete: () => core.destroy(),
-    });
-    // 余温：爆炸点留一团慢慢散掉的暖光，比闪光活得更久
-    const glow = this.add
-      .image(px, cy + 8, 'dot')
-      .setDepth(DEPTH)
-      .setTint(0xff8a4a)
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setAlpha(0.38)
-      .setScale(6);
-    this.tweens.add({
-      targets: glow,
-      scale: 14,
-      alpha: 0,
-      duration: 1200,
-      ease: 'Quad.out',
-      onComplete: () => glow.destroy(),
-    });
-
-    // ---- 双层冲击波：薄环贴图从爆心扩到大半屏，错峰出现（压扁贴合俯视地面） ----
-    const shockwave = (delay: number, endScale: number, alpha: number, dur: number): void => {
-      const wave = this.add
-        .image(px, py - 8, 'shock')
-        .setDepth(DEPTH)
-        .setTint(0xffe8b0)
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setScale(0.5, 0.4)
-        .setAlpha(alpha);
-      this.tweens.add({
-        targets: wave,
-        scaleX: endScale,
-        scaleY: endScale * 0.8,
-        alpha: 0,
-        delay,
-        duration: dur,
-        ease: 'Cubic.out',
-        onComplete: () => wave.destroy(),
-      });
-    };
-    shockwave(60, 5.5, 0.9, 700);
-    shockwave(220, 9, 0.55, 950);
-
-    // ---- 本体碎片：把 BOSS 自己的贴图切成 4x4 块往外抛，"碎掉"的实感 ----
-    if (bossTex && this.textures.exists(bossTex)) {
-      const probe = this.add.image(0, 0, bossTex); // 只为量原始像素尺寸
-      const tw = probe.width;
-      const th = probe.height;
-      probe.destroy();
-      const cols = 4;
-      const rows = 4;
-      const fw = tw / cols;
-      const fh = th / rows;
-      for (let iy = 0; iy < rows; iy++) {
-        for (let ix = 0; ix < cols; ix++) {
-          if (Math.random() < 0.2) continue; // 随机留缺口，不是模板化的十六宫格
-          const frag = this.add
-            .image(px, cy, bossTex)
-            .setDepth(DEPTH + 0.5)
-            .setScale(5.2);
-          // setCrop 后 origin 会按裁剪块重算，块心大致对齐爆心即可（爆炸不需要精确）
-          frag.setCrop(ix * fw, iy * fh, fw, fh);
-          frag.setTint(Math.random() < 0.5 ? 0xff9a9a : 0xffc9a0);
-          const ang = Math.random() * Math.PI * 2;
-          const dist = Phaser.Math.Between(70, 170);
-          const dur = Phaser.Math.Between(950, 1350);
-          this.tweens.add({
-            targets: frag,
-            x: px + Math.cos(ang) * dist,
-            y: cy + Math.sin(ang) * dist * 0.72 + 26, // 纵向压缩 + 略下坠，贴着地面散开
-            rotation: Phaser.Math.FloatBetween(-2.5, 2.5),
-            duration: dur,
-            ease: 'Cubic.out',
-          });
-          // 晚段才淡出缩小：先飞后散，避免边飞边凭空消失
-          this.tweens.add({
-            targets: frag,
-            alpha: 0,
-            scale: 2.2,
-            delay: dur * 0.55,
-            duration: dur * 0.45,
-            ease: 'Quad.in',
-            onComplete: () => frag.destroy(),
-          });
-        }
-      }
-    }
-
-    // ---- 粒子层：暖色火花慢速飞散（ADD 叠亮），深色碎屑被炸上天再砸落 ----
-    const sparks = this.add
-      .particles(px, cy, 'dot', {
-        speed: { min: 60, max: 300 },
-        lifespan: { min: 900, max: 1500 },
-        scale: { start: 2.6, end: 0 },
-        gravityY: 140,
-        tint: [0xffd93d, 0xff8a2a, 0xff3b3b, 0xfff3c0],
-        blendMode: Phaser.BlendModes.ADD,
-        emitting: false,
-      })
-      .setDepth(DEPTH + 0.6);
-    sparks.explode(70);
-    const debris = this.add
-      .particles(px, cy - 4, 'dot', {
-        speed: { min: 90, max: 260 },
-        lifespan: { min: 800, max: 1400 },
-        scale: { start: 2.2, end: 0.6 },
-        gravityY: 420,
-        tint: [0x8a3030, 0x5a2424, 0x3a2020],
-        emitting: false,
-      })
-      .setDepth(DEPTH + 0.4);
-    debris.explode(26);
-    this.time.delayedCall(2400, () => {
-      sparks.destroy();
-      debris.destroy();
-    });
-
-    // ---- 相机：轻推近再弹回（yoyo 回原 zoom）+ 长震屏，只在视野内才播 ----
-    if (this.nearCamera(px, py)) {
-      const cam = this.cameras.main;
-      this.tweens.add({
-        targets: cam,
-        zoom: cam.zoom * 1.06,
-        duration: 180,
-        hold: 80,
-        yoyo: true,
-        ease: 'Quad.out',
-      });
-      this.cameras.main.shake(460, 0.009);
     }
   }
 
@@ -1889,82 +1447,6 @@ export class StageBattleScene extends Phaser.Scene {
     }
   }
 
-  private levelUpFx(before: number, after: number, at: Phaser.GameObjects.Sprite = this.player) {
-    const groundY = at.y + 10;
-    // 热血江湖式光柱：白色炽热内芯 + 金色宽光晕，从脚下冲天。
-    // ADD 叠亮 + 放人物后面（4.5 < 5），轮廓不被洗白；两层共用同一张贴图、同一组补间
-    for (const [w, tint, alpha] of [
-      [2.1, 0xffd93d, 0.85],
-      [0.85, 0xffffff, 1],
-    ] as const) {
-      const img = this.add
-        .image(at.x, groundY, 'pillar')
-        .setOrigin(0.5, 1)
-        .setTint(tint)
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setDepth(4.5)
-        .setScale(w * 0.75, 0.1)
-        .setAlpha(alpha);
-      this.tweens.add({
-        targets: img,
-        scaleY: 0.85,
-        duration: 280,
-        ease: 'Quad.Out',
-      });
-      this.tweens.add({
-        targets: img,
-        alpha: 0,
-        delay: 380,
-        duration: 800,
-        onComplete: () => img.destroy(),
-      });
-    }
-    const ring = this.add
-      .image(at.x, groundY, 'ring')
-      .setTint(0xffd93d)
-      .setScale(0.5)
-      .setAlpha(1)
-      .setDepth(6)
-      .setBlendMode(Phaser.BlendModes.ADD);
-    this.tweens.add({
-      targets: ring,
-      scale: 2.8,
-      alpha: 0,
-      duration: 700,
-      onComplete: () => ring.destroy(),
-    });
-    if (at !== this.player) return; // 别人升级：光柱 + 一圈光，没有文字和金屑
-    const sparks = this.add
-      .particles(at.x, groundY, 'dot', {
-        speedY: { min: -170, max: -70 },
-        speedX: { min: -45, max: 45 },
-        lifespan: { min: 700, max: 1300 },
-        scale: { start: 2.2, end: 0 },
-        tint: [0xffd93d, 0xfff3c0],
-        blendMode: Phaser.BlendModes.ADD,
-        emitting: false,
-      })
-      .setDepth(7);
-    sparks.explode(24);
-    this.time.delayedCall(1400, () => sparks.destroy());
-    const t = this.text(at.x, at.y - 60, `LEVEL UP! Lv${after}`, '#ffd93d', 22)
-      .setOrigin(0.5)
-      .setDepth(9);
-    this.tweens.add({
-      targets: t,
-      y: t.y - 40,
-      alpha: 0,
-      duration: 900,
-      onComplete: () => t.destroy(),
-    });
-    this.cameras.main.flash(120, 255, 220, 120);
-    audio.play('levelup');
-    this.ui.toast(
-      `Lv${before} → Lv${after}，+${after - before} 属性点${isBreakthrough(after) ? '（可进阶!）' : ''}`,
-      '#ffd93d',
-    );
-  }
-
   private autoEquipBest() {
     const s = this.state;
     if (s.inventory.length === 0) {
@@ -2000,175 +1482,16 @@ export class StageBattleScene extends Phaser.Scene {
     }
   }
 
-  /** 挥砍特效的统一前置：从 fxOrigin（自己或别的玩家）出发的任意距离锚点 */
-  private swingAt(angle: number, dist: number): { x: number; y: number } {
-    return {
-      x: this.fxOrigin.x + Math.cos(angle) * dist,
-      y: this.fxOrigin.y + Math.sin(angle) * dist,
-    };
-  }
-
-  /** 让挥砍特效从另一个玩家身上放出来（别人的 swing 事件） */
-  private withOrigin(sprite: Phaser.GameObjects.Sprite, fn: () => void): void {
-    const prev = this.fxOrigin;
-    this.fxOrigin = sprite;
-    try {
-      fn();
-    } finally {
-      this.fxOrigin = prev;
-    }
-  }
-
-  /** 刀光的着色：常态是暖白/金，狂暴整体换成粉白系 */
-  private fxTint(normal: number, frenzy: number): number {
-    return this.frenzyActive() ? frenzy : normal;
-  }
-
-  /**
-   * 月牙：外弧（宽而暖）垫底 + 主弧（白）压在上面。
-   * depth 用 player.y + n —— 角色是按 y 排序的（上千层），写死数字会被自己挡住。
-   */
-  private slashEffect(angle: number) {
-    const base = this.fxOrigin.y;
-
-    const outerAt = this.swingAt(angle, ARC_OUTER.dist);
-    const outer = this.add
-      .image(outerAt.x, outerAt.y, 'slash')
-      .setRotation(angle + ARC_OUTER.rot)
-      .setScale(ARC_OUTER.scaleFrom)
-      .setTint(this.fxTint(ARC_OUTER.tint, ARC_OUTER.tintFrenzy))
-      .setAlpha(ARC_OUTER.alpha)
-      .setDepth(base + ARC_OUTER.depth);
-    this.tweens.add({
-      targets: outer,
-      alpha: 0,
-      scale: ARC_OUTER.scaleTo,
-      duration: ARC_OUTER.ms,
-      delay: ARC_OUTER.delay,
-      ease: 'Quad.Out',
-      onComplete: () => outer.destroy(),
+  /** 升级光柱（热血江湖式）：特效在 fx/levelUpFx.ts */
+  private spawnLevelUpFx(before: number, after: number, at: Phaser.GameObjects.Sprite = this.player): void {
+    levelUpFx(this, {
+      at,
+      self: at === this.player,
+      before,
+      after,
+      addText: (x, y, s, color, size) => this.text(x, y, s, color, size),
+      toast: (msg, color) => this.ui.toast(msg, color),
     });
-
-    const coreAt = this.swingAt(angle, ARC_CORE.dist);
-    const core = this.add
-      .image(coreAt.x, coreAt.y, 'slash')
-      .setRotation(angle + ARC_CORE.rot)
-      .setScale(ARC_CORE.scaleFrom)
-      .setTint(this.fxTint(ARC_CORE.tint, ARC_CORE.tintFrenzy))
-      .setAlpha(ARC_CORE.alpha)
-      .setDepth(base + ARC_CORE.depth);
-    this.tweens.add({
-      targets: core,
-      alpha: 0,
-      scale: ARC_CORE.scaleTo,
-      duration: ARC_CORE.ms,
-      delay: ARC_CORE.delay,
-      ease: 'Quad.Out',
-      onComplete: () => core.destroy(),
-    });
-  }
-
-  /** 挥刀：刀本体（原写法）+ 拖尾残影（新加的一层） */
-  private swingBlade(angle: number) {
-    const base = this.fxOrigin.y;
-    const at = this.swingAt(angle, BLADE_LAYER.dist);
-    const blade = this.add
-      .image(at.x, at.y, 'blade')
-      .setScale(BLADE_LAYER.scaleFrom)
-      .setDepth(base + BLADE_LAYER.depth)
-      .setTint(this.fxTint(BLADE_LAYER.tint, BLADE_LAYER.tintFrenzy))
-      .setRotation(angle + BLADE_LAYER.rotFrom)
-      .setAlpha(1);
-    // 前 130ms 保持不透明（看得清刀），之后迅速淡出
-    this.tweens.add({
-      targets: blade,
-      rotation: angle + BLADE_LAYER.rotTo,
-      scale: BLADE_LAYER.scaleTo,
-      duration: BLADE_LAYER.sweepMs,
-      ease: 'Quad.Out',
-    });
-    this.tweens.add({
-      targets: blade,
-      alpha: 0,
-      duration: BLADE_LAYER.fadeMs,
-      delay: BLADE_LAYER.fadeDelay,
-      onComplete: () => blade.destroy(),
-    });
-    this.swingTrail(blade, angle);
-  }
-
-  /**
-   * 拖尾残影：隔一定时间抽样刀本体**当前**的 rotation 生成，刀扫到哪残影就跟到哪。
-   * 不能用公式另算角度 —— 那会和刀本体的补间各走各的，看起来像两把刀。
-   */
-  private swingTrail(blade: Phaser.GameObjects.Image, angle: number): void {
-    const frenzy = this.frenzyActive();
-    const count = frenzy ? TRAIL_LAYER.countFrenzy : TRAIL_LAYER.count;
-    const spacing = frenzy ? TRAIL_LAYER.spacingFrenzy : TRAIL_LAYER.spacing;
-    const at = this.swingAt(angle, TRAIL_LAYER.dist);
-    for (let i = 0; i < count; i++) {
-      // 用 tween 排帧而不是 time.delayedCall：暂停时补间会一起冻住
-      this.tweens.addCounter({
-        delay: i * spacing,
-        duration: 0,
-        onComplete: () => {
-          if (!blade.active) return; // 刀已经淡出销毁
-          const base = this.fxOrigin.y;
-          const ghost = this.add
-            .image(at.x, at.y, 'blade')
-            .setRotation(blade.rotation)
-            .setScale(TRAIL_LAYER.scaleFrom)
-            .setTint(this.fxTint(TRAIL_LAYER.tint, TRAIL_LAYER.tintFrenzy))
-            .setAlpha(TRAIL_LAYER.alpha)
-            .setDepth(base + TRAIL_LAYER.depth);
-          this.tweens.add({
-            targets: ghost,
-            alpha: 0,
-            scale: TRAIL_LAYER.scaleTo,
-            duration: TRAIL_LAYER.ms,
-            ease: 'Sine.Out',
-            onComplete: () => ghost.destroy(),
-          });
-        },
-      });
-    }
-  }
-
-  /**
-   * 普攻命中反馈：命中环 + 六颗火花。
-   * 命中点从目标中心沿着「受击来的方向」退回一段，环才贴在受击面上而不是整个套住怪。
-   */
-  private hitFeedback(hitX: number, hitY: number, angle: number): void {
-    const hx = hitX - Math.cos(angle) * HIT_RING_LAYER.pullBack;
-    const hy = hitY - Math.sin(angle) * HIT_RING_LAYER.pullBack;
-
-    const ring = this.add
-      .image(hx, hy, 'ring')
-      .setScale(HIT_RING_LAYER.scaleFrom)
-      .setTint(this.fxTint(HIT_RING_LAYER.tint, HIT_RING_LAYER.tintFrenzy))
-      .setAlpha(HIT_RING_LAYER.alpha)
-      .setDepth(hy + HIT_RING_LAYER.depth);
-    this.tweens.add({
-      targets: ring,
-      scale: HIT_RING_LAYER.scaleTo,
-      alpha: 0,
-      duration: HIT_RING_LAYER.ms,
-      ease: 'Quad.Out',
-      onComplete: () => ring.destroy(),
-    });
-
-    // 火花：和毒雾的 puff 同一套 dot 粒子管线，emitting:false + explode + 到点销毁
-    const spark = this.add.particles(hx, hy, 'dot', {
-      speed: { min: HIT_SPARK_LAYER.speedMin, max: HIT_SPARK_LAYER.speedMax },
-      lifespan: HIT_SPARK_LAYER.lifespan,
-      scale: { start: HIT_SPARK_LAYER.scale, end: 0 },
-      tint: this.frenzyActive() ? HIT_SPARK_LAYER.tintsFrenzy : HIT_SPARK_LAYER.tints,
-      alpha: { start: HIT_SPARK_LAYER.alpha, end: 0 },
-      emitting: false,
-    });
-    spark.setDepth(hy + HIT_SPARK_LAYER.depth);
-    spark.explode(HIT_SPARK_LAYER.count);
-    this.time.delayedCall(HIT_SPARK_LAYER.ttlMs, () => spark.destroy());
   }
 
   private floatText(x: number, y: number, s: string, color: string, size: number) {
@@ -2304,14 +1627,7 @@ export class StageBattleScene extends Phaser.Scene {
     }
     for (const id of [...this.dropViews.keys()]) if (!seenD.has(id)) this.destroyDropView(id);
 
-    const seenF = new Set<string>();
-    for (const f of this.session.fireballs()) {
-      seenF.add(f.id);
-      const v = this.fireballViews.get(f.id);
-      if (!v) this.createFireballView(f);
-      else v.img.setPosition(f.x, f.y).setRotation(f.angle);
-    }
-    for (const id of [...this.fireballViews.keys()]) if (!seenF.has(id)) this.destroyFireballView(id);
+    this.fireballFx.sync(this.session.fireballs());
 
     const ringOn = this.selectedTarget();
     if (ringOn) {
@@ -2350,21 +1666,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.playerLabel.setText(`Lv${this.state.level}`);
 
     const frenzy = this.frenzyActive();
-    if (frenzy !== this.frenzyOn) this.toggleFrenzyFx(frenzy);
-    this.aura.setVisible(frenzy);
-    const glowPulse = Math.sin((time / FRENZY_GLOW.periodMs) * Math.PI * 2);
-    if (frenzy) {
-      // 光圈和轮廓光反相：一个涨一个落，两个一起呼吸会显得糊
-      const ringPulse = -Math.sin((time / FRENZY_RING.periodMs) * Math.PI * 2);
-      const [alphaBase, alphaAmp] = this.glowAvailable
-        ? [FRENZY_RING.alphaBase, FRENZY_RING.alphaAmp]
-        : [FRENZY_RING.alphaBaseFallback, FRENZY_RING.alphaAmpFallback];
-      this.aura
-        .setPosition(this.player.x, this.player.y + FRENZY_RING.offsetY)
-        .setAlpha(alphaBase + alphaAmp * ringPulse)
-        .setDepth(this.player.y + FRENZY_RING.depthOffset);
-    }
-    this.updateFrenzyGlow(time, frenzy, glowPulse);
+    this.frenzyFx.update(time, frenzy);
 
     // 护盾：位置跟随 + 淡入淡出，**尺寸恒定**
     const step = this.shieldActive() ? delta / SHIELD_DOME.fadeInMs : -delta / SHIELD_DOME.fadeOutMs;
@@ -2516,8 +1818,9 @@ export class StageBattleScene extends Phaser.Scene {
       case 'swing': {
         if (e.pid === selfId) {
           this.player.setFlipX(Math.cos(e.angle) < 0);
-          this.slashEffect(e.angle);
-          this.swingBlade(e.angle);
+          const fx = this.attackFxOf(this.state.job);
+          fx.primary(e.angle);
+          fx.secondary(e.angle);
           audio.play('swing');
           if (!e.empty) {
             this.tweens.add({
@@ -2532,9 +1835,10 @@ export class StageBattleScene extends Phaser.Scene {
         }
         const o = this.otherViews.get(e.pid);
         if (!o || !this.nearCamera(o.sprite.x, o.sprite.y)) return;
-        this.withOrigin(o.sprite, () => {
-          this.slashEffect(e.angle);
-          this.swingBlade(e.angle);
+        this.attackFxOf(o.job).withOrigin(o.sprite, () => {
+          const fx = this.attackFxOf(o.job);
+          fx.primary(e.angle);
+          fx.secondary(e.angle);
         });
         audio.play('swing', 0.3);
         return;
@@ -2546,9 +1850,9 @@ export class StageBattleScene extends Phaser.Scene {
       case 'reward':
         return this.onReward(e);
       case 'levelUp': {
-        if (e.pid === selfId) return this.levelUpFx(e.from, e.level);
+        if (e.pid === selfId) return this.spawnLevelUpFx(e.from, e.level);
         const o = this.otherViews.get(e.pid);
-        if (o) this.levelUpFx(e.from, e.level, o.sprite);
+        if (o) this.spawnLevelUpFx(e.from, e.level, o.sprite);
         return;
       }
       case 'hurt':
@@ -2564,7 +1868,8 @@ export class StageBattleScene extends Phaser.Scene {
       case 'castFail':
         return this.onCastFail(e.skill, e.reason);
       case 'fireExplode':
-        return this.fireExplodeFx(e.x, e.y);
+        this.fireballFx.explode(e.x, e.y);
+        return;
       case 'potion':
         return this.onPotion(e);
       case 'pickup':
@@ -2607,8 +1912,8 @@ export class StageBattleScene extends Phaser.Scene {
     this.cameras.main.shake(60, 0.003);
     // 受伤反馈只作用在角色身上：闪红 + 抖动，不再整屏泛红
     this.player.setTintFill(e.magic ? 0xc08cff : 0xff6b6b);
-    // 闪红这 110ms 内：轮廓光压低（见 updateFrenzyGlow），也不要覆写本体 tint
-    this.hurtUntil = this.time.now + FRENZY_GLOW.hurtMs;
+    // 闪红这 110ms 内：轮廓光压低（见 FrenzyFx.updateGlow），也不要覆写本体 tint
+    this.frenzyFx.markHurt(this.time.now);
     this.time.delayedCall(FRENZY_GLOW.hurtMs, () => {
       // 这一击正好致死时，清掉的是 die() 刚铺上的尸体灰化，不能清
       if (this.player.active && !this.dead) this.player.clearTint();
@@ -2631,7 +1936,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.player.setTint(0x8892a0);
     this.shieldFade = 0;
     this.shieldOrb.setVisible(false);
-    this.toggleFrenzyFx(false);
+    this.frenzyFx.toggle(false);
     this.cameras.main.shake(160, 0.006);
     audio.play('die');
     this.ui.showDeath(
