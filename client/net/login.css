@@ -196,6 +196,8 @@
   font: inherit;
   font-size: 12px;
   color: #8d9ab0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 .login-switch:hover {
