@@ -195,3 +195,26 @@ describe('World 战斗', () => {
     expect(w.drain().some((e) => e.k === 'pickup' && e.to === 'a')).toBe(true);
   });
 });
+
+describe('World 自动普攻开关', () => {
+  it('开着自动打身边的怪；关了不自动出手，空格仍能主动攻击', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState());
+    const m = normal(w);
+    p.x = m.x + 50;
+    p.y = m.y;
+
+    w.step(T0 + 1000);
+    const hp0 = m.data.hp;
+    expect(hp0).toBeLessThan(m.data.maxHp);
+
+    w.setAutoAttack('a', false);
+    p.nextAttackAt = 0;
+    w.step(T0 + 2000);
+    expect(m.data.hp).toBe(hp0);
+
+    // 主动出手（空格 / 左键点选）不受开关影响
+    w.cast('a', 'attack');
+    expect(m.data.hp).toBeLessThan(hp0);
+  });
+});

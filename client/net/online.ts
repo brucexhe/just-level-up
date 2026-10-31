@@ -365,6 +365,9 @@ export class OnlineSession implements Session {
   drink(kind: PotionKind): void {
     this.room.send('potion', { kind });
   }
+  setAutoAttack(on: boolean): void {
+    this.room.send('autoAttack', { on });
+  }
   revive(): void {
     this.room.send('revive', {});
   }

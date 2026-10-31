@@ -66,6 +66,9 @@ export interface SettingsApi {
   setMusic(on: boolean): void;
   setSfx(on: boolean): void;
   setVolume(v: number): void;
+  /** 自动普攻开关（身边有怪自动出手；关了只响应空格 / 左键） */
+  autoAttack(): boolean;
+  setAutoAttack(on: boolean): void;
   /** 'online' = 连着服务端；'offline' = 浏览器本地模拟（?offline） */
   mode(): 'online' | 'offline';
   /** 当前登录的账号名（离线为 null） */

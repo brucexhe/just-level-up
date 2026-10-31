@@ -22,6 +22,8 @@ export interface ClientMessages {
   target: { id: string | null };
   cast: { skill: SkillId };
   potion: { kind: PotionKind };
+  /** 自动普攻开关（客户端设置面板，进房后按本地偏好发一次） */
+  autoAttack: { on: boolean };
   revive: Record<string, never>;
   /** 客户端已注册好消息回调，请求第一份私有状态 */
   ready: Record<string, never>;

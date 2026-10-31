@@ -805,6 +805,8 @@ const settingsPanel: PanelDef = {
       <div class="sec-title">音频 <em>代码合成</em></div>
       ${toggleRow('music', '背景音乐', '每关一首：琶音 + 长音铺底的实时合成循环', st.music())}
       ${toggleRow('sfx', '战斗音效', '挥砍 / 命中 / 升级 / 技能', st.sfx())}
+      <div class="sec-title">战斗</div>
+      ${toggleRow('autoAttack', '自动普攻', '身边有怪就自动出手；关闭后只能空格 / 左键点怪普攻', st.autoAttack())}
       <div class="vol-row">
         <span class="vr-l">音量</span>
         <input class="vr-range" type="range" min="0" max="100" step="1" value="${vol}"
@@ -838,6 +840,12 @@ const settingsPanel: PanelDef = {
         st.setSfx(on);
         api.toast(`战斗音效${on ? '开' : '关'}`, on ? '#7ee787' : '#9aa4b2');
         if (on) st.setVolume(st.volume());
+        break;
+      }
+      case 'autoAttack': {
+        const on = !st.autoAttack();
+        st.setAutoAttack(on);
+        api.toast(`自动普攻${on ? '开' : '关'}`, on ? '#7ee787' : '#9aa4b2');
         break;
       }
       case 'vol':

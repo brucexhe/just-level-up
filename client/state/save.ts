@@ -11,11 +11,13 @@ export const PREFS_KEY = 'level-up/prefs/v1';
 export interface Prefs {
   music: boolean;
   sfx: boolean;
+  /** 自动普攻：开着 = 身边有怪就自动出手（服务端行为，进房后同步一次） */
+  autoAttack: boolean;
   /** 0~1（音乐 + 音效共用，设置面板只有一个音量滑块） */
   volume: number;
 }
 
-export const DEFAULT_PREFS: Prefs = { music: true, sfx: true, volume: 0.6 };
+export const DEFAULT_PREFS: Prefs = { music: true, sfx: true, autoAttack: true, volume: 0.6 };
 
 export function loadPrefs(): Prefs {
   const raw = store().getItem(PREFS_KEY);
@@ -25,6 +27,7 @@ export function loadPrefs(): Prefs {
     return {
       music: typeof p.music === 'boolean' ? p.music : DEFAULT_PREFS.music,
       sfx: typeof p.sfx === 'boolean' ? p.sfx : DEFAULT_PREFS.sfx,
+      autoAttack: typeof p.autoAttack === 'boolean' ? p.autoAttack : DEFAULT_PREFS.autoAttack,
       volume:
         typeof p.volume === 'number' && Number.isFinite(p.volume)
           ? Math.min(1, Math.max(0, p.volume))

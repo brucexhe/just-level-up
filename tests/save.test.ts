@@ -194,15 +194,15 @@ describe('偏好设置（音乐 / 音效 / 音量）', () => {
   });
 
   it('保存后能读回，且音量被钳制在 0~1', () => {
-    savePrefs({ music: false, sfx: true, volume: 0.25 });
+    savePrefs({ music: false, sfx: true, autoAttack: true, volume: 0.25 });
     const p = loadPrefs();
     expect(p.music).toBe(false);
     expect(p.sfx).toBe(true);
     expect(p.volume).toBeCloseTo(0.25, 5);
 
-    savePrefs({ music: true, sfx: false, volume: 8 });
+    savePrefs({ music: true, sfx: false, autoAttack: true, volume: 8 });
     expect(loadPrefs().volume).toBe(1);
-    savePrefs({ music: true, sfx: false, volume: -3 });
+    savePrefs({ music: true, sfx: false, autoAttack: true, volume: -3 });
     expect(loadPrefs().volume).toBe(0);
   });
   it('装备槽：戒指只有一个，另有手套', () => {

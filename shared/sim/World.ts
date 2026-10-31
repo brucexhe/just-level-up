@@ -97,6 +97,8 @@ export interface PlayerEnt {
   /** 待释放的目标技能：目标超出施法距离时先走向它，进圈后真正释放 */
   pendingCast: { skill: SkillId; since: number } | null;
   nextAttackAt: number;
+  /** 自动普攻：开着 = 定时打攻击距离内最近的怪（客户端设置面板可关） */
+  autoAttack: boolean;
   cooldowns: Partial<Record<SkillId, number>>;
   frenzyUntil: number;
   shieldUntil: number;
@@ -306,6 +308,7 @@ export class World {
       targetId: null,
       pendingCast: null,
       nextAttackAt: 0,
+      autoAttack: true,
       cooldowns: {},
       frenzyUntil: 0,
       shieldUntil: 0,
@@ -323,6 +326,12 @@ export class World {
   removePlayer(id: string): void {
     this.players.delete(id);
     for (const m of this.monsters.values()) if (m.targetId === id) m.targetId = null;
+  }
+
+  /** 自动普攻开关（客户端设置面板）；不影响空格 / 左键点选的主动出手 */
+  setAutoAttack(id: string, on: boolean): void {
+    const p = this.players.get(id);
+    if (p) p.autoAttack = on;
   }
 
   /** 方向键（null = 松开）。按下即作废点击移动目标 */
@@ -818,8 +827,8 @@ export class World {
       p.steerSince = 0;
     }
 
-    // 没有自动回复：自动普攻打身边的怪
-    if (this.now >= p.nextAttackAt) this.tryMelee(p);
+    // 没有自动回复：自动普攻打身边的怪（设置面板可关；关了只响应空格 / 左键的主动出手）
+    if (p.autoAttack && this.now >= p.nextAttackAt) this.tryMelee(p);
 
     // 走过去拾取：自己的掉落随时能捡，别人的要等保护期过
     for (const d of [...this.drops.values()]) {

@@ -105,6 +105,8 @@ export interface Session {
   targetId(): string | null;
   cast(id: SkillId): void;
   drink(kind: PotionKind): void;
+  /** 自动普攻开关：离线直接改本地世界；在线发消息给服务端 */
+  setAutoAttack(on: boolean): void;
   revive(): void;
   /** 面板操作：本地立即执行（返回结果给面板弹提示），同时交给服务端权威执行 */
   cmd<C extends Command>(s: GameState, c: C): CommandResult[C['t']];

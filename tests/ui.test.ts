@@ -20,7 +20,7 @@ import { applyCommand } from '../shared/state/commands';
 function fakeApi(state: () => GameState) {
   const view: UIView = { equipSlot: null, skillId: 'fireball', bagTab: 'equip' };
   const toasts: string[] = [];
-  const flags = { music: true, sfx: true, volume: 0.6 };
+  const flags = { music: true, sfx: true, autoAttack: true, volume: 0.6 };
   const api: UIApi = {
     view,
     toast: (m: string) => toasts.push(m),
@@ -44,6 +44,10 @@ function fakeApi(state: () => GameState) {
       },
       setVolume: (v) => {
         flags.volume = v;
+      },
+      autoAttack: () => flags.autoAttack,
+      setAutoAttack: (v) => {
+        flags.autoAttack = v;
       },
       mode: () => 'online',
       account: () => 'tester',

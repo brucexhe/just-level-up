@@ -204,6 +204,9 @@ export class OfflineSession implements Session {
     this.world.drink(SELF, kind);
     saveState(this.s);
   }
+  setAutoAttack(on: boolean): void {
+    this.world.setAutoAttack(SELF, on);
+  }
   revive(): void {
     this.world.revive(SELF);
     saveState(this.s);

@@ -278,6 +278,8 @@ export class StageBattleScene extends Phaser.Scene {
   private shieldFade = 0;
   /** 当前关卡（1 起） */
   private stage = 1;
+  /** 自动普攻开关（设置面板 / 本地偏好，进房时同步给世界） */
+  private autoAttackOn = true;
   /** 切关请求进行中（在线模式要等离开 / 进入房间） */
   private switching = false;
   /** 躺尸状态：true 期间人物不可操作，等玩家在弹窗里选择是否复活 */
@@ -309,6 +311,9 @@ export class StageBattleScene extends Phaser.Scene {
     audio.setVolume(prefs.volume);
     audio.setSfx(prefs.sfx);
     audio.setMusic(prefs.music);
+    // 自动普攻是服务端行为：进房后按本地偏好同步一次
+    this.autoAttackOn = prefs.autoAttack;
+    this.session.setAutoAttack(this.autoAttackOn);
     // 每个关卡一首曲子
     audio.setStage(this.stage);
 
@@ -991,6 +996,12 @@ export class StageBattleScene extends Phaser.Scene {
       music: () => audio.musicEnabled,
       sfx: () => audio.sfxEnabled,
       volume: () => audio.volume,
+      autoAttack: () => this.autoAttackOn,
+      setAutoAttack: (on) => {
+        this.autoAttackOn = on;
+        this.session.setAutoAttack(on);
+        this.savePrefs();
+      },
       setMusic: (on) => {
         audio.setMusic(on);
         if (on) audio.unlock();
@@ -1017,6 +1028,7 @@ export class StageBattleScene extends Phaser.Scene {
     savePrefs({
       music: audio.musicEnabled,
       sfx: audio.sfxEnabled,
+      autoAttack: this.autoAttackOn,
       volume: audio.volume,
     });
   }
