@@ -3,6 +3,7 @@ import { LOOT } from '../shared/config';
 import { buildObstacles, PICKUP_RANGE } from '../shared/sim/map';
 import { seeded } from '../shared/sim/rng';
 import { World, type MonsterEnt } from '../shared/sim/World';
+import { ARROW_RAIN_WAVES, ARROW_RAIN_WAVE_MS } from '../shared/data/skills';
 import { createInitialState } from '../shared/state/gameState';
 
 const T0 = 1_000_000;
@@ -216,5 +217,29 @@ describe('World 自动普攻开关', () => {
     // 主动出手（空格 / 左键点选）不受开关影响
     w.cast('a', 'attack');
     expect(m.data.hp).toBeLessThan(hp0);
+  });
+});
+
+describe('World 箭雨', () => {
+  it('5 个波次各自真实结算一次伤害（回归：once dot 不再依赖帧恰好踩进 1ms 窗口）', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState(1));
+    const m = normal(w);
+    m.data.aggressive = false;
+    m.data.hp = 1e9;
+    m.data.maxHp = 1e9;
+    p.autoAttack = false; // 隔离普攻，只数箭雨的 hit
+    p.nextAttackAt = T0 + 999_999; // selectTarget 会顺手砍一刀，推后出手时间隔离掉
+    p.x = m.x + 50;
+    p.y = m.y;
+    w.selectTarget('a', m.id);
+    expect(w.cast('a', 'arrowRain')).toBe(true);
+    // 用与波次间隔（500ms）不对齐的 33ms 步长走完全部波次，模拟真实帧率
+    for (let t = 33; t <= ARROW_RAIN_WAVES * ARROW_RAIN_WAVE_MS + 200; t += 33) {
+      w.step(T0 + t);
+      if (!w.monsters.has(m.id)) break;
+    }
+    const hits = w.drain().filter((e) => e.k === 'hit' && e.mid === m.id && e.by === 'a');
+    expect(hits).toHaveLength(ARROW_RAIN_WAVES);
   });
 });

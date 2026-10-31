@@ -74,9 +74,11 @@ export interface Dot {
   by: string;
   /**
    * 结算口径：缺省 = 毒（法防、不击退）。箭雨复用 DoT 管线做离散波次，
-   * until 只盖住自己那一跳 → 每发 dot 恰好命中一次。
+   * once = 一次性：到 tickAt 必跳一次然后消失（不依赖帧恰好踩进存活窗口）。
    */
   kind?: HitKind;
+  /** 一次性 dot（箭雨波次）：跳一次就移除 */
+  once?: boolean;
   /** 受击方向（击退用）：毒雾固定朝下，箭雨从中心向外 */
   angle?: number;
 }
@@ -509,8 +511,8 @@ export class World {
   }
 
   /**
-   * 箭雨：以选中的怪为中心降 3 波箭雨，每波范围内所有怪吃一次物理伤害（各按自己的物防结算）。
-   * 波次复用 DoT 管线：每只怪每波塞一发 dot，until 只盖住自己那一跳 → 到点命中一次就消失。
+   * 箭雨：以选中的怪为中心降 ARROW_RAIN_WAVES 波箭雨，每波范围内所有怪吃一次物理伤害（各按自己的物防结算）。
+   * 波次复用 DoT 管线：每只怪每波塞一发 once dot → 到点命中一次就消失。
    */
   private castArrowRain(p: PlayerEnt, lv: number, target: MonsterEnt): void {
     const stats = aggregatedStats(p.state);
@@ -529,11 +531,12 @@ export class World {
       for (let i = 0; i < ARROW_RAIN_WAVES; i++) {
         m.dots.push({
           perTick: wave,
-          until: this.now + i * ARROW_RAIN_WAVE_MS + 1,
+          until: this.now + i * ARROW_RAIN_WAVE_MS,
           tickAt: this.now + i * ARROW_RAIN_WAVE_MS,
           by: p.id,
           kind: 'melee',
           angle: angleTo(cx, cy, m.x, m.y),
+          once: true,
         });
       }
       m.names.set(p.id, p.name);
@@ -877,15 +880,22 @@ export class World {
   }
 
   private stepMonster(m: MonsterEnt, dt: number): void {
-    // DoT：每 0.5s 一跳，这一跳可能把怪打死（箭雨波次复用管线，单发只跳一次）
+    // DoT：每 0.5s 一跳，这一跳可能把怪打死（箭雨波次复用管线，once 单发只跳一次）
     if (m.dots.length > 0) {
-      m.dots = m.dots.filter((d) => d.until > this.now);
+      const kept: Dot[] = [];
       for (const d of m.dots) {
-        if (this.now < d.tickAt) continue;
-        d.tickAt = this.now + POISON_TICK_MS;
+        if (!d.once && d.until <= this.now) continue; // 过期：不再跳
+        if (this.now < d.tickAt) {
+          kept.push(d);
+          continue;
+        }
         this.applyDamage(m, d.perTick, d.angle ?? Math.PI / 2, d.by, d.kind ?? 'poison');
         if (!this.monsters.has(m.id)) return;
+        if (d.once) continue;
+        d.tickAt = this.now + POISON_TICK_MS;
+        if (d.until > this.now) kept.push(d);
       }
+      m.dots = kept;
     }
 
     if (this.now < m.knockUntil) {
