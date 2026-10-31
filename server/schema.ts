@@ -67,6 +67,8 @@ export const FireballPub = schema(
     x: t.float32(),
     y: t.float32(),
     angle: t.float32(),
+    /** 0 = 火球（法伤），1 = 穿杨箭（物伤） */
+    kind: t.uint8(),
   },
   'FireballPub',
 );

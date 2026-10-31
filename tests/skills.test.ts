@@ -25,21 +25,23 @@ import {
   skillLevel,
   upgradeSkill,
 } from '../shared/state/gameState';
+import { normalizeState } from '../shared/state/normalize';
 import { SKILL_BY_ID } from '../shared/data/skills';
+import { jobSkills } from '../shared/data/jobs';
 
 const fixed = (v: number) => () => v;
 
 describe('技能书 / 技能点', () => {
-  it('普攻不进掉落池：只会掉火球 / 狂暴 / 毒刃 / 护盾', () => {
+  it('普攻不进掉落池：只会掉各职业的主动技能', () => {
     const got = new Set<string>();
     for (let i = 0; i < 400; i++) {
       const b = dropSkillBook(20, Math.random);
       got.add(b.skillId);
     }
     expect(got.has('attack')).toBe(false);
-    for (const id of got) expect(['fireball', 'frenzy', 'poison', 'shield']).toContain(id);
-    // 四种都要能掉出来（蒙特卡洛，跑 400 次必然覆盖）
-    expect([...got].sort()).toEqual(['fireball', 'frenzy', 'poison', 'shield']);
+    for (const id of got) expect(['fireball', 'frenzy', 'poison', 'shield', 'snipe', 'arrowRain']).toContain(id);
+    // 六种都要能掉出来（蒙特卡洛，跑 400 次必然覆盖）
+    expect([...got].sort()).toEqual(['arrowRain', 'fireball', 'frenzy', 'poison', 'shield', 'snipe']);
   });
 
   it('掉出来的技能书等级 ∈ [关卡最低等级, 怪等级]：第 3 关 26 级怪 → 21-26', () => {
@@ -55,6 +57,80 @@ describe('技能书 / 技能点', () => {
     for (const id of ['attack', 'fireball', 'frenzy', 'poison', 'shield'] as const) {
       expect(skillLevel(s, id)).toBe(1);
     }
+  });
+
+  it('弓手开局会的是穿杨箭/箭雨，不是火球/毒刃', () => {
+    const s = createInitialState(1);
+    expect(skillLevel(s, 'snipe')).toBe(1);
+    expect(skillLevel(s, 'arrowRain')).toBe(1);
+    expect(skillLevel(s, 'fireball')).toBe(0);
+    expect(skillLevel(s, 'poison')).toBe(0);
+    expect(skillLevel(s, 'frenzy')).toBe(1);
+    expect(skillLevel(s, 'shield')).toBe(1);
+  });
+
+  it('技能表按职业拆分：专属技能不串职业，狂暴/护盾全职业通用', () => {
+    const mage = jobSkills(0).map((d) => d.id).sort();
+    expect(mage).toEqual(['attack', 'fireball', 'frenzy', 'poison', 'shield']);
+    const archer = jobSkills(1).map((d) => d.id).sort();
+    expect(archer).toEqual(['arrowRain', 'attack', 'frenzy', 'shield', 'snipe']);
+    // 四个职业都有通用技能，且共用同一份定义（同热键）
+    for (let job = 0; job < 4; job++) {
+      const ids = jobSkills(job).map((d) => d.id);
+      expect(ids).toContain('frenzy');
+      expect(ids).toContain('shield');
+    }
+    // 热键口径：Q 单体 / W 群攻 / E 狂暴 / R 护盾
+    expect(SKILL_BY_ID.fireball.hotkey).toBe('Q');
+    expect(SKILL_BY_ID.snipe.hotkey).toBe('Q');
+    expect(SKILL_BY_ID.poison.hotkey).toBe('W');
+    expect(SKILL_BY_ID.arrowRain.hotkey).toBe('W');
+    expect(SKILL_BY_ID.frenzy.hotkey).toBe('E');
+    expect(SKILL_BY_ID.shield.hotkey).toBe('R');
+  });
+
+  it('读档清掉不属于本职业的残留技能', () => {
+    const s = normalizeState({ job: 0, skills: { attack: 1, fireball: 6, snipe: 5, arrowRain: 3 } });
+    expect(s.skills.fireball).toBe(6);
+    expect(s.skills.snipe).toBeUndefined();
+    expect(s.skills.arrowRain).toBeUndefined();
+  });
+
+  it('异职业技能书不可穿戴（书留在背包，可以卖）', () => {
+    const s = createInitialState(0); // 法师
+    s.level = 10;
+    const b = { id: 'x', skillId: 'snipe' as const, points: 8 };
+    s.skillBooks.push(b);
+    expect(equipSkillBook(s, b).kind).toBe('blocked');
+    expect(s.skillBooks).toContain(b);
+    // 弓手穿自己的书没问题
+    const a = createInitialState(1);
+    a.level = 10;
+    a.skillBooks.push({ id: 'y', skillId: 'snipe' as const, points: 8 });
+    expect(equipSkillBook(a, a.skillBooks[0]).kind).toBe('equip');
+  });
+
+  it('旧档迁移：弓手的火球/毒刃等级与技能书原样换成穿杨箭/箭雨', () => {
+    const s = normalizeState({
+      job: 1,
+      level: 10,
+      skills: { attack: 1, fireball: 7, poison: 4, frenzy: 2, shield: 3 },
+      skillBooks: [
+        { id: 'b1', skillId: 'fireball', points: 9 },
+        { id: 'b2', skillId: 'poison', points: 5 },
+        { id: 'b3', skillId: 'frenzy', points: 2 },
+      ],
+    });
+    expect(s.skills).toEqual({ attack: 1, snipe: 7, arrowRain: 4, frenzy: 2, shield: 3 });
+    expect(s.skillBooks.map((b) => [b.skillId, b.points])).toEqual([
+      ['snipe', 9],
+      ['arrowRain', 5],
+      ['frenzy', 2],
+    ]);
+    // 法师的旧档不动
+    const m = normalizeState({ job: 0, skills: { fireball: 6 } });
+    expect(m.skills.fireball).toBe(6);
+    expect(m.skills.snipe).toBeUndefined();
   });
 
   it('穿戴技能书 = 直接把技能等级替换成书的等级，旧等级退回背包', () => {

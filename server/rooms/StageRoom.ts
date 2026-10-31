@@ -344,6 +344,7 @@ export class StageRoom extends Room<{ state: StageState }> {
       s.x = f.x;
       s.y = f.y;
       s.angle = f.angle;
+      s.kind = f.kind === 'snipe' ? 1 : 0;
     }
     for (const id of [...st.fireballs.keys()]) if (!w.fireballs.has(id)) st.fireballs.delete(id);
   }

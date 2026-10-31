@@ -3,8 +3,8 @@ import { expToNext } from '../../shared/core/progression';
 import { skillMpCost } from '../../shared/core/skills';
 import type { PotionKind } from '../../shared/core/economy';
 import { maxHp, maxMp, type GameState } from '../../shared/state/gameState';
-import { SKILLS, type SkillId } from '../../shared/data/skills';
-import { jobDef } from '../../shared/data/jobs';
+import { type SkillDef, type SkillId } from '../../shared/data/skills';
+import { jobDef, jobSkills } from '../../shared/data/jobs';
 import type {
   Cooldown,
   DockSide,
@@ -29,6 +29,8 @@ export interface GameUIOptions {
   designWidth: number;
   designHeight: number;
   getState(): GameState;
+  /** 当前职业（决定技能栏显示哪些技能；职业注册后不变） */
+  jobOf(): number;
   castSkill(id: SkillId): void;
   /** 喝一瓶药（工具栏快捷槽 / Z、X 热键） */
   drinkPotion(kind: PotionKind): void;
@@ -52,10 +54,10 @@ export interface GameUIOptions {
 
 const TOOLS: { id: PanelId; icon: string; label: string; key: string }[] = [
   { id: 'character', icon: '🧙', label: '人物', key: 'C' },
-  { id: 'equipment', icon: '🗡', label: '装备', key: 'B' },
-  { id: 'skills', icon: '✨', label: '技能', key: 'K' },
-  { id: 'bag', icon: '🎒', label: '背包', key: 'I' },
-  { id: 'shop', icon: '🏪', label: '商店', key: 'P' },
+  { id: 'equipment', icon: '🗡', label: '装备', key: 'V' },
+  { id: 'skills', icon: '✨', label: '技能', key: 'B' },
+  { id: 'bag', icon: '🎒', label: '背包', key: 'N' },
+  { id: 'shop', icon: '🏪', label: '商店', key: 'M' },
   { id: 'settings', icon: '⚙', label: '设置', key: 'O' },
 ];
 
@@ -89,6 +91,8 @@ export class GameUI {
   private deathRevive: (() => void) | null = null;
   private open: Record<DockSide, PanelId | null> = { left: null, right: null };
   private skillEls = new Map<SkillId, { root: HTMLElement; cd: HTMLElement; num: HTMLElement }>();
+  /** 技能栏当前职业的技能表（buildSkillBar 时定死，职业注册后不会变） */
+  private skillBarList: SkillDef[] = [];
   private toolEls = new Map<PanelId, { btn: HTMLElement; badge?: HTMLElement }>();
   private hudAvatar!: HTMLElement;
   private jobToolIcon: HTMLElement | null = null;
@@ -314,8 +318,11 @@ export class GameUI {
   // ---------------- 构建 ----------------
 
   private buildSkillBar() {
-    // 普攻不是技能：底部技能栏只放火球/狂暴/毒刃（普攻仍有空格热键，点怪即攻击）
-    const list = SKILLS.filter((d) => d.id !== 'attack');
+    // 普攻不是技能：底部技能栏放本职业专属 + 通用技能（狂暴/护盾），别职业的技能不显示
+    const list = jobSkills(this.opts.jobOf()).filter((d) => d.id !== 'attack');
+    this.skillBarList = list;
+    // 面板默认选中的技能换成当前职业的第一个（避免指着别职业的技能）
+    if (!list.some((d) => d.id === this.view.skillId)) this.view.skillId = list[0].id;
     this.skillBar.innerHTML = list.map(
       (d) => `<button class="skill-slot" data-skill="${d.id}" title="${d.name} — ${d.hotkey}">
         <span class="ss-key">${d.hotkey}</span>
@@ -398,10 +405,10 @@ export class GameUI {
   private bindKeys() {
     const map: Record<string, PanelId> = {
       KeyC: 'character',
-      KeyB: 'equipment',
-      KeyK: 'skills',
-      KeyI: 'bag',
-      KeyP: 'shop',
+      KeyV: 'equipment',
+      KeyB: 'skills',
+      KeyN: 'bag',
+      KeyM: 'shop',
       KeyO: 'settings',
     };
     window.addEventListener('keydown', (e) => {
@@ -645,8 +652,8 @@ export class GameUI {
     setTxt(this.hudAvatar, avatar);
     setTxt(this.jobToolIcon, avatar);
 
-    // 技能槽：CD / 等级 / 法力不足
-    SKILLS.forEach((d) => {
+    // 技能槽：CD / 等级 / 法力不足（只遍历当前职业的技能）
+    this.skillBarList.forEach((d) => {
       const els = this.skillEls.get(d.id);
       if (!els) return;
       const lv = s.skills[d.id] ?? 0;

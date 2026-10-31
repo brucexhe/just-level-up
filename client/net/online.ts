@@ -189,7 +189,13 @@ export class OnlineSession implements Session {
       aggressive: !!v.aggressive,
       poisoned: !!v.poisoned,
     }));
-    this.syncMap(st.fireballs, this.fireballsT, (v, id) => ({ id, x: num(v.x), y: num(v.y), angle: num(v.angle) }));
+    this.syncMap(st.fireballs, this.fireballsT, (v, id) => ({
+      id,
+      x: num(v.x),
+      y: num(v.y),
+      angle: num(v.angle),
+      kind: num(v.kind) === 1 ? 'snipe' : 'fireball',
+    }));
 
     // 掉落物不动，不需要平滑
     const seen = new Set<string>();

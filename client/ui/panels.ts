@@ -14,9 +14,9 @@ import {
 } from '../../shared/core/skills';
 import { BASE_ATTRS, type BaseAttr } from '../../shared/core/types';
 import { ATTR_META } from '../../shared/data/attrs';
-import { jobDef } from '../../shared/data/jobs';
+import { jobDef, jobSkills } from '../../shared/data/jobs';
 import { RARITY_META, SLOT_META } from '../../shared/data/items';
-import { SKILLS, SKILL_BY_ID, type SkillId } from '../../shared/data/skills';
+import { SKILL_BY_ID, type SkillId } from '../../shared/data/skills';
 import type { GameState } from '../../shared/state/gameState';
 import {
   bookPoints,
@@ -346,8 +346,10 @@ const skillsPanel: PanelDef = {
   dock: 'right',
   render(s, api) {
     const cur = api.view.skillId;
-    // 普攻不是技能（不吃技能点、也不能升级），技能面板只列真正可升级的三种
-    const list = SKILLS.filter((d) => d.id !== 'attack')
+    // 普攻不是技能（不吃技能点、也不能升级），技能面板只列真正可升级的
+    // 技能按职业列：本职业专属 + 通用，别职业的技能不显示也学不了
+    const list = jobSkills(s.job)
+      .filter((d) => d.id !== 'attack')
       .map((d) => {
         const lv = skillLevel(s, d.id);
         return `<button class="sk-tab ${cur === d.id ? 'on' : ''} ${
@@ -532,16 +534,19 @@ function bookRows(s: GameState): string {
       const def = SKILL_BY_ID[b.skillId];
       const cur = skillLevel(s, b.skillId);
       const gain = bookPoints(b);
-      // 换装预览：升 / 降多少级，一眼看得出值不值；穿不了时优先提示所需等级
+      // 换装预览：升 / 降多少级，一眼看得出值不值；穿不了时优先提示原因
       const delta = b.points - cur;
+      const wrongJob = !jobSkills(s.job).some((d) => d.id === b.skillId);
       const blocked = !canEquipSkillBook(s, b);
-      const badge = blocked
-        ? `<span class="bi-dn">需 Lv${fmtNum(b.points)}</span>`
-        : delta > 0
-          ? `<span class="bi-up">↑${fmtNum(delta)}</span>`
-          : delta < 0
-            ? `<span class="bi-dn">↓${fmtNum(-delta)}</span>`
-            : `<span class="bi-eq">持平</span>`;
+      const badge = wrongJob
+        ? `<span class="bi-dn">非本职业</span>`
+        : blocked
+          ? `<span class="bi-dn">需 Lv${fmtNum(b.points)}</span>`
+          : delta > 0
+            ? `<span class="bi-up">↑${fmtNum(delta)}</span>`
+            : delta < 0
+              ? `<span class="bi-dn">↓${fmtNum(-delta)}</span>`
+              : `<span class="bi-eq">持平</span>`;
       return `<div class="bag-item">
         <div class="bi-top">
           <div class="bi-ico">${def.icon}</div>
@@ -555,7 +560,7 @@ function bookRows(s: GameState): string {
         <div class="bi-acts">
           <button class="btn gold" data-act="use-book" data-arg="${b.id}"${
             blocked ? ' disabled' : ''
-          }>${blocked ? '等级不足' : '穿戴'}</button>
+          }>${wrongJob ? '不可穿' : blocked ? '等级不足' : '穿戴'}</button>
           <button class="btn danger" data-act="sell-book" data-arg="${b.id}">卖出 +${fmtNum(
             bookPoints(b),
           )}</button>

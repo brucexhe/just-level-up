@@ -97,6 +97,8 @@ const HIT_SPARK_LAYER = {
 /** 箭矢飞行：飞多远 / 多久（比弓手射程 180 略远一点，视觉上完整离手） */
 const ARROW_FLY_DIST = 200;
 const ARROW_FLY_MS = 160;
+/** 贴图 14×3，放大多少倍显示（角色是 2 倍，箭至少要跟人一个体量才看得清） */
+const ARROW_SCALE = 2;
 
 /** 普攻特效：职业武器不同，主特效不同（剑 = 刀光，弓 = 飞箭），命中反馈共用 */
 export interface AttackFx {
@@ -325,6 +327,7 @@ export class BowFx extends BaseAttackFx {
     const at = this.at(angle, 12);
     const arrow = this.scene.add
       .image(at.x, at.y, 'arrow')
+      .setScale(ARROW_SCALE)
       .setRotation(angle)
       .setDepth(this.origin.y + 5)
       .setTint(this.tint(0xffffff, 0xffc0e8));

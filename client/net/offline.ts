@@ -148,7 +148,8 @@ export class OfflineSession implements Session {
   }
 
   *fireballs(): Iterable<FireballView> {
-    for (const f of this.world.fireballs.values()) yield { id: f.id, x: f.x, y: f.y, angle: f.angle };
+    for (const f of this.world.fireballs.values())
+      yield { id: f.id, x: f.x, y: f.y, angle: f.angle, kind: f.kind };
   }
 
   drainEvents(): WorldEvent[] {

@@ -66,6 +66,8 @@ export interface FireballView {
   x: number;
   y: number;
   angle: number;
+  /** fireball = 火球术弹体，snipe = 穿杨箭重箭（客户端画成巨型箭矢） */
+  kind: 'fireball' | 'snipe';
 }
 
 export interface Session {

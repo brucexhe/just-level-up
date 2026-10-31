@@ -64,7 +64,8 @@ export class Auth {
     if (await this.repo.getAccount(name)) return { ok: false, status: 409, error: '用户名已被占用' };
     const pwd = await argon2.hash(password as string, { type: argon2.argon2id });
     const uid = randomUUID();
-    const state: GameState = legacy ? normalizeState(legacy) : createInitialState();
+    // 初始技能按注册选定的职业给（createInitialState 内部按 job 取技能表）
+    const state: GameState = legacy ? normalizeState(legacy) : createInitialState(clampJob(job));
     state.job = clampJob(job);
     const created = await this.repo.createAccount({ uid, name, pwd, createdAt: Date.now() }, state);
     if (!created) return { ok: false, status: 409, error: '用户名已被占用' };

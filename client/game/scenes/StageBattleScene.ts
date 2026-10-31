@@ -34,13 +34,14 @@ import { mkAttackFx, type AttackFx } from '../fx/attackFx';
 import { FrenzyFx, FRENZY_GLOW, FRENZY_RING } from '../fx/frenzyFx';
 import { FireballFx } from '../fx/fireballFx';
 import { poisonFx } from '../fx/poisonFx';
+import { arrowRainFx } from '../fx/arrowRainFx';
 import { bossDeathFx } from '../fx/bossDeathFx';
 import { levelUpFx } from '../fx/levelUpFx';
 import { SKILL_BY_ID, type BookSkillId, type SkillId } from '../../../shared/data/skills';
 import { ATTR_META } from '../../../shared/data/attrs';
 import { STAGES, artStageOf, stageDef, stageName as stageLabel } from '../../../shared/data/stages';
 import { RARITY_META, SLOT_META } from '../../../shared/data/items';
-import { JOBS, playerTexture, playerWalkAnim } from '../../../shared/data/jobs';
+import { JOBS, jobSkills, playerTexture, playerWalkAnim } from '../../../shared/data/jobs';
 import { BASE_ATTRS } from '../../../shared/core/types';
 import { GameUI } from '../../ui';
 import { fmtNum } from '../../ui/dom';
@@ -110,6 +111,8 @@ const BOOK_COLOR: Record<BookSkillId, string> = {
   frenzy: '#ff7bd5',
   poison: '#9ade6a',
   shield: '#ffd07a',
+  snipe: '#ffd93d',
+  arrowRain: '#bfe0ff',
 };
 
 /** 血量数值缩写（怪物后期血量会很大） */
@@ -867,10 +870,12 @@ export class StageBattleScene extends Phaser.Scene {
       if (hit) this.session.target(hit.src.id);
     });
     this.input.keyboard!.on('keydown-SPACE', () => this.castSkill('attack'));
-    this.input.keyboard!.on('keydown-Q', () => this.castSkill('fireball'));
-    this.input.keyboard!.on('keydown-W', () => this.castSkill('frenzy'));
-    this.input.keyboard!.on('keydown-E', () => this.castSkill('poison'));
-    this.input.keyboard!.on('keydown-R', () => this.castSkill('shield'));
+    // 技能热键按职业绑：本职业专属（Q 单体 / W 群攻）+ 通用（E 狂暴 / R 护盾），
+    // 热键字符来自各 SkillDef，别职业的技能在本职业没有按键
+    for (const d of jobSkills(this.state.job)) {
+      if (d.id === 'attack') continue;
+      this.input.keyboard!.on(`keydown-${d.hotkey}`, () => this.castSkill(d.id));
+    }
     this.input.keyboard!.on('keydown-F', () => this.autoEquipBest());
     // 药水热键：Z 回血 / X 回蓝（1-9 已被快速加点占用，空格 + QWE 是技能）
     this.input.keyboard!.on('keydown-Z', () => this.drinkPotion('hp'));
@@ -964,6 +969,7 @@ export class StageBattleScene extends Phaser.Scene {
       designWidth: 1200,
       designHeight: 720,
       getState: () => this.state,
+      jobOf: () => this.state.job,
       castSkill: (id) => this.castSkill(id),
       drinkPotion: (kind) => this.drinkPotion(kind),
       cooldownOf: (id) => this.cooldownOf(id),
@@ -1073,7 +1079,7 @@ export class StageBattleScene extends Phaser.Scene {
       return;
     }
     if (this.session.cooldownLeft(id) > 0) return;
-    if ((id === 'fireball' || id === 'poison') && !this.selectedTarget()) {
+    if (SKILL_BY_ID[id].needsTarget && !this.selectedTarget()) {
       this.ui.toast(`请先用左键点选一只怪物，再释放${SKILL_BY_ID[id].name}`, '#ff8a8a');
       return;
     }
@@ -1121,6 +1127,21 @@ export class StageBattleScene extends Phaser.Scene {
       case 'fireball':
         if (mine) audio.play('fire');
         return;
+      case 'snipe':
+        // 弦响就是 release 音；命中另有金爆 + heavy crit
+        if (mine) audio.play('swing');
+        return;
+      case 'arrowRain': {
+        arrowRainFx(this, e.x ?? 0, e.y ?? 0, e.radius ?? 100);
+        if (!mine) return;
+        this.ui.toast(
+          (e.hits ?? 0) > 0
+            ? `箭雨覆盖：${e.hits} 只受击，每波 ${e.perTick} 点，共 3 波`
+            : '箭雨落空：范围内没有怪',
+          (e.hits ?? 0) > 0 ? '#ffd93d' : '#9aa4b2',
+        );
+        return;
+      }
       case 'poison':
         poisonFx(this, e.x ?? 0, e.y ?? 0, e.radius ?? 100);
         if (!mine) return;
@@ -1867,8 +1888,8 @@ export class StageBattleScene extends Phaser.Scene {
         return this.onCast(e);
       case 'castFail':
         return this.onCastFail(e.skill, e.reason);
-      case 'fireExplode':
-        this.fireballFx.explode(e.x, e.y);
+      case 'boltHit':
+        this.fireballFx.explode(e.x, e.y, e.snipe);
         return;
       case 'potion':
         return this.onPotion(e);

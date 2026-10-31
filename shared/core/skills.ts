@@ -1,5 +1,10 @@
 import { rollDropLevel } from './loot';
-import { BOOK_SKILLS, type BookSkillId, type SkillDef } from '../data/skills';
+import {
+  ARROW_RAIN_WAVES,
+  BOOK_SKILLS,
+  type BookSkillId,
+  type SkillDef,
+} from '../data/skills';
 
 export interface SkillBook {
   id: string;
@@ -10,7 +15,7 @@ export interface SkillBook {
 
 let bookSeq = 0;
 
-/** 打怪掉技能书：等级 ∈ [关卡最低等级, 怪等级]，技能从火球/狂暴/毒刃里随机（不含普攻） */
+/** 打怪掉技能书：等级 ∈ [关卡最低等级, 怪等级]，技能从各职业的主动技能里随机（不含普攻） */
 export function dropSkillBook(
   monsterLevel: number,
   rng: () => number = Math.random,
@@ -104,6 +109,10 @@ export function describeSkill(def: SkillDef, level: number): string {
       return `造成 ${pct}% 物攻的物理伤害，攻速由敏捷决定。`;
     case 'magical':
       return `造成 ${pct}% 法攻的法术伤害（单体追踪）。`;
+    case 'strike':
+      return `射出一发重箭，造成 ${pct}% 物攻的物理伤害并击退目标。`;
+    case 'volley':
+      return `以选中的怪为中心降下 ${ARROW_RAIN_WAVES} 波箭雨，每波造成 ${pct}% 物攻的物理伤害，范围半径随等级扩大。`;
     case 'buff':
       return `${dur}内攻击力与攻击/施法速度 +${pct}%。`;
     case 'ward':

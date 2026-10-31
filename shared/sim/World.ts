@@ -9,10 +9,15 @@ import { skillCooldown, skillMpCost, skillPower, skillValue } from '../core/skil
 import { levelBandOfStage, remainingOfLevel } from '../core/stage';
 import { jobDef } from '../data/jobs';
 import {
+  ARROW_RAIN_RADIUS_BASE,
+  ARROW_RAIN_RADIUS_GROWTH,
+  ARROW_RAIN_WAVES,
+  ARROW_RAIN_WAVE_MS,
   FIREBALL_SPEED,
   POISON_RADIUS_BASE,
   POISON_RADIUS_GROWTH,
   POISON_TICK_MS,
+  SNIPE_SPEED,
   SKILL_BY_ID,
   type SkillId,
 } from '../data/skills';
@@ -67,6 +72,13 @@ export interface Dot {
   tickAt: number;
   /** 施毒者：毒伤也算进伤害贡献 */
   by: string;
+  /**
+   * 结算口径：缺省 = 毒（法防、不击退）。箭雨复用 DoT 管线做离散波次，
+   * until 只盖住自己那一跳 → 每发 dot 恰好命中一次。
+   */
+  kind?: HitKind;
+  /** 受击方向（击退用）：毒雾固定朝下，箭雨从中心向外 */
+  angle?: number;
 }
 
 export interface PlayerEnt {
@@ -140,7 +152,9 @@ export interface FireballEnt {
   angle: number;
   targetId: string;
   bornAt: number;
-  mAtk: number;
+  /** fireball = 火球术（法伤），snipe = 穿杨箭（物伤、更快更大） */
+  kind: 'fireball' | 'snipe';
+  atk: number;
   lv: number;
 }
 
@@ -162,7 +176,7 @@ export type WorldEvent =
   | { k: 'revive'; pid: string }
   | { k: 'cast'; pid: string; skill: SkillId; lv: number; x?: number; y?: number; radius?: number; hits?: number; perTick?: number; duration?: number; value?: number }
   | { k: 'castFail'; to: string; skill: SkillId; reason: CastFail }
-  | { k: 'fireExplode'; x: number; y: number }
+  | { k: 'boltHit'; x: number; y: number; snipe?: boolean }
   | { k: 'potion'; to: string; kind: PotionKind; res: PotionUseResult; heal: number }
   | { k: 'pickup'; to: string; did: string; drop: GroundDrop }
   | { k: 'stageCleared'; to: string; stage: number }
@@ -397,9 +411,9 @@ export class World {
     if (lv <= 0) return fail('notLearned');
     if (this.cooldownLeft(p, skill) > 0) return fail('cooldown');
     const def = SKILL_BY_ID[skill];
-    // 火球 / 毒刃必须先选中一只怪：校验放在扣蓝之前，免得白扣蓝、白进冷却
+    // 需要目标的技能（火球 / 毒刃 / 穿杨箭 / 箭雨）：校验放在扣蓝之前，免得白扣蓝、白进冷却
     let target: MonsterEnt | null = null;
-    if (skill === 'fireball' || skill === 'poison') {
+    if (def.needsTarget) {
       target = this.selected(p);
       if (!target) return fail('needTarget');
       const cost0 = skillMpCost(def, lv);
@@ -418,7 +432,10 @@ export class World {
         if (!this.tryMelee(p)) this.emptySwing(p);
         break;
       case 'fireball':
-        this.castFireball(p, lv, target!);
+        this.castBolt(p, lv, target!, 'fireball');
+        break;
+      case 'snipe':
+        this.castBolt(p, lv, target!, 'snipe');
         break;
       case 'frenzy':
         p.frenzyUntil = this.now + skillValue(SKILL_BY_ID.frenzy);
@@ -426,6 +443,9 @@ export class World {
         break;
       case 'poison':
         this.castPoison(p, lv, target!);
+        break;
+      case 'arrowRain':
+        this.castArrowRain(p, lv, target!);
         break;
       case 'shield':
         p.shieldUntil = this.now + skillValue(SKILL_BY_ID.shield, lv);
@@ -436,7 +456,8 @@ export class World {
     return true;
   }
 
-  private castFireball(p: PlayerEnt, lv: number, target: MonsterEnt): void {
+  /** 火球 / 穿杨箭共用追踪弹：火球走法攻法防，穿杨箭走物攻物防、更快 */
+  private castBolt(p: PlayerEnt, lv: number, target: MonsterEnt, kind: 'fireball' | 'snipe'): void {
     const stats = aggregatedStats(p.state);
     const fb: FireballEnt = {
       id: this.nextId('f'),
@@ -446,11 +467,12 @@ export class World {
       angle: angleTo(p.x, p.y, target.x, target.y),
       targetId: target.id,
       bornAt: this.now,
-      mAtk: (stats.mAtk ?? 1) * this.frenzyMult(p),
+      kind,
+      atk: (kind === 'snipe' ? stats.pAtk ?? 1 : stats.mAtk ?? 1) * this.frenzyMult(p),
       lv,
     };
     this.fireballs.set(fb.id, fb);
-    this.events.push({ k: 'cast', pid: p.id, skill: 'fireball', lv });
+    this.events.push({ k: 'cast', pid: p.id, skill: kind, lv });
   }
 
   /** 毒刃：以选中的怪为中心撒毒雾，范围内所有怪一起中毒（每只按自己的法防结算） */
@@ -475,6 +497,52 @@ export class World {
       hits += 1;
     }
     this.events.push({ k: 'cast', pid: p.id, skill: 'poison', lv, x: cx, y: cy, radius, hits, perTick, duration });
+  }
+
+  /**
+   * 箭雨：以选中的怪为中心降 3 波箭雨，每波范围内所有怪吃一次物理伤害（各按自己的物防结算）。
+   * 波次复用 DoT 管线：每只怪每波塞一发 dot，until 只盖住自己那一跳 → 到点命中一次就消失。
+   */
+  private castArrowRain(p: PlayerEnt, lv: number, target: MonsterEnt): void {
+    const stats = aggregatedStats(p.state);
+    const cx = target.x;
+    const cy = target.y;
+    const radius = ARROW_RAIN_RADIUS_BASE + ARROW_RAIN_RADIUS_GROWTH * (lv - 1);
+    const power = (stats.pAtk ?? 1) * skillPower(SKILL_BY_ID.arrowRain, lv) * this.frenzyMult(p);
+    let hits = 0;
+    let perWave = 0;
+    for (const m of this.monsters.values()) {
+      if (dist(cx, cy, m.x, m.y) > radius) continue;
+      const wave = computeDamage(
+        { attack: power, defense: m.data.stats.pDef ?? 0, attackerLevel: p.state.level },
+        this.rng,
+      );
+      for (let i = 0; i < ARROW_RAIN_WAVES; i++) {
+        m.dots.push({
+          perTick: wave,
+          until: this.now + i * ARROW_RAIN_WAVE_MS + 1,
+          tickAt: this.now + i * ARROW_RAIN_WAVE_MS,
+          by: p.id,
+          kind: 'melee',
+          angle: angleTo(cx, cy, m.x, m.y),
+        });
+      }
+      m.names.set(p.id, p.name);
+      if (hits === 0) perWave = wave;
+      hits += 1;
+    }
+    this.events.push({
+      k: 'cast',
+      pid: p.id,
+      skill: 'arrowRain',
+      lv,
+      x: cx,
+      y: cy,
+      radius,
+      hits,
+      perTick: perWave,
+      duration: ARROW_RAIN_WAVES * ARROW_RAIN_WAVE_MS,
+    });
   }
 
   /** 喝药（底部药槽 / Z·X）：药效按当前等级档位结算，满血满蓝不消耗 */
@@ -778,33 +846,35 @@ export class World {
       }
       const t = fb.targetId ? this.monsters.get(fb.targetId) : undefined;
       if (t) fb.angle = angleTo(fb.x, fb.y, t.x, t.y);
-      fb.x += Math.cos(fb.angle) * FIREBALL_SPEED * dt;
-      fb.y += Math.sin(fb.angle) * FIREBALL_SPEED * dt;
+      const speed = fb.kind === 'snipe' ? SNIPE_SPEED : FIREBALL_SPEED;
+      fb.x += Math.cos(fb.angle) * speed * dt;
+      fb.y += Math.sin(fb.angle) * speed * dt;
       if (!t) continue;
       const r = (t.isBoss ? BOSS_RADIUS : MONSTER_RADIUS) + FIREBALL_RADIUS;
       if (dist(fb.x, fb.y, t.x, t.y) > r) continue;
       this.fireballs.delete(fb.id);
-      this.events.push({ k: 'fireExplode', x: fb.x, y: fb.y });
+      this.events.push({ k: 'boltHit', x: fb.x, y: fb.y, snipe: fb.kind === 'snipe' });
+      const snipe = fb.kind === 'snipe';
       const dmg = computeDamage(
         {
-          attack: fb.mAtk * skillPower(SKILL_BY_ID.fireball, fb.lv),
-          defense: t.data.stats.mDef ?? 0,
+          attack: fb.atk * skillPower(SKILL_BY_ID[fb.kind], fb.lv),
+          defense: snipe ? t.data.stats.pDef ?? 0 : t.data.stats.mDef ?? 0,
           attackerLevel: this.players.get(fb.ownerId)?.state.level ?? 1,
         },
         this.rng,
       );
-      this.applyDamage(t, dmg, fb.angle, fb.ownerId, 'fire');
+      this.applyDamage(t, dmg, fb.angle, fb.ownerId, snipe ? 'melee' : 'fire');
     }
   }
 
   private stepMonster(m: MonsterEnt, dt: number): void {
-    // DoT：每 0.5s 一跳，这一跳可能把怪打死
+    // DoT：每 0.5s 一跳，这一跳可能把怪打死（箭雨波次复用管线，单发只跳一次）
     if (m.dots.length > 0) {
       m.dots = m.dots.filter((d) => d.until > this.now);
       for (const d of m.dots) {
         if (this.now < d.tickAt) continue;
         d.tickAt = this.now + POISON_TICK_MS;
-        this.applyDamage(m, d.perTick, Math.PI / 2, d.by, 'poison');
+        this.applyDamage(m, d.perTick, d.angle ?? Math.PI / 2, d.by, d.kind ?? 'poison');
         if (!this.monsters.has(m.id)) return;
       }
     }

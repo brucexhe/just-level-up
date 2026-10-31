@@ -19,7 +19,7 @@ import {
   type SkillBook,
 } from '../core/skills';
 import { SKILL_BY_ID, type SkillId } from '../data/skills';
-import { DEFAULT_JOB } from '../data/jobs';
+import { clampJob, DEFAULT_JOB, jobSkills } from '../data/jobs';
 import { BASE_ATTRS, type AttrSet, type BaseAttr } from '../core/types';
 
 /** 某一关的击杀进度（当天清零，次日刷新） */
@@ -68,7 +68,7 @@ export interface GameState {
   potions: { hp: number; mp: number };
 }
 
-export function createInitialState(): GameState {
+export function createInitialState(job: number = DEFAULT_JOB): GameState {
   const baseStats = emptyStats();
   // 初始属性统一 10 点（HP = 10 × HP_PER_POINT）
   for (const k of [
@@ -84,8 +84,9 @@ export function createInitialState(): GameState {
   ] as BaseAttr[]) {
     baseStats[k] = BASE_ATTR_START;
   }
+  const id = clampJob(job);
   const s: GameState = {
-    job: DEFAULT_JOB,
+    job: id,
     level: 1,
     exp: 0,
     baseStats,
@@ -98,9 +99,9 @@ export function createInitialState(): GameState {
     inventory: [],
     equipped: {},
     skillBooks: [],
-    // 三个主动技能开局就都会（普攻 + 火球 + 狂暴 + 毒刃），
+    // 本职业的技能开局就都会（普攻 + 本职业专属 + 通用），
     // 但都只有 Lv1、威力很低，要靠技能书换技能点去升级
-    skills: { attack: 1, fireball: 1, frenzy: 1, poison: 1, shield: 1 },
+    skills: Object.fromEntries(jobSkills(id).map((d) => [d.id, 1])),
     highestMonsterLevel: 1,
     stage: 1,
     stages: {},
@@ -384,9 +385,9 @@ export function skillLevelCap(s: GameState): number {
   return Math.max(1, Math.floor(s.level));
 }
 
-/** 技能书等级必须 ≤ 人物等级才能穿戴 */
+/** 技能书等级必须 ≤ 人物等级，且必须属于本职业（通用技能 + 本职业专属）才能穿戴 */
 export function canEquipSkillBook(s: GameState, book: SkillBook): boolean {
-  return book.points <= skillLevelCap(s);
+  return book.points <= skillLevelCap(s) && jobSkills(s.job).some((d) => d.id === book.skillId);
 }
 
 /**

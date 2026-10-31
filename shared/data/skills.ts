@@ -1,8 +1,8 @@
-import { JOBS } from './jobs';
+import { JOBS, UNIVERSAL_SKILLS } from './jobs';
 
-export type SkillId = 'attack' | 'fireball' | 'frenzy' | 'poison' | 'shield';
+export type SkillId = 'attack' | 'fireball' | 'frenzy' | 'poison' | 'shield' | 'snipe' | 'arrowRain';
 
-export type SkillSchool = 'physical' | 'magical' | 'buff' | 'dot' | 'ward';
+export type SkillSchool = 'physical' | 'magical' | 'buff' | 'dot' | 'ward' | 'strike' | 'volley';
 
 export interface SkillDef {
   id: SkillId;
@@ -10,6 +10,8 @@ export interface SkillDef {
   icon: string;
   hotkey: string;
   school: SkillSchool;
+  /** 释放前必须先用左键选中一只怪（火球 / 毒刃 / 穿杨箭 / 箭雨） */
+  needsTarget?: boolean;
   /** 1 级时的法力消耗，之后每级 +mpCostGrowth */
   mpCost: number;
   mpCostGrowth: number;
@@ -40,12 +42,12 @@ export interface SkillDef {
 }
 
 /**
- * 全职业技能总表：由各职业文件（shared/data/jobs/mage.ts …）的 skills 拼接而成。
+ * 全职业技能总表：各职业文件（shared/data/jobs/mage.ts …）的专属技能 + 通用技能（狂暴/护盾）。
  * 同 id 只保留第一个职业的定义 —— 普攻 attack 各职业各有一份（当前内容一致，
- * 弓手改成射箭后要走「按职业查技能」，见 jobDef(job).skills）。
+ * 弓手改成射箭后要走「按职业查技能」，见 jobSkills(job)）。
  */
 export const SKILLS: SkillDef[] = [
-  ...new Map(JOBS.flatMap((j) => j.skills).map((s) => [s.id, s])).values(),
+  ...new Map([...JOBS.flatMap((j) => j.skills), ...UNIVERSAL_SKILLS].map((s) => [s.id, s])).values(),
 ];
 
 /** 火球飞行速度 px/s */
@@ -55,6 +57,13 @@ export const POISON_TICK_MS = 500;
 /** 毒刃 AoE 半径：BASE + GROWTH × (技能等级 − 1)。地图很大，半径太小等于单体 */
 export const POISON_RADIUS_BASE = 100;
 export const POISON_RADIUS_GROWTH = 1;
+/** 穿杨箭飞行速度 px/s：比火球快一截，重箭一闪即至 */
+export const SNIPE_SPEED = 720;
+/** 箭雨：波数 / 波间隔 ms；半径同毒雾口径（BASE + GROWTH × (等级 − 1)） */
+export const ARROW_RAIN_WAVES = 3;
+export const ARROW_RAIN_WAVE_MS = 400;
+export const ARROW_RAIN_RADIUS_BASE = 100;
+export const ARROW_RAIN_RADIUS_GROWTH = 1;
 
 export const SKILL_BY_ID: Record<SkillId, SkillDef> = SKILLS.reduce(
   (acc, s) => {

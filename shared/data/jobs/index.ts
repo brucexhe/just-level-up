@@ -2,10 +2,14 @@ import { ARCHER } from './archer';
 import { ELF } from './elf';
 import { MAGE } from './mage';
 import { WARRIOR } from './warrior';
+import { UNIVERSAL_SKILLS } from './universal';
 import type { JobDef, PlayerGrids, PlayerPalette } from './types';
+import type { SkillDef } from '../skills';
 
 export type { JobDef, PlayerGrids, PlayerPalette } from './types';
 export { BASE_PALETTE, palette } from './types';
+export { ARCHER } from './archer';
+export { UNIVERSAL_SKILLS } from './universal';
 
 /**
  * 职业注册表：每个职业一个文件（mage / archer / warrior / elf），
@@ -26,6 +30,15 @@ export function clampJob(v: unknown): number {
 
 export function jobDef(id: number): JobDef {
   return JOBS.find((j) => j.id === clampJob(id)) ?? JOBS[DEFAULT_JOB];
+}
+
+/**
+ * 某职业的完整技能表 = 本职业专属技能 + 全职业通用技能（狂暴 / 护盾）。
+ * 工具栏、技能面板、开局技能、存档默认填充都走这里，
+ * 保证「法师的技能弓手看不到也放不出来」。
+ */
+export function jobSkills(id: number): SkillDef[] {
+  return [...jobDef(id).skills, ...UNIVERSAL_SKILLS];
 }
 
 /** 主角贴图 key：player-0-a / player-2-b … */
