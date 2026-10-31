@@ -37,7 +37,7 @@ import { poisonFx } from '../fx/poisonFx';
 import { arrowRainFx } from '../fx/arrowRainFx';
 import { bossDeathFx } from '../fx/bossDeathFx';
 import { levelUpFx } from '../fx/levelUpFx';
-import { SKILL_BY_ID, type BookSkillId, type SkillId } from '../../../shared/data/skills';
+import { ARROW_RAIN_WAVES, SKILL_BY_ID, type BookSkillId, type SkillId } from '../../../shared/data/skills';
 import { ATTR_META } from '../../../shared/data/attrs';
 import { STAGES, artStageOf, stageDef, stageName as stageLabel } from '../../../shared/data/stages';
 import { RARITY_META, SLOT_META } from '../../../shared/data/items';
@@ -1136,7 +1136,7 @@ export class StageBattleScene extends Phaser.Scene {
         if (!mine) return;
         this.ui.toast(
           (e.hits ?? 0) > 0
-            ? `箭雨覆盖：${e.hits} 只受击，每波 ${e.perTick} 点，共 3 波`
+            ? `箭雨覆盖：${e.hits} 只受击，每波 ${e.perTick} 点，共 ${ARROW_RAIN_WAVES} 波`
             : '箭雨落空：范围内没有怪',
           (e.hits ?? 0) > 0 ? '#ffd93d' : '#9aa4b2',
         );
