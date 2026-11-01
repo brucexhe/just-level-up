@@ -1,5 +1,5 @@
 import type { SkillDef } from '../skills';
-import { DEFAULT_GROWTH, palette, type JobDef } from './types';
+import { DEFAULT_GROWTH, DEFAULT_START, palette, type JobDef } from './types';
 
 /**
  * 职业 3 精灵：外观 + 技能全在这一个文件里。
@@ -80,6 +80,8 @@ export const ELF: JobDef = {
   weapon: 'sword',
   // 远程辅助：蓝池是唯一主成长线，其余全默认
   growth: { ...DEFAULT_GROWTH, mp: 4 },
+  // 法系主攻（与法师同构，技能目前全是法系）
+  start: { ...DEFAULT_START, mAtk: 3 },
   skills: [
     {
       id: 'attack',

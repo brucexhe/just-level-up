@@ -1,5 +1,5 @@
 import type { SkillDef } from '../skills';
-import { DEFAULT_GROWTH, palette, type JobDef } from './types';
+import { DEFAULT_GROWTH, DEFAULT_START, palette, type JobDef } from './types';
 
 /**
  * 职业 1 弓手：外观 + 技能全在这一个文件里。
@@ -83,6 +83,8 @@ export const ARCHER: JobDef = {
   weapon: 'bow',
   // 脆皮远程物理：物攻为主成长线；mp 稍快（技能箭耗蓝不低）
   growth: { ...DEFAULT_GROWTH, mp: 2, pAtk: 3 },
+  // 物理主攻：pAtk 3
+  start: { ...DEFAULT_START, pAtk: 3 },
   attackRange: ARCHER_ATTACK_RANGE,
   skills: [
     {
@@ -108,9 +110,9 @@ export const ARCHER: JobDef = {
       mpCost: 2,
       mpCostGrowth: 0.8,
       cdMs: 3000,
-      power: 2.5,
+      power: 1,
       value: 0,
-      desc: '需先选中一只怪：射出一发巨型箭矢直取它，造成一次高额物理伤害并击退。',
+      desc: '需先选中一只怪：射出一发巨型箭矢直取它，造成一次物理伤害并击退。',
     },
     {
       id: 'arrowRain',
@@ -122,9 +124,9 @@ export const ARCHER: JobDef = {
       mpCost: 3,
       mpCostGrowth: 0.9,
       cdMs: 6000,
-      power: 0.8,
-      value: 0,
-      desc: '需先选中一只怪：以它为中心降下 3 波箭雨，范围内所有怪每波受到一次物理伤害，范围随等级扩大。',
+      power: 0.1,
+      value: 2500,
+      desc: '需先选中一只怪：以它为中心降下箭雨，2.5 秒内每 0.25 秒对范围内所有怪造成一次物理伤害（每波 10% 物攻，随等级成长），范围随等级扩大。',
     },
   ],
 };

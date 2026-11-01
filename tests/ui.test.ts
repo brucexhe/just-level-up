@@ -13,6 +13,7 @@ import {
   type GameState,
 } from '../shared/state/gameState';
 import { BASE_ATTR_START } from '../shared/state/gameState';
+import { DEFAULT_START } from '../shared/data/jobs';
 import { BALANCE } from '../shared/core/balance';
 import type { UIApi, UIView } from '../client/ui/api';
 import { applyCommand } from '../shared/state/commands';
@@ -87,7 +88,7 @@ describe('面板渲染（headless 字符串校验）', () => {
     const { api } = fakeApi(() => s);
     PANEL_BY_ID.character.action('attr', 'pAtk', s, api);
     const auto = BALANCE.ATTR_PER_LEVEL * (s.level - 1); // 升级自带的全属性成长
-    expect(s.baseStats.pAtk).toBe(BASE_ATTR_START + auto + 1);
+    expect(s.baseStats.pAtk).toBe(DEFAULT_START.pAtk + auto + 1);
     expect(s.attrPoints).toBe(1);
     PANEL_BY_ID.character.action('attrmax', 'hp', s, api);
     expect(s.attrPoints).toBe(0);
@@ -112,7 +113,7 @@ describe('面板渲染（headless 字符串校验）', () => {
     PANEL_BY_ID.character.action('attr10', 'pAtk', s, api);
     expect(s.attrPoints).toBe(0);
     const auto = BALANCE.ATTR_PER_LEVEL * (s.level - 1);
-    expect(s.baseStats.pAtk).toBe(BASE_ATTR_START + auto + 4);
+    expect(s.baseStats.pAtk).toBe(DEFAULT_START.pAtk + auto + 4);
   });
 
   it('装备面板展示 8 个槽位与选中装备详情', () => {

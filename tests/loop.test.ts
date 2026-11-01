@@ -9,6 +9,7 @@ import {
   maxHp,
 } from '../shared/state/gameState';
 import { BASE_ATTR_START } from '../shared/state/gameState';
+import { DEFAULT_START } from '../shared/data/jobs';
 import { BALANCE } from '../shared/core/balance';
 import { createMonster } from '../shared/core/combat';
 
@@ -27,12 +28,11 @@ function playerHit(state: ReturnType<typeof createInitialState>, monsterDef: num
 }
 
 describe('P2 growth loop closes at locked starting values', () => {
-  it('Lv1 player one-shots Lv1 monster (1 dmg vs 1 hp)', () => {
+  it('Lv1 玩家能打动 Lv1 怪，且怪是被动不反杀', () => {
     const s = createInitialState();
     const m = createMonster(1);
     const dmg = playerHit(s, m.stats.pDef ?? 0, m.level);
     expect(dmg).toBeGreaterThanOrEqual(1);
-    expect(dmg).toBeGreaterThanOrEqual(m.maxHp); // 1 击必杀
     expect(m.aggressive).toBe(false); // Lv1 被动，不会反杀
   });
 
@@ -57,7 +57,7 @@ describe('P2 growth loop closes at locked starting values', () => {
     expect(s.hp).toBe(maxHp(s));
     // 没有点了，再加失败
     expect(allocateAttrPoint(s, 'pAtk')).toBe(false);
-    expect(aggregatedStats(s).pAtk).toBe(BASE_ATTR_START + auto);
+    expect(aggregatedStats(s).pAtk).toBe(DEFAULT_START.pAtk + auto);
   });
 
   it('player out-scales a rising monster once points are invested', () => {

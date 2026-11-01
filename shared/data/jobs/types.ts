@@ -23,6 +23,24 @@ export const DEFAULT_GROWTH: JobGrowth = {
   luck: BALANCE.ATTR_PER_LEVEL,
 };
 
+/**
+ * 新角色 1 级的初始属性（与 growth 同构）。
+ * 默认骨架：血蓝 10、其余七项全 1 —— 各职业只把自己的主攻属性改成 3。
+ */
+export type JobStart = Record<BaseAttr, number>;
+
+export const DEFAULT_START: JobStart = {
+  hp: 10,
+  mp: 10,
+  pAtk: 1,
+  mAtk: 1,
+  pDef: 1,
+  mDef: 1,
+  speed: 1,
+  agi: 1,
+  luck: 1,
+};
+
 /** 主角配色（像素网格的字符 → 颜色） */
 export type PlayerPalette = {
   H: number;
@@ -71,6 +89,8 @@ export interface JobDef {
   attackRange?: number;
   /** 该职业的属性成长曲线（各职业文件显式声明，默认引用 DEFAULT_GROWTH） */
   growth: JobGrowth;
+  /** 该职业 1 级的初始属性（各职业文件显式声明，默认引用 DEFAULT_START） */
+  start: JobStart;
   /** 该职业的技能表（含普攻；各职业可以有完全不同的技能组） */
   skills: SkillDef[];
 }

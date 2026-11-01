@@ -70,20 +70,9 @@ export interface GameState {
 
 export function createInitialState(job: number = DEFAULT_JOB): GameState {
   const baseStats = emptyStats();
-  // 初始属性统一 10 点（HP = 10 × HP_PER_POINT）
-  for (const k of [
-    'hp',
-    'mp',
-    'pAtk',
-    'mAtk',
-    'pDef',
-    'mDef',
-    'speed',
-    'agi',
-    'luck',
-  ] as BaseAttr[]) {
-    baseStats[k] = BASE_ATTR_START;
-  }
+  // 初始属性按职业走（JobDef.start）：血蓝 10、主攻 3、其余 1
+  const start = jobDef(job).start;
+  for (const k of BASE_ATTRS) baseStats[k] = start[k];
   const id = clampJob(job);
   const s: GameState = {
     job: id,

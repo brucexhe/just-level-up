@@ -11,7 +11,6 @@ import { jobDef } from '../data/jobs';
 import {
   ARROW_RAIN_RADIUS_BASE,
   ARROW_RAIN_RADIUS_GROWTH,
-  ARROW_RAIN_WAVES,
   ARROW_RAIN_WAVE_MS,
   FIREBALL_SPEED,
   POISON_RADIUS_BASE,
@@ -511,7 +510,9 @@ export class World {
   }
 
   /**
-   * 箭雨：以选中的怪为中心降 ARROW_RAIN_WAVES 波箭雨，每波范围内所有怪吃一次物理伤害（各按自己的物防结算）。
+  /**
+   * 箭雨：以选中的怪为中心降箭雨，时长 = 技能 value（ms），每 ARROW_RAIN_WAVE_MS 一波，
+   * 每波范围内所有怪吃一次物理伤害（各按自己的物防结算）。
    * 波次复用 DoT 管线：每只怪每波塞一发 once dot → 到点命中一次就消失。
    */
   private castArrowRain(p: PlayerEnt, lv: number, target: MonsterEnt): void {
@@ -520,6 +521,8 @@ export class World {
     const cy = target.y;
     const radius = ARROW_RAIN_RADIUS_BASE + ARROW_RAIN_RADIUS_GROWTH * (lv - 1);
     const power = (stats.pAtk ?? 1) * skillPower(SKILL_BY_ID.arrowRain, lv) * this.frenzyMult(p);
+    const duration = skillValue(SKILL_BY_ID.arrowRain);
+    const waves = Math.max(1, Math.round(duration / ARROW_RAIN_WAVE_MS));
     let hits = 0;
     let perWave = 0;
     for (const m of this.monsters.values()) {
@@ -528,7 +531,7 @@ export class World {
         { attack: power, defense: m.data.stats.pDef ?? 0, attackerLevel: p.state.level },
         this.rng,
       );
-      for (let i = 0; i < ARROW_RAIN_WAVES; i++) {
+      for (let i = 0; i < waves; i++) {
         m.dots.push({
           perTick: wave,
           until: this.now + i * ARROW_RAIN_WAVE_MS,
@@ -553,7 +556,7 @@ export class World {
       radius,
       hits,
       perTick: perWave,
-      duration: ARROW_RAIN_WAVES * ARROW_RAIN_WAVE_MS,
+      duration: waves * ARROW_RAIN_WAVE_MS,
     });
   }
 
@@ -584,7 +587,8 @@ export class World {
 
   private meleeInterval(p: PlayerEnt): number {
     const stats = aggregatedStats(p.state);
-    return attackIntervalMs(stats.agi ?? 0) / this.frenzyMult(p);
+    // 狂暴只加攻击力（frenzyMult 乘在伤害端），不再缩攻击间隔
+    return attackIntervalMs(stats.agi ?? 0);
   }
 
   private nearestMonster(p: PlayerEnt, maxDist: number): MonsterEnt | null {

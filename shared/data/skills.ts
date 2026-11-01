@@ -59,9 +59,9 @@ export const POISON_RADIUS_BASE = 100;
 export const POISON_RADIUS_GROWTH = 1;
 /** 穿杨箭飞行速度 px/s：比火球快一截，重箭一闪即至 */
 export const SNIPE_SPEED = 720;
-/** 箭雨：波数 / 波间隔 ms；半径同毒雾口径（BASE + GROWTH × (等级 − 1)） */
-export const ARROW_RAIN_WAVES = 5;
-export const ARROW_RAIN_WAVE_MS = 500;
+/** 箭雨：波数 / 波间隔 ms（10 波 × 0.25s = 2.5 秒）；半径同毒雾口径（BASE + GROWTH × (等级 − 1)） */
+export const ARROW_RAIN_WAVES = 10;
+export const ARROW_RAIN_WAVE_MS = 250;
 export const ARROW_RAIN_RADIUS_BASE = 100;
 export const ARROW_RAIN_RADIUS_GROWTH = 1;
 

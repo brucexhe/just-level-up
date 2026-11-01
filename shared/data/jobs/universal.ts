@@ -17,7 +17,7 @@ export const UNIVERSAL_SKILLS: SkillDef[] = [
     cdMs: 60000,
     power: 0.1,
     value: 5000,
-    desc: '短时间内提升攻击力与攻击/施法速度。',
+    desc: '短时间内物理攻击与法术攻击提升（随技能等级成长）。',
   },
   {
     id: 'shield',

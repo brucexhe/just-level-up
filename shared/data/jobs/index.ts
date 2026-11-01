@@ -7,7 +7,7 @@ import type { JobDef, PlayerGrids, PlayerPalette } from './types';
 import type { SkillDef } from '../skills';
 
 export type { JobDef, PlayerGrids, PlayerPalette } from './types';
-export { BASE_PALETTE, palette } from './types';
+export { BASE_PALETTE, DEFAULT_GROWTH, DEFAULT_START, palette } from './types';
 export { ARCHER } from './archer';
 export { UNIVERSAL_SKILLS } from './universal';
 

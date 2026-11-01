@@ -1,6 +1,7 @@
 import { rollDropLevel } from './loot';
 import {
   ARROW_RAIN_WAVES,
+  ARROW_RAIN_WAVE_MS,
   BOOK_SKILLS,
   type BookSkillId,
   type SkillDef,
@@ -113,9 +114,9 @@ export function describeSkill(def: SkillDef, level: number): string {
     case 'strike':
       return `射出一发重箭，造成 ${pct}% 物攻的物理伤害并击退目标。`;
     case 'volley':
-      return `以选中的怪为中心降下 ${ARROW_RAIN_WAVES} 波箭雨，每波造成 ${pct}% 物攻的物理伤害，范围半径随等级扩大。`;
+      return `以选中的怪为中心降下 ${ARROW_RAIN_WAVES} 波箭雨（每 ${ARROW_RAIN_WAVE_MS / 1000} 秒一波），每波造成 ${pct}% 物攻的物理伤害，范围半径随等级扩大。`;
     case 'buff':
-      return `${dur}内攻击力与攻击/施法速度 +${pct}%。`;
+      return `${dur}内物理攻击与法术攻击 +${pct}%。`;
     case 'ward':
       return `${dur}内物理抗性与法术抗性 +${pct}%。`;
     case 'dot':

@@ -1,5 +1,5 @@
 import type { SkillDef } from '../skills';
-import { DEFAULT_GROWTH, palette, type JobDef } from './types';
+import { DEFAULT_GROWTH, DEFAULT_START, palette, type JobDef } from './types';
 
 /**
  * 职业 2 战士：外观 + 技能全在这一个文件里。
@@ -80,6 +80,8 @@ export const WARRIOR: JobDef = {
   weapon: 'sword',
   // 近战坦：血厚防厚换攻击成长低（物攻 2 仍高于默认，法攻垫底）
   growth: { ...DEFAULT_GROWTH, hp: 8, pAtk: 2, pDef: 3, mDef: 3 },
+  // 物理主攻：pAtk 3（与弓手起手相同，差距靠成长曲线拉开）
+  start: { ...DEFAULT_START, pAtk: 3 },
   skills: [
     {
       id: 'attack',
