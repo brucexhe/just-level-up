@@ -1,6 +1,6 @@
 import { EQUIP_SLOTS, type EquipSlot, type EquipmentItem } from '../core/equipment';
 import { BASE_ATTRS, type AttrSet } from '../core/types';
-import { ARCHER, clampJob, jobSkills } from '../data/jobs';
+import { clampJob, jobSkills } from '../data/jobs';
 import { SKILL_BY_ID, SKILLS, type BookSkillId, type SkillId } from '../data/skills';
 import { createInitialState, maxHp, maxMp, type GameState } from './gameState';
 
@@ -129,22 +129,6 @@ export function normalizeState(raw: unknown): GameState {
       if (typeof lv === 'number' && Number.isFinite(lv) && lv > 0) {
         s.skills[d.id] = Math.floor(lv);
       }
-    }
-  }
-  // 旧档迁移：弓手的火球术/毒刃换成穿杨箭/箭雨，等级与技能书原样平移。
-  // 必须在下面补默认等级**之前**做，否则新技能先被填成 1，旧等级就丢了
-  if (s.job === ARCHER.id) {
-    for (const [from, to] of [
-      ['fireball', 'snipe'],
-      ['poison', 'arrowRain'],
-    ] as const) {
-      const lv = s.skills[from];
-      if ((s.skills[to] ?? 0) <= 0 && lv) s.skills[to] = lv;
-      delete s.skills[from];
-    }
-    for (const b of s.skillBooks) {
-      if (b.skillId === 'fireball') b.skillId = 'snipe';
-      else if (b.skillId === 'poison') b.skillId = 'arrowRain';
     }
   }
   // 主动技能默认就会（旧档也补上），只是等级低 —— 按当前职业的技能表补（含通用技能）

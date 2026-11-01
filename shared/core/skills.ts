@@ -15,7 +15,8 @@ export interface SkillBook {
 
 let bookSeq = 0;
 
-/** 打怪掉技能书：等级 ∈ [关卡最低等级, 怪等级]，技能从各职业的主动技能里随机（不含普攻） */
+/** 打怪掉技能书：等级 ∈ [关卡最低等级, 怪等级]，技能从各职业的主动技能里随机（不含普攻）。
+ *  异职业的书允许掉、允许捡 —— 进背包后不能穿戴、只能卖出换技能点（穿戴按职业校验）。 */
 export function dropSkillBook(
   monsterLevel: number,
   rng: () => number = Math.random,

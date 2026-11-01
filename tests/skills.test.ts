@@ -32,7 +32,7 @@ import { jobSkills } from '../shared/data/jobs';
 const fixed = (v: number) => () => v;
 
 describe('技能书 / 技能点', () => {
-  it('普攻不进掉落池：只会掉各职业的主动技能', () => {
+  it('普攻不进掉落池：只会掉各职业的主动技能（异职业的书也掉，捡了只能卖）', () => {
     const got = new Set<string>();
     for (let i = 0; i < 400; i++) {
       const b = dropSkillBook(20, Math.random);
@@ -110,27 +110,17 @@ describe('技能书 / 技能点', () => {
     expect(equipSkillBook(a, a.skillBooks[0]).kind).toBe('equip');
   });
 
-  it('旧档迁移：弓手的火球/毒刃等级与技能书原样换成穿杨箭/箭雨', () => {
+  it('新掉的异职业技能书读档不改名：保持原样，不能穿只能卖', () => {
+    // 弓手捡了法师的毒刃书：身上没有毒刃技能（等级没发生平移），书不能被偷偷换成箭雨
     const s = normalizeState({
       job: 1,
       level: 10,
-      skills: { attack: 1, fireball: 7, poison: 4, frenzy: 2, shield: 3 },
-      skillBooks: [
-        { id: 'b1', skillId: 'fireball', points: 9 },
-        { id: 'b2', skillId: 'poison', points: 5 },
-        { id: 'b3', skillId: 'frenzy', points: 2 },
-      ],
+      skillBooks: [{ id: 'b1', skillId: 'poison', points: 5 }],
     });
-    expect(s.skills).toEqual({ attack: 1, snipe: 7, arrowRain: 4, frenzy: 2, shield: 3 });
-    expect(s.skillBooks.map((b) => [b.skillId, b.points])).toEqual([
-      ['snipe', 9],
-      ['arrowRain', 5],
-      ['frenzy', 2],
-    ]);
-    // 法师的旧档不动
-    const m = normalizeState({ job: 0, skills: { fireball: 6 } });
-    expect(m.skills.fireball).toBe(6);
-    expect(m.skills.snipe).toBeUndefined();
+    expect(s.skillBooks[0]!.skillId).toBe('poison');
+    expect(equipSkillBook(s, s.skillBooks[0]!).kind).toBe('blocked');
+    // 卖出换技能点照常
+    expect(sellSkillBook(s, s.skillBooks[0]!)).toBe(2);
   });
 
   it('穿戴技能书 = 直接把技能等级替换成书的等级，旧等级退回背包', () => {
