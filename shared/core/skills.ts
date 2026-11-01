@@ -3,6 +3,9 @@ import {
   ARROW_RAIN_WAVES,
   ARROW_RAIN_WAVE_MS,
   BOOK_SKILLS,
+  MOON_BATH_TICK_BASE,
+  MOON_BATH_TICK_CAP,
+  MOON_BATH_TICK_GROWTH,
   MOON_ECLIPSE_SHRED_BASE,
   MOON_ECLIPSE_SHRED_CAP,
   MOON_ECLIPSE_SHRED_GROWTH,
@@ -130,6 +133,13 @@ export function describeSkill(def: SkillDef, level: number): string {
         MOON_ECLIPSE_SHRED_BASE + MOON_ECLIPSE_SHRED_GROWTH * (level - 1),
       );
       return `造成 ${pct}% 法攻的法术伤害并蚀甲：目标物防与法防 -${Math.round(shred * 100)}%（上限 30%），持续 ${dur}。`;
+    }
+    case 'heal': {
+      const tick = Math.min(
+        MOON_BATH_TICK_CAP,
+        MOON_BATH_TICK_BASE + MOON_BATH_TICK_GROWTH * (level - 1),
+      );
+      return `${dur}内每 0.5 秒回复 300 范围内所有玩家 ${Math.round(tick * 100)}% 最大生命（每跳上限 3%，即总回复 30%）。`;
     }
     default:
       return def.desc;

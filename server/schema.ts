@@ -19,6 +19,8 @@ export const PlayerPub = schema(
     dead: t.boolean(),
     frenzy: t.boolean(),
     shield: t.boolean(),
+    /** 月沐 HoT 生效中（头顶回血图标） */
+    healing: t.boolean(),
   },
   'PlayerPub',
 );
@@ -37,6 +39,8 @@ export const MonsterPub = schema(
     moving: t.boolean(),
     aggressive: t.boolean(),
     poisoned: t.boolean(),
+    /** 月蚀蚀甲生效中（头顶若隐若现小月亮） */
+    shredded: t.boolean(),
   },
   'MonsterPub',
 );
@@ -67,7 +71,7 @@ export const FireballPub = schema(
     x: t.float32(),
     y: t.float32(),
     angle: t.float32(),
-    /** 0 = 火球（法伤），1 = 穿杨箭（物伤） */
+    /** 0 = 火球（法伤），1 = 穿杨箭（物伤），2 = 月蚀（法伤 + 蚀甲） */
     kind: t.uint8(),
   },
   'FireballPub',

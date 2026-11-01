@@ -855,4 +855,18 @@ export function bakeProps(scene: Phaser.Scene): void {
     '..OOYYYYOO..',
     '....OOOO....',
   ], { O: 0x8a9ad8, Y: 0xc8d4f2, W: 0xf4f8ff });
+
+  // 月沐生效中的头顶图标：水滴里嵌一轮月牙（绿底月光），被治疗者头上微微浮动
+  bakeGrid(scene, 'hotIcon', [
+    '....W.....',
+    '...GW.....',
+    '...GGW....',
+    '..GYYGW...',
+    '..GYYYG...',
+    '.GYYYYGG..',
+    '.GYYYYGG..',
+    '.GGYYGGG..',
+    '..GGGGG...',
+    '...GGG....',
+  ], { G: 0x9ade6a, Y: 0xc8d4f2, W: 0xf4f8ff });
 }

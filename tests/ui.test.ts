@@ -31,7 +31,7 @@ function fakeApi(state: () => GameState) {
     cooldownOf: () => ({ remain: 0, total: 0 }),
     now: () => 0,
     close: () => undefined,
-    // 和离线会话一致：直接在传入的状态上执行同一份指令
+    // 直接在传入的状态上执行同一份指令
     cmd: (st, c) => applyCommand(st, c),
     settings: {
       music: () => flags.music,
@@ -50,7 +50,6 @@ function fakeApi(state: () => GameState) {
       setAutoAttack: (v) => {
         flags.autoAttack = v;
       },
-      mode: () => 'online',
       account: () => 'tester',
       logout: () => undefined,
       monstersLeft: () => 101,

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { LOOT } from '../shared/config';
 import { buildObstacles, PICKUP_RANGE } from '../shared/sim/map';
 import { seeded } from '../shared/sim/rng';
-import { World, type MonsterEnt } from '../shared/sim/World';
+import { World, type MonsterEnt, type WorldEvent } from '../shared/sim/World';
 import { ARROW_RAIN_WAVES, ARROW_RAIN_WAVE_MS } from '../shared/data/skills';
-import { createInitialState } from '../shared/state/gameState';
+import { createInitialState, maxHp } from '../shared/state/gameState';
 
 const T0 = 1_000_000;
 
@@ -279,5 +279,85 @@ describe('World 月蚀', () => {
     const hitAt2 = waitForBoltHit(w, hitAt + 7000);
     expect(m.shredPct).toBeCloseTo(0.08, 5); // 不叠加，仍是 8%
     expect(m.shredUntil).toBe(hitAt2 + 8000); // 从第二次命中起算
+  });
+});
+
+describe('World 月沐', () => {
+  /** 每 250ms 步进走完 ms 毫秒，收集期间全部 heal 事件（步长与 500ms 跳拍错开，模拟真实帧率） */
+  function drainHeals(w: World, from: number, ms: number) {
+    const heals: { pid: string; amount: number }[] = [];
+    for (let t = 250; t <= ms; t += 250) {
+      w.step(from + t);
+      for (const e of w.drain()) if (e.k === 'heal') heals.push({ pid: e.pid, amount: e.amount });
+    }
+    return heals;
+  }
+
+  /** 怪不追人不咬人：5 秒的 HoT 测试不该被 Lv5 野怪打断 */
+  function pacify(w: World) {
+    for (const m of w.monsters.values()) {
+      m.data.aggressive = false;
+      m.data.hp = 1e9;
+      m.data.maxHp = 1e9;
+    }
+  }
+
+  it('5 秒 10 跳、每跳按最大生命回：不溢出，300 内队友一起吃到，圈外和死人不算', () => {
+    const w = world();
+    pacify(w);
+    const a = w.addPlayer('a', 'A', createInitialState(3));
+    const b = w.addPlayer('b', 'B', createInitialState());
+    const c = w.addPlayer('c', 'C', createInitialState());
+    const d = w.addPlayer('d', 'D', createInitialState());
+    c.x = a.x + 400; // 圈外
+    c.y = a.y;
+    c.state.hp = 1;
+    d.dead = true;
+    a.state.hp = maxHp(a.state) - 1; // 只差 1 点：溢出不补
+    b.state.hp = maxHp(b.state) - 5; // 差 5 点：吃满 5 点就停
+    a.state.mp = 999;
+
+    expect(w.cast('a', 'moonBath')).toBe(true);
+    const castEv = w.drain().find(
+      (e): e is Extract<WorldEvent, { k: 'cast' }> => e.k === 'cast' && e.skill === 'moonBath',
+    );
+    expect(castEv!.hits).toBe(2); // 圈内活人只有 a / b
+    expect(a.hots[0]!.until).toBe(T0 + 5000);
+    const perTick = Math.max(1, Math.round(maxHp(a.state) * 0.01));
+    expect(a.hots[0]!.perTick).toBe(perTick);
+
+    const heals = drainHeals(w, T0, 5200);
+    const sum = (pid: string) => heals.filter((h) => h.pid === pid).reduce((s, h) => s + h.amount, 0);
+    expect(sum('a')).toBe(1); // 只回到满为止
+    expect(sum('b')).toBe(5); // 10 跳上限，但缺口只有 5
+    expect(heals.every((h) => h.amount > 0)).toBe(true);
+    expect(heals.some((h) => h.pid === 'c' || h.pid === 'd')).toBe(false);
+    expect(c.state.hp).toBe(1); // 圈外：一滴都没回
+    expect(c.hots).toHaveLength(0);
+    expect(d.hots).toHaveLength(0);
+    // 到点自动消失
+    expect(a.hots).toHaveLength(0);
+    expect(b.hots).toHaveLength(0);
+  });
+
+  it('回血比例走专属曲线：Lv1 1%/跳，Lv100 ≈2%，Lv200+ 封顶 3%', () => {
+    const w = world();
+    pacify(w);
+    const a = w.addPlayer('a', 'A', createInitialState(3));
+    a.x += 400; // 离怪远点，专心测数值
+    const tickAt = (lv: number, pct: number) => {
+      a.state.skills.moonBath = lv;
+      a.state.mp = 9999;
+      a.cooldowns.moonBath = 0; // 跳过冷却连续施放
+      expect(w.cast('a', 'moonBath')).toBe(true);
+      w.drain();
+      expect(a.hots[0]!.perTick).toBe(Math.max(1, Math.round(maxHp(a.state) * pct)));
+      a.hots.length = 0;
+    };
+    tickAt(1, 0.01);
+    tickAt(100, 0.0199);
+    tickAt(150, 0.0245);
+    tickAt(200, 0.0299); // 线性到 200 还差一点点到 3%
+    tickAt(250, 0.03); // 封顶
   });
 });

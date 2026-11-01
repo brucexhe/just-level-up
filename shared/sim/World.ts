@@ -13,6 +13,11 @@ import {
   ARROW_RAIN_RADIUS_GROWTH,
   ARROW_RAIN_WAVE_MS,
   FIREBALL_SPEED,
+  MOON_BATH_RADIUS,
+  MOON_BATH_TICK_BASE,
+  MOON_BATH_TICK_CAP,
+  MOON_BATH_TICK_GROWTH,
+  MOON_BATH_TICK_MS,
   MOON_ECLIPSE_SHRED_BASE,
   MOON_ECLIPSE_SHRED_CAP,
   MOON_ECLIPSE_SHRED_GROWTH,
@@ -64,7 +69,7 @@ import {
 /**
  * 一关的权威世界模拟（headless，不依赖 Phaser）。
  *
- * 服务端每个 StageRoom 跑一个；客户端离线模式（?offline）也直接在浏览器里跑同一份代码。
+ * 服务端每个 StageRoom 跑一个。
  * 场景只负责把这里的实体画出来、把 events 变成特效 / 音效 / 飘字。
  */
 
@@ -106,12 +111,23 @@ export interface PlayerEnt {
   cooldowns: Partial<Record<SkillId, number>>;
   frenzyUntil: number;
   shieldUntil: number;
+  /** 月沐 HoT：镜像怪的 DoT，每 0.5s 回一跳（多个精灵的可以叠加） */
+  hots: PlayerHot[];
   dead: boolean;
   steerSince: number;
   stuckX: number;
   stuckY: number;
   /** 私有状态（经验 / 背包 / 血蓝…）有变化，需要同步给本人 */
   dirty: boolean;
+}
+
+/** 玩家身上的持续回复（月沐）：perTick 在施放时按目标自己的 maxHp 算好 */
+export interface PlayerHot {
+  perTick: number;
+  until: number;
+  tickAt: number;
+  /** 施放者（后续做治疗量统计用） */
+  by: string;
 }
 
 export interface MonsterEnt {
@@ -172,7 +188,7 @@ export type HitKind = 'melee' | 'fire' | 'poison';
 export type CastFail = 'dead' | 'notLearned' | 'cooldown' | 'needTarget' | 'tooFar' | 'noMp';
 
 /**
- * 世界事件：宿主（房间 / 离线会话）每 tick 取走，公共事件广播，带 `to` 的只发给本人。
+ * 世界事件：宿主（关卡房间）每 tick 取走，公共事件广播，带 `to` 的只发给本人。
  */
 export type WorldEvent =
   | { k: 'swing'; pid: string; angle: number; empty: boolean }
@@ -183,6 +199,7 @@ export type WorldEvent =
   | { k: 'hurt'; pid: string; mid: string; dmg: number; magic: boolean }
   | { k: 'die'; pid: string; killer: { name: string; level: number; isBoss: boolean } }
   | { k: 'revive'; pid: string }
+  | { k: 'heal'; pid: string; by: string; amount: number }
   | { k: 'cast'; pid: string; skill: SkillId; lv: number; x?: number; y?: number; radius?: number; hits?: number; perTick?: number; duration?: number; value?: number }
   | { k: 'castFail'; to: string; skill: SkillId; reason: CastFail }
   | { k: 'boltHit'; x: number; y: number; snipe?: boolean; moon?: boolean }
@@ -321,6 +338,7 @@ export class World {
       cooldowns: {},
       frenzyUntil: 0,
       shieldUntil: 0,
+      hots: [],
       dead: state.hp <= 0,
       steerSince: 0,
       stuckX: 0,
@@ -465,6 +483,9 @@ export class World {
       case 'poison':
         this.castPoison(p, lv, target!);
         break;
+      case 'moonBath':
+        this.castMoonBath(p, lv);
+        break;
       case 'arrowRain':
         this.castArrowRain(p, lv, target!);
         break;
@@ -499,6 +520,28 @@ export class World {
     };
     this.fireballs.set(fb.id, fb);
     this.events.push({ k: 'cast', pid: p.id, skill: kind, lv });
+  }
+
+  /** 月沐：以自己为中心的回复光圈，300 内所有存活玩家（含自己）挂 HoT，每 0.5s 回一跳 */
+  private castMoonBath(p: PlayerEnt, lv: number): void {
+    const tickPct = Math.min(
+      MOON_BATH_TICK_CAP,
+      MOON_BATH_TICK_BASE + MOON_BATH_TICK_GROWTH * (lv - 1),
+    );
+    const duration = skillValue(SKILL_BY_ID.moonBath);
+    let hits = 0;
+    for (const t of this.players.values()) {
+      if (t.dead) continue;
+      if (dist(p.x, p.y, t.x, t.y) > MOON_BATH_RADIUS) continue;
+      t.hots.push({
+        perTick: Math.max(1, Math.round(maxHp(t.state) * tickPct)),
+        until: this.now + duration,
+        tickAt: this.now + MOON_BATH_TICK_MS,
+        by: p.id,
+      });
+      hits += 1;
+    }
+    this.events.push({ k: 'cast', pid: p.id, skill: 'moonBath', lv, hits });
   }
 
   /** 毒刃：以选中的怪为中心撒毒雾，范围内所有怪一起中毒（每只按自己的法防结算） */
@@ -813,6 +856,23 @@ export class World {
     if (p.dead) {
       p.moving = false;
       return;
+    }
+    // 月沐 HoT：每 0.5s 一跳，回血不溢出（镜像怪的 DoT 管线）
+    if (p.hots.length > 0) {
+      const kept: PlayerHot[] = [];
+      for (const h of p.hots) {
+        if (this.now >= h.tickAt) {
+          const healed = Math.min(h.perTick, maxHp(p.state) - p.state.hp);
+          if (healed > 0) {
+            p.state.hp += healed;
+            p.dirty = true;
+            this.events.push({ k: 'heal', pid: p.id, by: h.by, amount: healed });
+          }
+          h.tickAt += MOON_BATH_TICK_MS;
+        }
+        if (h.until > this.now) kept.push(h);
+      }
+      p.hots = kept;
     }
     const sel = this.selected(p); // 每帧校验选中目标仍存在，失效就清掉
     // 施法自动接近：进圈真正释放；目标没了 / 超时作废

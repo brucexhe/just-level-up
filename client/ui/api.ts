@@ -69,10 +69,8 @@ export interface SettingsApi {
   /** 自动普攻开关（身边有怪自动出手；关了只响应空格 / 左键） */
   autoAttack(): boolean;
   setAutoAttack(on: boolean): void;
-  /** 'online' = 连着服务端；'offline' = 浏览器本地模拟（?offline） */
-  mode(): 'online' | 'offline';
-  /** 当前登录的账号名（离线为 null） */
-  account(): string | null;
+  /** 当前登录的账号名 */
+  account(): string;
   /** 退出登录（回到登录页） */
   logout(): void;
   /** 本关剩余怪物数 */

@@ -34,10 +34,17 @@ import { mkAttackFx, type AttackFx } from '../fx/attackFx';
 import { FrenzyFx, FRENZY_GLOW, FRENZY_RING } from '../fx/frenzyFx';
 import { FireballFx } from '../fx/fireballFx';
 import { poisonFx } from '../fx/poisonFx';
+import { healFx } from '../fx/healFx';
 import { arrowRainFx } from '../fx/arrowRainFx';
 import { bossDeathFx } from '../fx/bossDeathFx';
 import { levelUpFx } from '../fx/levelUpFx';
-import { ARROW_RAIN_WAVES, SKILL_BY_ID, type BookSkillId, type SkillId } from '../../../shared/data/skills';
+import {
+  ARROW_RAIN_WAVES,
+  MOON_BATH_RADIUS,
+  SKILL_BY_ID,
+  type BookSkillId,
+  type SkillId,
+} from '../../../shared/data/skills';
 import { ATTR_META } from '../../../shared/data/attrs';
 import { STAGES, artStageOf, stageDef, stageName as stageLabel } from '../../../shared/data/stages';
 import { RARITY_META, SLOT_META } from '../../../shared/data/items';
@@ -114,6 +121,7 @@ const BOOK_COLOR: Record<BookSkillId, string> = {
   snipe: '#ffd93d',
   arrowRain: '#bfe0ff',
   moonEclipse: '#c8d4f2',
+  moonBath: '#7fd8be',
 };
 
 /** 血量数值缩写（怪物后期血量会很大） */
@@ -147,6 +155,8 @@ interface OtherView {
   label: Phaser.GameObjects.Text;
   aura: Phaser.GameObjects.Image;
   shield: Phaser.GameObjects.Image;
+  /** 月沐生效中的头顶图标（水滴嵌月牙） */
+  hot: Phaser.GameObjects.Image;
   shieldFade: number;
   /** 当前贴图对应的职业；Redis 改职业后重连会换 */
   job: number;
@@ -233,6 +243,8 @@ interface MonsterSprite {
   hpText: Phaser.GameObjects.Text;
   /** 血条上方第一行：等级 */
   label: Phaser.GameObjects.Text;
+  /** 月蚀蚀甲标记：头顶若隐若现的小月亮 */
+  moon: Phaser.GameObjects.Image;
   /** 脚下的地面投影（和人物、树一样，让怪有落地感） */
   shadow: Phaser.GameObjects.Image;
   isBoss: boolean;
@@ -275,6 +287,8 @@ export class StageBattleScene extends Phaser.Scene {
   private targetRing!: Phaser.GameObjects.Image;
   /** 护盾罩：金色椭圆渐变贴图，尺寸恒定，跟随角色 */
   private shieldOrb!: Phaser.GameObjects.Image;
+  /** 月沐生效中：自己头顶的回血图标 */
+  private selfHot!: Phaser.GameObjects.Image;
   /** 淡入淡出的进度 0..1（update 驱动） */
   private shieldFade = 0;
   /** 当前关卡（1 起） */
@@ -305,7 +319,7 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   create() {
-    // 会话由入口（main.ts）在登录 / 离线模式下建好：场景只负责画面和输入
+    // 会话由入口（main.ts）登录后建好：场景只负责画面和输入
     this.session = currentSession();
     this.stage = this.session.stage;
     const prefs = loadPrefs();
@@ -370,6 +384,12 @@ export class StageBattleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(9);
 
+    // 月沐 HoT 图标：别人名字上方一格，生效期间轻微浮动 + 呼吸
+    this.selfHot = this.add
+      .image(0, 0, 'hotIcon')
+      .setDepth(10)
+      .setVisible(false);
+
     this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.fitScreen();
@@ -393,9 +413,7 @@ export class StageBattleScene extends Phaser.Scene {
 
     const s = this.state;
     this.ui.toast(
-      this.session.account
-        ? `欢迎回来，${this.session.account}：Lv${s.level} · 第 ${this.stage} 关`
-        : `离线模式：Lv${s.level}（本机存档）`,
+      `欢迎回来，${this.session.account}：Lv${s.level} · 第 ${this.stage} 关`,
       '#9ad06a',
     );
 
@@ -412,7 +430,6 @@ export class StageBattleScene extends Phaser.Scene {
   private demoHooks() {
     const alive = () => [...this.monsterViews.values()];
     return {
-      mode: () => this.session.mode,
       snapshot: () => this.snapshot(),
       state: () => this.state,
       pos: () => ({ x: Math.round(this.player.x), y: Math.round(this.player.y) }),
@@ -456,7 +473,7 @@ export class StageBattleScene extends Phaser.Scene {
       gotoStage: (n: number) => this.gotoStage(n),
       stage: () => ({ stage: this.stage, maxStage: this.maxStage(), left: this.monsterViews.size }),
       players: () =>
-        [...this.session.players()].map((p) => ({ id: p.id, name: p.name, x: Math.round(p.x), y: Math.round(p.y), dead: p.dead })),
+        [...this.session.players()].map((p) => ({ id: p.id, name: p.name, x: Math.round(p.x), y: Math.round(p.y), dead: p.dead, healing: p.healing })),
       barHeight: () => alive()[0]?.hpBg.displayHeight ?? 0,
       playerTinted: () => this.player.isTinted,
       dead: () => this.dead,
@@ -474,6 +491,7 @@ export class StageBattleScene extends Phaser.Scene {
           labelVisible: m.label.visible,
           barVisible: m.hpBg.visible,
           poisoned: m.src.poisoned,
+          shredded: m.src.shredded,
           dist: Math.round(Phaser.Math.Distance.Between(m.src.x, m.src.y, this.player.x, this.player.y)),
         })),
       /** 选中第 idx 只怪（null 取消），调试用 */
@@ -734,6 +752,7 @@ export class StageBattleScene extends Phaser.Scene {
     m.hpFg.destroy();
     m.hpText.destroy();
     m.label.destroy();
+    m.moon.destroy();
     m.shadow.destroy();
     m.sprite.destroy();
     this.monsterViews.delete(id);
@@ -758,10 +777,11 @@ export class StageBattleScene extends Phaser.Scene {
     o.label.destroy();
     o.aura.destroy();
     o.shield.destroy();
+    o.hot.destroy();
     this.otherViews.delete(id);
   }
 
-  /** 服务端（或离线世界）里新出现一只怪：建贴图 / 投影 / 血条 / 名字 */
+  /** 服务端世界里新出现一只怪：建贴图 / 投影 / 血条 / 名字 */
   private createMonsterView(src: MonsterView): MonsterSprite {
     const skin = skinForStage(artStageOf(this.stage));
     const isBoss = src.isBoss;
@@ -827,6 +847,12 @@ export class StageBattleScene extends Phaser.Scene {
       .setDepth(y + 2)
       .setVisible(false);
 
+    // 蚀甲标记：小月亮钉在等级标签上方一格，显隐和呼吸在 syncMonster 里每帧算
+    const moon = this.add
+      .image(x, y - barY - barH / 2 - HP_BAR.labelGap - 16, 'moonOrb')
+      .setDepth(y + 2.5)
+      .setVisible(false);
+
     const view: MonsterSprite = {
       src,
       sprite,
@@ -834,6 +860,7 @@ export class StageBattleScene extends Phaser.Scene {
       hpFg,
       hpText,
       label,
+      moon,
       shadow,
       isBoss,
       announced: false,
@@ -1016,7 +1043,6 @@ export class StageBattleScene extends Phaser.Scene {
         audio.setVolume(v);
         this.savePrefs();
       },
-      mode: () => this.session.mode,
       account: () => this.session.account,
       logout: () => window.dispatchEvent(new CustomEvent('lvup:logout')),
       monstersLeft: () => this.monsterViews.size,
@@ -1143,6 +1169,21 @@ export class StageBattleScene extends Phaser.Scene {
       case 'moonEclipse':
         if (mine) audio.play('magic');
         return;
+      case 'moonBath': {
+        const o = this.otherViews.get(e.pid);
+        const cx = mine ? this.player.x : (o?.sprite.x ?? 0);
+        const cy = mine ? this.player.y : (o?.sprite.y ?? 0);
+        healFx(this, cx, cy, MOON_BATH_RADIUS);
+        if (!mine) return;
+        audio.play('magic');
+        this.ui.toast(
+          (e.hits ?? 0) > 0
+            ? `月沐：${e.hits} 名玩家沐浴月光，持续回血中`
+            : '月沐落空：范围内没有玩家',
+          (e.hits ?? 0) > 0 ? '#7fd8be' : '#9aa4b2',
+        );
+        return;
+      }
       case 'snipe':
         // 弦响就是 release 音；命中另有金爆 + heavy crit
         if (mine) audio.play('swing');
@@ -1441,7 +1482,7 @@ export class StageBattleScene extends Phaser.Scene {
     if (g.shownFree === g.src.free) return;
     g.shownFree = g.src.free;
     const mine = g.src.ownerId === this.session.selfId;
-    if (this.session.mode === 'offline' || (mine && !g.src.free)) {
+    if (mine && !g.src.free) {
       g.owner.setText('');
     } else if (g.src.free || !g.src.ownerName) {
       g.owner.setText('无主 · 可拾取').setColor('#7ee787');
@@ -1565,52 +1606,6 @@ export class StageBattleScene extends Phaser.Scene {
     };
   }
 
-  /**
-   * 控制台调试入口（window.LV.hp）。**只在离线模式生效**：在线时血量由服务端说了算，
-   * 改本地副本只会在下一次同步时被覆盖。
-   *
-   * - `LV.hp()`          只查看，返回 { hp, maxHp }
-   * - `LV.hp(500)`       当前血 = 500，超过现有上限时连上限一起抬到 500
-   * - `LV.hp(500, 10000)` 当前血 = 500，上限 = 10000（只给上限时会顺手回满）
-   */
-  debugHp(current?: number, max?: number): { hp: number; maxHp: number } {
-    const s = this.state;
-    if (this.session.mode === 'online' && (current !== undefined || max !== undefined)) {
-      console.warn('[LV] 在线模式下血量由服务端结算，调试修改只在离线模式（?offline）生效');
-    } else {
-      this.debugPool(s, 'hp', current, max);
-    }
-    return { hp: Math.round(s.hp), maxHp: maxHp(s) };
-  }
-
-  /** 蓝量版的控制台调试入口（window.LV.mp），语义与 debugHp 完全一致。 */
-  debugMp(current?: number, max?: number): { mp: number; maxMp: number } {
-    const s = this.state;
-    if (this.session.mode === 'online' && (current !== undefined || max !== undefined)) {
-      console.warn('[LV] 在线模式下法力由服务端结算，调试修改只在离线模式（?offline）生效');
-    } else {
-      this.debugPool(s, 'mp', current, max);
-    }
-    return { mp: Math.round(s.mp), maxMp: maxMp(s) };
-  }
-
-  /** 上限写在 baseStats 上（装备词条仍叠加在其上），与加点走的同一条链路 */
-  private debugPool(s: GameState, k: 'hp' | 'mp', current?: number, max?: number): void {
-    const cap0 = k === 'hp' ? maxHp(s) : maxMp(s);
-    const per = k === 'hp' ? BALANCE.HP_PER_POINT : BALANCE.MP_PER_POINT;
-    const hasCurrent = typeof current === 'number' && Number.isFinite(current);
-    const hasMax = typeof max === 'number' && Number.isFinite(max);
-    let targetMax = hasMax ? Math.max(1, Math.floor(max)) : cap0;
-    if (!hasMax && hasCurrent && current > targetMax) targetMax = Math.floor(current);
-    if (targetMax !== cap0) {
-      const fromEquip = cap0 - Math.round((s.baseStats[k] ?? 0) * per);
-      s.baseStats[k] = Math.max(1, Math.round(targetMax / per) - fromEquip);
-    }
-    const cap = k === 'hp' ? maxHp(s) : maxMp(s);
-    if (hasCurrent) s[k] = Math.min(cap, Math.max(0, Math.floor(current)));
-    else if (hasMax) s[k] = cap;
-  }
-
   // ---------- 主循环 ----------
 
   update(time: number, delta: number) {
@@ -1715,6 +1710,16 @@ export class StageBattleScene extends Phaser.Scene {
         .setDepth(this.player.y + SHIELD_DOME.depthOffset)
         .setAlpha(this.shieldFade);
     }
+
+    // 月沐 HoT：小图标在等级标签上方轻微浮动 + 呼吸
+    const healing = me.healing && !this.dead;
+    this.selfHot.setVisible(healing);
+    if (healing) {
+      this.selfHot
+        .setPosition(this.player.x, this.player.y - 60 - 2 * Math.sin((time / 700) * Math.PI * 2))
+        .setDepth(this.player.y + 10)
+        .setAlpha(0.75 + 0.25 * Math.sin((time / 900) * Math.PI * 2));
+    }
   }
 
   /** 其他玩家：同一套主角网格，职业决定配色，名字统一用青色，护盾状态同步显示，躺尸时横倒灰化 */
@@ -1747,7 +1752,8 @@ export class StageBattleScene extends Phaser.Scene {
         .setAlpha(0)
         .setDepth(p.y + SHIELD_DOME.depthOffset)
         .setVisible(false);
-      o = { sprite, shadow, label, aura, shield, shieldFade: 0, job: p.job, dead: false, shownLabel: '' };
+      const hot = this.add.image(p.x, p.y - 60, 'hotIcon').setDepth(10).setVisible(false);
+      o = { sprite, shadow, label, aura, shield, hot, shieldFade: 0, job: p.job, dead: false, shownLabel: '' };
       this.otherViews.set(p.id, o);
     }
     if (o.job !== p.job) {
@@ -1777,6 +1783,16 @@ export class StageBattleScene extends Phaser.Scene {
       .setVisible(p.frenzy && !p.dead)
       .setPosition(p.x, p.y + FRENZY_RING.offsetY)
       .setDepth(p.y + FRENZY_RING.depthOffset);
+    // 月沐 HoT：小图标在名字上方轻微浮动 + 呼吸（和自己的同一套）
+    const healing = p.healing && !p.dead;
+    o.hot.setVisible(healing);
+    if (healing) {
+      const t = this.time.now;
+      o.hot
+        .setPosition(p.x, p.y - 60 - 2 * Math.sin((t / 700) * Math.PI * 2))
+        .setDepth(p.y + 10)
+        .setAlpha(0.75 + 0.25 * Math.sin((t / 900) * Math.PI * 2));
+    }
     if (p.dead !== o.dead) {
       o.dead = p.dead;
       if (p.dead) {
@@ -1831,6 +1847,17 @@ export class StageBattleScene extends Phaser.Scene {
       if (src.poisoned) m.sprite.setTint(0xb8f08a);
       else if (m.isBoss) m.sprite.setTint(0xff9a9a);
       else m.sprite.clearTint();
+    }
+
+    // 月蚀蚀甲：头顶一枚小月亮若隐若现（呼吸明暗），表示双抗被蚀掉了
+    if (src.shredded) {
+      m.moon
+        .setPosition(src.x, baseY - barY - barH / 2 - HP_BAR.labelGap - 16)
+        .setDepth(baseY + 2.5)
+        .setAlpha(0.475 + 0.225 * Math.sin((time / 450) * Math.PI * 2))
+        .setVisible(true);
+    } else {
+      m.moon.setVisible(false);
     }
 
     const d = Phaser.Math.Distance.Between(src.x, src.y, this.player.x, this.player.y);
@@ -1907,6 +1934,18 @@ export class StageBattleScene extends Phaser.Scene {
       case 'boltHit':
         this.fireballFx.explode(e.x, e.y, e.snipe, e.moon);
         return;
+      case 'heal': {
+        // 月沐每跳：绿色小飘字，比伤害数字更轻
+        if (e.pid === selfId) {
+          this.floatText(this.player.x, this.player.y - 40, `+${e.amount}`, '#9ade6a', 13);
+        } else {
+          const o = this.otherViews.get(e.pid);
+          if (o && this.nearCamera(o.sprite.x, o.sprite.y)) {
+            this.floatText(o.sprite.x, o.sprite.y - 40, `+${e.amount}`, '#9ade6a', 11);
+          }
+        }
+        return;
+      }
       case 'potion':
         return this.onPotion(e);
       case 'pickup':

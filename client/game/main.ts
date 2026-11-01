@@ -1,23 +1,18 @@
 import Phaser from 'phaser';
 import '../ui/ui.css';
-import { GAME_CONFIG, StageBattleScene } from './scenes/StageBattleScene';
+import { GAME_CONFIG } from './scenes/StageBattleScene';
 import { ApiError, clearToken, loadToken, me } from '../net/api';
 import { setSession } from '../net/current';
 import { showBlocking, showLogin } from '../net/login';
-import { OfflineSession } from '../net/offline';
 import { OnlineSession } from '../net/online';
 import type { Session } from '../net/session';
 import { LoadingScreen, stageLoadingInfo } from '../ui/loading';
 
 /**
- * 入口：先拿到会话（登录 → 连上关卡房间，或 ?offline 本地模拟），再启动 Phaser。
+ * 入口：登录 → 连上关卡房间，再启动 Phaser。
  * 场景本身不关心世界跑在哪里。
  */
-async function connect(): Promise<{ session: Session; loading: LoadingScreen | null }> {
-  if (new URLSearchParams(location.search).has('offline')) {
-    return { session: new OfflineSession(), loading: null };
-  }
-
+async function connect(): Promise<{ session: Session; loading: LoadingScreen }> {
   let notice: string | undefined;
   for (;;) {
     let token = loadToken();
@@ -63,24 +58,10 @@ async function boot() {
   const { session, loading } = await connect();
   setSession(session);
   const game = new Phaser.Game(GAME_CONFIG);
-  if (loading) {
-    game.events.once('lvup:scene-ready', (e: { art?: string }) => {
-      loading.setArt(e?.art);
-      loading.hide(650, () => loading.destroy());
-    });
-  }
-
-  const scene = () => (game.scene.getScene('StageBattle') as StageBattleScene | null) ?? null;
-
-  /**
-   * 控制台调试（仅离线模式生效，在线时数值由服务端结算）：
-   * - `LV.hp()` / `LV.hp(500)` / `LV.hp(500, 10000)` —— 查血、改当前血、同时改上限
-   * - `LV.mp()` / `LV.mp(500)` / `LV.mp(500, 10000)` —— 同上，对应蓝量
-   */
-  (window as Window & { LV?: unknown }).LV = {
-    hp: (current?: number, max?: number) => scene()?.debugHp(current, max),
-    mp: (current?: number, max?: number) => scene()?.debugMp(current, max),
-  };
+  game.events.once('lvup:scene-ready', (e: { art?: string }) => {
+    loading.setArt(e?.art);
+    loading.hide(650, () => loading.destroy());
+  });
 
   window.addEventListener('lvup:logout', () => {
     clearToken();

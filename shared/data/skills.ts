@@ -8,7 +8,8 @@ export type SkillId =
   | 'shield'
   | 'snipe'
   | 'arrowRain'
-  | 'moonEclipse';
+  | 'moonEclipse'
+  | 'moonBath';
 
 export type SkillSchool =
   | 'physical'
@@ -18,7 +19,8 @@ export type SkillSchool =
   | 'ward'
   | 'strike'
   | 'volley'
-  | 'eclipse';
+  | 'eclipse'
+  | 'heal';
 
 export interface SkillDef {
   id: SkillId;
@@ -87,6 +89,15 @@ export const ARROW_RAIN_RADIUS_GROWTH = 1;
 export const MOON_ECLIPSE_SHRED_BASE = 0.08;
 export const MOON_ECLIPSE_SHRED_GROWTH = 0.002;
 export const MOON_ECLIPSE_SHRED_CAP = 0.3;
+/**
+ * 月沐 HoT：每跳回复目标最大生命的 BASE + GROWTH × (等级 − 1)，CAP 封顶。
+ * Lv1 = 1%/跳（5 秒共 10%），Lv100 = 2%（20%），Lv200 触顶 3%（30%）。半径固定 300。
+ */
+export const MOON_BATH_TICK_MS = 500;
+export const MOON_BATH_TICK_BASE = 0.01;
+export const MOON_BATH_TICK_GROWTH = 0.0001;
+export const MOON_BATH_TICK_CAP = 0.03;
+export const MOON_BATH_RADIUS = 300;
 
 export const SKILL_BY_ID: Record<SkillId, SkillDef> = SKILLS.reduce(
   (acc, s) => {

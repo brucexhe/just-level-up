@@ -39,7 +39,6 @@ type SchemaMap = { forEach(fn: (v: Record<string, unknown>, k: string) => void):
  * - 面板操作乐观执行 + 序号对账（服务端回 ack 后丢弃已确认的本地操作）。
  */
 export class OnlineSession implements Session {
-  readonly mode = 'online' as const;
   stage: number;
   obstacles: Obstacle[];
   private room!: Room;
@@ -174,6 +173,7 @@ export class OnlineSession implements Session {
       dead: !!v.dead,
       frenzy: !!v.frenzy,
       shield: !!v.shield,
+      healing: !!v.healing,
     }));
     this.syncMap(st.monsters, this.monstersT, (v, id) => ({
       id,
@@ -188,6 +188,7 @@ export class OnlineSession implements Session {
       moving: !!v.moving,
       aggressive: !!v.aggressive,
       poisoned: !!v.poisoned,
+      shredded: !!v.shredded,
     }));
     this.syncMap(st.fireballs, this.fireballsT, (v, id) => ({
       id,

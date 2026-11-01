@@ -8,9 +8,7 @@ import type { GameState } from '../../shared/state/gameState';
 /**
  * 场景与「世界」之间的唯一接口。
  *
- * - OnlineSession：世界在服务端，这里是 Colyseus 同步下来的快照 + 本地预测；
- * - OfflineSession：世界就在浏览器里（同一份 shared/sim/World），开发 / 断网调试用。
- *
+ * 世界跑在服务端（Colyseus 关卡房间），这里是同步下来的快照 + 本地预测。
  * 场景只读这些视图来画画面，把玩家输入转成意图交回来，从不直接改世界。
  */
 
@@ -29,6 +27,8 @@ export interface PlayerView {
   dead: boolean;
   frenzy: boolean;
   shield: boolean;
+  /** 月沐 HoT 生效中（头顶回血图标） */
+  healing: boolean;
 }
 
 export interface MonsterView {
@@ -44,6 +44,8 @@ export interface MonsterView {
   moving: boolean;
   aggressive: boolean;
   poisoned: boolean;
+  /** 月蚀蚀甲生效中（头顶若隐若现小月亮） */
+  shredded: boolean;
 }
 
 export interface DropView {
@@ -71,17 +73,16 @@ export interface FireballView {
 }
 
 export interface Session {
-  readonly mode: 'online' | 'offline';
   /** 自己在世界里的 id（服务端是 uid） */
   readonly selfId: string;
-  /** 账号名（离线模式为 null） */
-  readonly account: string | null;
+  /** 当前登录的账号名 */
+  readonly account: string;
   stage: number;
   obstacles: Obstacle[];
 
-  /** 每帧调用：离线推进世界；在线做插值 / 本地预测 */
+  /** 每帧调用：做插值 / 本地预测 */
   update(now: number): void;
-  /** 本人的完整状态（背包 / 经验 / 点数…）。在线时是服务端权威副本 + 未确认的本地操作 */
+  /** 本人的完整状态（背包 / 经验 / 点数…）。服务端权威副本 + 未确认的本地操作 */
   state(): GameState;
   players(): Iterable<PlayerView>;
   monsters(): Iterable<MonsterView>;
@@ -105,7 +106,7 @@ export interface Session {
   targetId(): string | null;
   cast(id: SkillId): void;
   drink(kind: PotionKind): void;
-  /** 自动普攻开关：离线直接改本地世界；在线发消息给服务端 */
+  /** 自动普攻开关：发消息给服务端 */
   setAutoAttack(on: boolean): void;
   revive(): void;
   /** 面板操作：本地立即执行（返回结果给面板弹提示），同时交给服务端权威执行 */
@@ -114,7 +115,7 @@ export interface Session {
   gotoStage(n: number): Promise<boolean>;
   /** 关卡被动切换（如重置角色后回第 1 关）时回调，场景据此重铺地图 */
   onStageChange(fn: () => void): void;
-  /** 连接断开 / 被踢时回调（离线模式不会触发） */
+  /** 连接断开 / 被踢时回调 */
   onClose(fn: (reason: string) => void): void;
   dispose(): void;
 }

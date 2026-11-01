@@ -291,6 +291,8 @@ export class StageRoom extends Room<{ state: StageState }> {
       if (s.frenzy !== fz) s.frenzy = fz;
       const sh = now < p.shieldUntil;
       if (s.shield !== sh) s.shield = sh;
+      const hl = p.hots.some((h) => h.until > now);
+      if (s.healing !== hl) s.healing = hl;
     }
     for (const id of [...st.players.keys()]) if (!w.players.has(id)) st.players.delete(id);
 
@@ -313,6 +315,8 @@ export class StageRoom extends Room<{ state: StageState }> {
       if (s.moving !== mv) s.moving = mv;
       const poisoned = m.dots.length > 0;
       if (s.poisoned !== poisoned) s.poisoned = poisoned;
+      const shredded = m.shredUntil > now;
+      if (s.shredded !== shredded) s.shredded = shredded;
     }
     for (const id of [...st.monsters.keys()]) if (!w.monsters.has(id)) st.monsters.delete(id);
 

@@ -40,13 +40,14 @@ describe('技能书 / 技能点', () => {
     }
     expect(got.has('attack')).toBe(false);
     for (const id of got) {
-      expect(['fireball', 'frenzy', 'poison', 'shield', 'snipe', 'arrowRain', 'moonEclipse']).toContain(id);
+      expect(['fireball', 'frenzy', 'poison', 'shield', 'snipe', 'arrowRain', 'moonEclipse', 'moonBath']).toContain(id);
     }
-    // 七种都要能掉出来（蒙特卡洛，跑 600 次必然覆盖）
+    // 八种都要能掉出来（蒙特卡洛，跑 600 次必然覆盖）
     expect([...got].sort()).toEqual([
       'arrowRain',
       'fireball',
       'frenzy',
+      'moonBath',
       'moonEclipse',
       'poison',
       'shield',
@@ -79,11 +80,21 @@ describe('技能书 / 技能点', () => {
     expect(skillLevel(s, 'shield')).toBe(1);
   });
 
+  it('精灵开局会的是月蚀/月沐，不是火球/毒刃', () => {
+    const s = createInitialState(3);
+    expect(skillLevel(s, 'moonEclipse')).toBe(1);
+    expect(skillLevel(s, 'moonBath')).toBe(1);
+    expect(skillLevel(s, 'fireball')).toBe(0);
+    expect(skillLevel(s, 'poison')).toBe(0);
+  });
+
   it('技能表按职业拆分：专属技能不串职业，狂暴/护盾全职业通用', () => {
     const mage = jobSkills(0).map((d) => d.id).sort();
     expect(mage).toEqual(['attack', 'fireball', 'frenzy', 'poison', 'shield']);
     const archer = jobSkills(1).map((d) => d.id).sort();
     expect(archer).toEqual(['arrowRain', 'attack', 'frenzy', 'shield', 'snipe']);
+    const elf = jobSkills(3).map((d) => d.id).sort();
+    expect(elf).toEqual(['attack', 'frenzy', 'moonBath', 'moonEclipse', 'shield']);
     // 四个职业都有通用技能，且共用同一份定义（同热键）
     for (let job = 0; job < 4; job++) {
       const ids = jobSkills(job).map((d) => d.id);
@@ -95,6 +106,8 @@ describe('技能书 / 技能点', () => {
     expect(SKILL_BY_ID.snipe.hotkey).toBe('Q');
     expect(SKILL_BY_ID.poison.hotkey).toBe('W');
     expect(SKILL_BY_ID.arrowRain.hotkey).toBe('W');
+    expect(SKILL_BY_ID.moonEclipse.hotkey).toBe('Q');
+    expect(SKILL_BY_ID.moonBath.hotkey).toBe('W');
     expect(SKILL_BY_ID.frenzy.hotkey).toBe('E');
     expect(SKILL_BY_ID.shield.hotkey).toBe('R');
   });

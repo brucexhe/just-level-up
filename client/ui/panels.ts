@@ -799,7 +799,6 @@ const settingsPanel: PanelDef = {
   render(s, api) {
     const st = api.settings;
     const vol = Math.round(st.volume() * 100);
-    const online = st.mode() === 'online';
 
     return `
       <div class="sec-title">音频 <em>代码合成</em></div>
@@ -814,16 +813,16 @@ const settingsPanel: PanelDef = {
         <span class="vr-v num">${vol}</span>
       </div>
 
-      <div class="sec-title">${online ? '账号 <em>服务端自动保存</em>' : '离线模式 <em>本机存档</em>'}</div>
+      <div class="sec-title">账号 <em>服务端自动保存</em></div>
       <div class="kv-grid">
-        ${online ? `<div class="kv wide"><span>账号</span><b>${esc(st.account() ?? '')}</b></div>` : ''}
+        <div class="kv wide"><span>账号</span><b>${esc(st.account())}</b></div>
         <div class="kv"><span>等级</span><b class="num">Lv ${fmtNum(s.level)}</b></div>
         <div class="kv"><span>金币</span><b class="num">${fmtNum(s.gold)}</b></div>
         <div class="kv"><span>本关剩余</span><b class="num">${fmtNum(st.monstersLeft())}</b></div>
         <div class="kv"><span>本关在线</span><b class="num">${fmtNum(st.online())} 人</b></div>
         <div class="kv wide"><span>整关重刷</span><b class="num">${leftStr(st.resetLeft())}后</b></div>
       </div>
-      ${online ? '<button class="btn big" data-act="logout" style="margin-top:8px">🚪 退出登录</button>' : ''}
+      <button class="btn big" data-act="logout" style="margin-top:8px">🚪 退出登录</button>
     `;
   },
   action(act, _arg, _s, api) {
