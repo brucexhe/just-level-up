@@ -39,9 +39,19 @@ describe('技能书 / 技能点', () => {
       got.add(b.skillId);
     }
     expect(got.has('attack')).toBe(false);
-    for (const id of got) expect(['fireball', 'frenzy', 'poison', 'shield', 'snipe', 'arrowRain']).toContain(id);
-    // 六种都要能掉出来（蒙特卡洛，跑 400 次必然覆盖）
-    expect([...got].sort()).toEqual(['arrowRain', 'fireball', 'frenzy', 'poison', 'shield', 'snipe']);
+    for (const id of got) {
+      expect(['fireball', 'frenzy', 'poison', 'shield', 'snipe', 'arrowRain', 'moonEclipse']).toContain(id);
+    }
+    // 七种都要能掉出来（蒙特卡洛，跑 600 次必然覆盖）
+    expect([...got].sort()).toEqual([
+      'arrowRain',
+      'fireball',
+      'frenzy',
+      'moonEclipse',
+      'poison',
+      'shield',
+      'snipe',
+    ]);
   });
 
   it('掉出来的技能书等级 ∈ [关卡最低等级, 怪等级]：第 3 关 26 级怪 → 21-26', () => {

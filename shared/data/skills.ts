@@ -1,8 +1,24 @@
 import { JOBS, UNIVERSAL_SKILLS } from './jobs';
 
-export type SkillId = 'attack' | 'fireball' | 'frenzy' | 'poison' | 'shield' | 'snipe' | 'arrowRain';
+export type SkillId =
+  | 'attack'
+  | 'fireball'
+  | 'frenzy'
+  | 'poison'
+  | 'shield'
+  | 'snipe'
+  | 'arrowRain'
+  | 'moonEclipse';
 
-export type SkillSchool = 'physical' | 'magical' | 'buff' | 'dot' | 'ward' | 'strike' | 'volley';
+export type SkillSchool =
+  | 'physical'
+  | 'magical'
+  | 'buff'
+  | 'dot'
+  | 'ward'
+  | 'strike'
+  | 'volley'
+  | 'eclipse';
 
 export interface SkillDef {
   id: SkillId;
@@ -64,6 +80,13 @@ export const ARROW_RAIN_WAVES = 10;
 export const ARROW_RAIN_WAVE_MS = 250;
 export const ARROW_RAIN_RADIUS_BASE = 100;
 export const ARROW_RAIN_RADIUS_GROWTH = 1;
+/**
+ * 月蚀减抗：BASE + GROWTH × (技能等级 − 1)，CAP 封顶。
+ * 禁用通用 1+L/100 曲线（同护盾），Lv100 ≈ 28%、Lv110 触顶 30%。
+ */
+export const MOON_ECLIPSE_SHRED_BASE = 0.08;
+export const MOON_ECLIPSE_SHRED_GROWTH = 0.002;
+export const MOON_ECLIPSE_SHRED_CAP = 0.3;
 
 export const SKILL_BY_ID: Record<SkillId, SkillDef> = SKILLS.reduce(
   (acc, s) => {

@@ -3,6 +3,9 @@ import {
   ARROW_RAIN_WAVES,
   ARROW_RAIN_WAVE_MS,
   BOOK_SKILLS,
+  MOON_ECLIPSE_SHRED_BASE,
+  MOON_ECLIPSE_SHRED_CAP,
+  MOON_ECLIPSE_SHRED_GROWTH,
   type BookSkillId,
   type SkillDef,
 } from '../data/skills';
@@ -121,6 +124,13 @@ export function describeSkill(def: SkillDef, level: number): string {
       return `${dur}内物理抗性与法术抗性 +${pct}%。`;
     case 'dot':
       return `${dur}内每 0.5 秒造成 ${pct}% 法攻的法术伤害，毒雾半径随等级扩大。`;
+    case 'eclipse': {
+      const shred = Math.min(
+        MOON_ECLIPSE_SHRED_CAP,
+        MOON_ECLIPSE_SHRED_BASE + MOON_ECLIPSE_SHRED_GROWTH * (level - 1),
+      );
+      return `造成 ${pct}% 法攻的法术伤害并蚀甲：目标物防与法防 -${Math.round(shred * 100)}%（上限 30%），持续 ${dur}。`;
+    }
     default:
       return def.desc;
   }

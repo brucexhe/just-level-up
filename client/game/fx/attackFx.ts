@@ -117,7 +117,7 @@ export interface AttackFx {
   withOrigin(sprite: Phaser.GameObjects.Sprite, fn: () => void): void;
 }
 
-/** 按职业武器造一套普攻特效（剑 = 刀光，弓 = 飞箭，杖 = 小火球） */
+/** 按职业武器造一套普攻特效（剑 = 刀光，弓 = 飞箭，杖 = 投射物：法师火球 / 精灵月光弹） */
 export function mkAttackFx(
   scene: Phaser.Scene,
   origin: Phaser.GameObjects.Sprite,
@@ -126,7 +126,9 @@ export function mkAttackFx(
 ): AttackFx {
   const weapon = jobDef(job).weapon;
   if (weapon === 'bow') return new BowFx(scene, origin, frenzy);
-  if (weapon === 'staff') return new StaffFx(scene, origin, frenzy);
+  if (weapon === 'staff') {
+    return new StaffFx(scene, origin, frenzy, job === 3 ? 'moonOrb' : 'fireball');
+  }
   return new SwordFx(scene, origin, frenzy);
 }
 
@@ -357,22 +359,31 @@ export class BowFx extends BaseAttackFx {
   secondary(_angle: number): void {}
 }
 
-/** 杖的普攻特效：杖尖掷出小火球（与弓的放箭同构，伤害由世界即时结算，这里只有画面） */
+/** 杖的普攻特效：杖尖掷出小弹体（法师火球 / 精灵月光弹，与弓的放箭同构，伤害由世界即时结算，这里只有画面） */
 export class StaffFx extends BaseAttackFx {
+  constructor(
+    scene: Phaser.Scene,
+    origin: Phaser.GameObjects.Sprite,
+    frenzy: () => boolean,
+    private orb: 'fireball' | 'moonOrb' = 'fireball',
+  ) {
+    super(scene, origin, frenzy);
+  }
+
   primary(angle: number): void {
     const at = this.at(angle, 12);
     const orb = this.scene.add
-      .image(at.x, at.y, 'fireball')
+      .image(at.x, at.y, this.orb)
       .setScale(ORB_SCALE)
       .setDepth(this.origin.y + 5)
       .setTint(this.tint(0xffffff, 0xffc0e8));
-    // 火星拖尾：跟着火球一路撒点
+    // 火星/月光拖尾：跟着弹体一路撒点
     const trail = this.scene.add.particles(0, 0, 'dot', {
       follow: orb,
       lifespan: 180,
       speed: { min: 5, max: 25 },
       scale: { start: 0.8, end: 0 },
-      tint: [0xffd23a, 0xff8a2a],
+      tint: this.orb === 'moonOrb' ? [0xc8d4f2, 0x8a9ad8] : [0xffd23a, 0xff8a2a],
       alpha: { start: 0.8, end: 0 },
       frequency: 15,
     });

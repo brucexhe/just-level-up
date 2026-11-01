@@ -34,7 +34,8 @@ export class FireballFx {
 
   private create(src: FireballView): void {
     const snipe = src.kind === 'snipe';
-    // 穿杨箭：比普攻箭大一号的金色重箭；火球：橙红弹体
+    const moon = src.kind === 'moonEclipse';
+    // 穿杨箭：比普攻箭大一号的金色重箭；火球：橙红弹体；月蚀：银蓝月光弹（小一号）
     const img = snipe
       ? this.scene.add
           .image(src.x, src.y, 'arrow')
@@ -42,13 +43,19 @@ export class FireballFx {
           .setDepth(6)
           .setRotation(src.angle)
           .setTint(0xffd23a)
-      : this.scene.add.image(src.x, src.y, 'fireball').setScale(2.5).setDepth(6).setRotation(src.angle);
+      : moon
+        ? this.scene.add.image(src.x, src.y, 'moonOrb').setScale(2).setDepth(6).setRotation(src.angle)
+        : this.scene.add.image(src.x, src.y, 'fireball').setScale(2.5).setDepth(6).setRotation(src.angle);
     const trail = this.scene.add.particles(0, 0, 'dot', {
       follow: img,
       speed: { min: 10, max: 40 },
       lifespan: 260,
-      scale: { start: snipe ? 1.8 : 1.4, end: 0 },
-      tint: snipe ? [0xfff2b0, 0xffd23a] : [0xff8a2a, 0xffd23a],
+      scale: { start: snipe ? 1.8 : moon ? 1.1 : 1.4, end: 0 },
+      tint: snipe
+        ? [0xfff2b0, 0xffd23a]
+        : moon
+          ? [0xc8d4f2, 0x8a9ad8]
+          : [0xff8a2a, 0xffd23a],
       alpha: { start: 0.9, end: 0 },
     });
     trail.setDepth(5);
@@ -64,13 +71,17 @@ export class FireballFx {
     this.views.delete(id);
   }
 
-  /** 弹体命中爆裂：只有特效，伤害由 hit 事件飘字。snipe = 金色大爆 */
-  explode(px: number, py: number, snipe = false): void {
+  /** 弹体命中爆裂：只有特效，伤害由 hit 事件飘字。snipe = 金色大爆，moon = 银蓝月爆 */
+  explode(px: number, py: number, snipe = false, moon = false): void {
     const burst = this.scene.add.particles(px, py, 'dot', {
       speed: { min: snipe ? 120 : 80, max: snipe ? 300 : 220 },
       lifespan: 420,
       scale: { start: snipe ? 2.8 : 2.2, end: 0 },
-      tint: snipe ? [0xfff2b0, 0xffd23a, 0xffffff] : [0xff8a2a, 0xffd23a, 0xd84a1a],
+      tint: moon
+        ? [0xf4f8ff, 0xc8d4f2, 0x8a9ad8]
+        : snipe
+          ? [0xfff2b0, 0xffd23a, 0xffffff]
+          : [0xff8a2a, 0xffd23a, 0xd84a1a],
       emitting: false,
     });
     burst.explode(snipe ? 34 : 26);

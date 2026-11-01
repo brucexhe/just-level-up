@@ -243,3 +243,41 @@ describe('World 箭雨', () => {
     expect(hits).toHaveLength(ARROW_RAIN_WAVES);
   });
 });
+
+describe('World 月蚀', () => {
+  /** 弹体命中（33ms 步长走帧直到月光弹落地），返回命中的世界时间 */
+  function waitForBoltHit(w: World, from: number): number {
+    for (let t = 33; t <= 2000; t += 33) {
+      w.step(from + t);
+      if (w.drain().some((e) => e.k === 'boltHit' && e.moon)) return from + t;
+    }
+    throw new Error('月光弹 2 秒内未命中');
+  }
+
+  it('命中挂蚀甲：Lv1 减双抗 8%、持续 8 秒，重复施放刷新时长', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState(3));
+    const m = normal(w);
+    m.data.aggressive = false;
+    m.data.hp = 1e9;
+    m.data.maxHp = 1e9;
+    p.autoAttack = false;
+    p.nextAttackAt = T0 + 999_999; // 隔离普攻
+    p.x = m.x + 50;
+    p.y = m.y;
+    w.selectTarget('a', m.id);
+
+    expect(w.cast('a', 'moonEclipse')).toBe(true);
+    const hitAt = waitForBoltHit(w, T0);
+    expect(m.shredPct).toBeCloseTo(0.08, 5);
+    expect(m.shredUntil).toBe(hitAt + 8000);
+
+    // CD 6 秒后再放：刷新蚀甲时长（不叠加）
+    w.step(hitAt + 7000);
+    p.state.mp = 999;
+    expect(w.cast('a', 'moonEclipse')).toBe(true);
+    const hitAt2 = waitForBoltHit(w, hitAt + 7000);
+    expect(m.shredPct).toBeCloseTo(0.08, 5); // 不叠加，仍是 8%
+    expect(m.shredUntil).toBe(hitAt2 + 8000); // 从第二次命中起算
+  });
+});

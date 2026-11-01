@@ -839,4 +839,20 @@ export function bakeProps(scene: Phaser.Scene): void {
     '..OODDDD....',
     '....DD......',
   ], { O: 0xff8a2a, Y: 0xffd23a, W: 0xfff6c8, D: 0xd84a1a });
+
+  // 月蚀的月光弹：新月形（右开口，rotation 对齐飞行方向后月角朝前），银蓝月色
+  bakeGrid(scene, 'moonOrb', [
+    '....OOOO....',
+    '..OOYYYYOO..',
+    '.OYYYYYYOO..',
+    '.OYYYYWOO...',
+    'OYYYYWWO....',
+    'OYYYWWWO....',
+    'OYYYWWWO....',
+    'OYYYYWWO....',
+    '.OYYYYWOO...',
+    '.OYYYYYYOO..',
+    '..OOYYYYOO..',
+    '....OOOO....',
+  ], { O: 0x8a9ad8, Y: 0xc8d4f2, W: 0xf4f8ff });
 }

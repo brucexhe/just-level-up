@@ -194,7 +194,7 @@ export class OnlineSession implements Session {
       x: num(v.x),
       y: num(v.y),
       angle: num(v.angle),
-      kind: num(v.kind) === 1 ? 'snipe' : 'fireball',
+      kind: num(v.kind) === 1 ? 'snipe' : num(v.kind) === 2 ? 'moonEclipse' : 'fireball',
     }));
 
     // 掉落物不动，不需要平滑

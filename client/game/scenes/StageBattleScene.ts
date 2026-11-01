@@ -113,6 +113,7 @@ const BOOK_COLOR: Record<BookSkillId, string> = {
   shield: '#ffd07a',
   snipe: '#ffd93d',
   arrowRain: '#bfe0ff',
+  moonEclipse: '#c8d4f2',
 };
 
 /** 血量数值缩写（怪物后期血量会很大） */
@@ -1139,6 +1140,9 @@ export class StageBattleScene extends Phaser.Scene {
       case 'fireball':
         if (mine) audio.play('fire');
         return;
+      case 'moonEclipse':
+        if (mine) audio.play('magic');
+        return;
       case 'snipe':
         // 弦响就是 release 音；命中另有金爆 + heavy crit
         if (mine) audio.play('swing');
@@ -1901,7 +1905,7 @@ export class StageBattleScene extends Phaser.Scene {
       case 'castFail':
         return this.onCastFail(e.skill, e.reason);
       case 'boltHit':
-        this.fireballFx.explode(e.x, e.y, e.snipe);
+        this.fireballFx.explode(e.x, e.y, e.snipe, e.moon);
         return;
       case 'potion':
         return this.onPotion(e);

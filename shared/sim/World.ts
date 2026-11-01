@@ -13,6 +13,9 @@ import {
   ARROW_RAIN_RADIUS_GROWTH,
   ARROW_RAIN_WAVE_MS,
   FIREBALL_SPEED,
+  MOON_ECLIPSE_SHRED_BASE,
+  MOON_ECLIPSE_SHRED_CAP,
+  MOON_ECLIPSE_SHRED_GROWTH,
   POISON_RADIUS_BASE,
   POISON_RADIUS_GROWTH,
   POISON_TICK_MS,
@@ -125,6 +128,9 @@ export interface MonsterEnt {
   nextAttackAt: number;
   knockUntil: number;
   dots: Dot[];
+  /** 月蚀蚀甲：双抗 -shredPct，到 shredUntil 为止（重复施放刷新） */
+  shredUntil: number;
+  shredPct: number;
   /** 出手计数：BOSS 每 N 下掺一发法术 */
   atkIndex: number;
   /** 有效伤害记账：玩家 id → 伤害（已截断溢出） */
@@ -155,8 +161,8 @@ export interface FireballEnt {
   angle: number;
   targetId: string;
   bornAt: number;
-  /** fireball = 火球术（法伤），snipe = 穿杨箭（物伤、更快更大） */
-  kind: 'fireball' | 'snipe';
+  /** fireball = 火球术（法伤），snipe = 穿杨箭（物伤、更快更大），moonEclipse = 月蚀（法伤 + 蚀甲） */
+  kind: 'fireball' | 'snipe' | 'moonEclipse';
   atk: number;
   lv: number;
 }
@@ -179,7 +185,7 @@ export type WorldEvent =
   | { k: 'revive'; pid: string }
   | { k: 'cast'; pid: string; skill: SkillId; lv: number; x?: number; y?: number; radius?: number; hits?: number; perTick?: number; duration?: number; value?: number }
   | { k: 'castFail'; to: string; skill: SkillId; reason: CastFail }
-  | { k: 'boltHit'; x: number; y: number; snipe?: boolean }
+  | { k: 'boltHit'; x: number; y: number; snipe?: boolean; moon?: boolean }
   | { k: 'potion'; to: string; kind: PotionKind; res: PotionUseResult; heal: number }
   | { k: 'pickup'; to: string; did: string; drop: GroundDrop }
   | { k: 'stageCleared'; to: string; stage: number }
@@ -281,6 +287,8 @@ export class World {
       nextAttackAt: 0,
       knockUntil: 0,
       dots: [],
+      shredUntil: 0,
+      shredPct: 0,
       atkIndex: 0,
       damage: new Map(),
       firstHitAt: new Map(),
@@ -444,6 +452,9 @@ export class World {
       case 'fireball':
         this.castBolt(p, lv, target!, 'fireball');
         break;
+      case 'moonEclipse':
+        this.castBolt(p, lv, target!, 'moonEclipse');
+        break;
       case 'snipe':
         this.castBolt(p, lv, target!, 'snipe');
         break;
@@ -467,7 +478,12 @@ export class World {
   }
 
   /** 火球 / 穿杨箭共用追踪弹：火球走法攻法防，穿杨箭走物攻物防、更快 */
-  private castBolt(p: PlayerEnt, lv: number, target: MonsterEnt, kind: 'fireball' | 'snipe'): void {
+  private castBolt(
+    p: PlayerEnt,
+    lv: number,
+    target: MonsterEnt,
+    kind: 'fireball' | 'snipe' | 'moonEclipse',
+  ): void {
     const stats = aggregatedStats(p.state);
     const fb: FireballEnt = {
       id: this.nextId('f'),
@@ -498,7 +514,7 @@ export class World {
     for (const m of this.monsters.values()) {
       if (dist(cx, cy, m.x, m.y) > radius) continue;
       const tick = computeDamage(
-        { attack: power, defense: m.data.stats.mDef ?? 0, attackerLevel: p.state.level },
+        { attack: power, defense: this.monsterDef(m, 'magic'), attackerLevel: p.state.level },
         this.rng,
       );
       m.dots.push({ perTick: tick, until: this.now + duration, tickAt: this.now + POISON_TICK_MS, by: p.id });
@@ -528,7 +544,7 @@ export class World {
     for (const m of this.monsters.values()) {
       if (dist(cx, cy, m.x, m.y) > radius) continue;
       const wave = computeDamage(
-        { attack: power, defense: m.data.stats.pDef ?? 0, attackerLevel: p.state.level },
+        { attack: power, defense: this.monsterDef(m, 'melee'), attackerLevel: p.state.level },
         this.rng,
       );
       for (let i = 0; i < waves; i++) {
@@ -591,6 +607,12 @@ export class World {
     return attackIntervalMs(stats.agi ?? 0);
   }
 
+  /** 怪的有效防御：被月蚀蚀甲期间双抗按百分比降低 */
+  private monsterDef(m: MonsterEnt, kind: 'melee' | 'magic'): number {
+    const base = kind === 'melee' ? (m.data.stats.pDef ?? 0) : (m.data.stats.mDef ?? 0);
+    return m.shredUntil > this.now ? base * (1 - m.shredPct) : base;
+  }
+
   private nearestMonster(p: PlayerEnt, maxDist: number): MonsterEnt | null {
     let best: MonsterEnt | null = null;
     let bestD = Infinity;
@@ -617,7 +639,7 @@ export class World {
     const dmg = computeDamage(
       {
         attack: (stats.pAtk ?? 1) * skillPower(SKILL_BY_ID.attack, lv) * this.frenzyMult(p),
-        defense: target.data.stats.pDef ?? 0,
+        defense: this.monsterDef(target, 'melee'),
         attackerLevel: p.state.level,
       },
       this.rng,
@@ -869,17 +891,25 @@ export class World {
       const r = (t.isBoss ? BOSS_RADIUS : MONSTER_RADIUS) + FIREBALL_RADIUS;
       if (dist(fb.x, fb.y, t.x, t.y) > r) continue;
       this.fireballs.delete(fb.id);
-      this.events.push({ k: 'boltHit', x: fb.x, y: fb.y, snipe: fb.kind === 'snipe' });
       const snipe = fb.kind === 'snipe';
+      this.events.push({ k: 'boltHit', x: fb.x, y: fb.y, snipe, moon: fb.kind === 'moonEclipse' });
       const dmg = computeDamage(
         {
           attack: fb.atk * skillPower(SKILL_BY_ID[fb.kind], fb.lv),
-          defense: snipe ? t.data.stats.pDef ?? 0 : t.data.stats.mDef ?? 0,
+          defense: this.monsterDef(t, snipe ? 'melee' : 'magic'),
           attackerLevel: this.players.get(fb.ownerId)?.state.level ?? 1,
         },
         this.rng,
       );
       this.applyDamage(t, dmg, fb.angle, fb.ownerId, snipe ? 'melee' : 'fire');
+      // 月蚀：命中后再挂/刷新蚀甲（这一发先按旧抗性结算，下一发才吃到新减抗）
+      if (fb.kind === 'moonEclipse') {
+        t.shredPct = Math.min(
+          MOON_ECLIPSE_SHRED_CAP,
+          MOON_ECLIPSE_SHRED_BASE + MOON_ECLIPSE_SHRED_GROWTH * (fb.lv - 1),
+        );
+        t.shredUntil = this.now + skillValue(SKILL_BY_ID.moonEclipse);
+      }
     }
   }
 
