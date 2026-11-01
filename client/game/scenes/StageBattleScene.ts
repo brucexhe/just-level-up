@@ -257,7 +257,7 @@ export class StageBattleScene extends Phaser.Scene {
   private session!: Session;
   private player!: Phaser.GameObjects.Sprite;
   private shadow!: Phaser.GameObjects.Image;
-  /** 普攻特效（按职业：剑 = 刀光六层，弓 = 飞箭）+ 命中反馈，见 fx/attackFx.ts */
+  /** 普攻特效（按职业：剑 = 刀光六层，弓 = 飞箭，杖 = 小火球）+ 命中反馈，见 fx/attackFx.ts */
   private attackFxs = new Map<number, AttackFx>();
   /** 狂暴特效：脚下光圈 + preFX 轮廓光，见 fx/frenzyFx.ts */
   private frenzyFx!: FrenzyFx;

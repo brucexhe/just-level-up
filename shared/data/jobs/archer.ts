@@ -6,8 +6,8 @@ import { DEFAULT_GROWTH, DEFAULT_START, palette, type JobDef } from './types';
  * 要改弓手的配色、像素造型或技能，只动这里。
  */
 
-/** 弓手普攻射程（px）：近战 90 的一倍出头，警戒圈 300 以内 —— 拉得开距离但白嫖不了 */
-export const ARCHER_ATTACK_RANGE = 180;
+/** 弓手普攻射程（px）：近战 90 的一倍多，警戒圈 300 以内 —— 拉得开距离但白嫖不了 */
+export const ARCHER_ATTACK_RANGE = 200;
 
 const GRID_A = [
   '........................',

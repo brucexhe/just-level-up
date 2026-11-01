@@ -94,13 +94,18 @@ const HIT_SPARK_LAYER = {
   ttlMs: 300,
 };
 
-/** 箭矢飞行：飞多远 / 多久（比弓手射程 180 略远一点，视觉上完整离手） */
+/** 箭矢飞行：飞多远 / 多久（与弓手射程 200 持平，视觉上完整离手） */
 const ARROW_FLY_DIST = 200;
 const ARROW_FLY_MS = 160;
 /** 贴图 14×3，放大多少倍显示（角色是 2 倍，箭至少要跟人一个体量才看得清） */
 const ARROW_SCALE = 2;
 
-/** 普攻特效：职业武器不同，主特效不同（剑 = 刀光，弓 = 飞箭），命中反馈共用 */
+/** 法杖普攻小火球：飞多远 / 多久（贴图同 Q 技能的大火球，显示尺寸小一号） */
+const ORB_SCALE = 0.8;
+const ORB_FLY_DIST = 200;
+const ORB_FLY_MS = 170;
+
+/** 普攻特效：职业武器不同，主特效不同（剑 = 刀光，弓 = 飞箭，杖 = 小火球），命中反馈共用 */
 export interface AttackFx {
   /** 普攻主特效：月牙弧 / 放箭 */
   primary(angle: number): void;
@@ -112,16 +117,17 @@ export interface AttackFx {
   withOrigin(sprite: Phaser.GameObjects.Sprite, fn: () => void): void;
 }
 
-/** 按职业武器造一套普攻特效 */
+/** 按职业武器造一套普攻特效（剑 = 刀光，弓 = 飞箭，杖 = 小火球） */
 export function mkAttackFx(
   scene: Phaser.Scene,
   origin: Phaser.GameObjects.Sprite,
   frenzy: () => boolean,
   job: number,
 ): AttackFx {
-  return jobDef(job).weapon === 'bow'
-    ? new BowFx(scene, origin, frenzy)
-    : new SwordFx(scene, origin, frenzy);
+  const weapon = jobDef(job).weapon;
+  if (weapon === 'bow') return new BowFx(scene, origin, frenzy);
+  if (weapon === 'staff') return new StaffFx(scene, origin, frenzy);
+  return new SwordFx(scene, origin, frenzy);
 }
 
 /**
@@ -348,5 +354,55 @@ export class BowFx extends BaseAttackFx {
   }
 
   /** 弓没有第二层（刀本体 / 残影是剑专属） */
+  secondary(_angle: number): void {}
+}
+
+/** 杖的普攻特效：杖尖掷出小火球（与弓的放箭同构，伤害由世界即时结算，这里只有画面） */
+export class StaffFx extends BaseAttackFx {
+  primary(angle: number): void {
+    const at = this.at(angle, 12);
+    const orb = this.scene.add
+      .image(at.x, at.y, 'fireball')
+      .setScale(ORB_SCALE)
+      .setDepth(this.origin.y + 5)
+      .setTint(this.tint(0xffffff, 0xffc0e8));
+    // 火星拖尾：跟着火球一路撒点
+    const trail = this.scene.add.particles(0, 0, 'dot', {
+      follow: orb,
+      lifespan: 180,
+      speed: { min: 5, max: 25 },
+      scale: { start: 0.8, end: 0 },
+      tint: [0xffd23a, 0xff8a2a],
+      alpha: { start: 0.8, end: 0 },
+      frequency: 15,
+    });
+    trail.setDepth(this.origin.y + 4);
+    this.scene.tweens.add({
+      targets: orb,
+      x: at.x + Math.cos(angle) * ORB_FLY_DIST,
+      y: at.y + Math.sin(angle) * ORB_FLY_DIST,
+      duration: ORB_FLY_MS,
+      ease: 'Linear',
+      onComplete: () => {
+        trail.destroy();
+        orb.destroy();
+      },
+    });
+    // 越飞越旺的小火苗
+    this.scene.tweens.add({
+      targets: orb,
+      scale: ORB_SCALE * 1.3,
+      duration: ORB_FLY_MS,
+      ease: 'Quad.Out',
+    });
+    this.scene.tweens.add({
+      targets: orb,
+      alpha: 0,
+      delay: ORB_FLY_MS - 50,
+      duration: 50,
+    });
+  }
+
+  /** 杖没有第二层（刀本体 / 残影是剑专属） */
   secondary(_angle: number): void {}
 }

@@ -80,8 +80,8 @@ export interface JobDef {
   palette: PlayerPalette;
   /** 主角两帧像素网格（武器形状画在网格里，换武器 = 改网格） */
   grids: PlayerGrids;
-  /** 普攻武器形状：决定普攻特效（剑 = 刀光，弓 = 飞箭） */
-  weapon: 'sword' | 'bow';
+  /** 普攻武器形状：决定普攻特效（剑 = 刀光，弓 = 飞箭，杖 = 小火球） */
+  weapon: 'sword' | 'bow' | 'staff';
   /**
    * 普攻距离（px）：不填 = 近战 ATTACK_RANGE(90)。
    * 上限是警戒圈 CHASE_RANGE(300) —— 超过它就能站在怪追不到的地方白嫖。
