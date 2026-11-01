@@ -1,5 +1,5 @@
 import type { SkillDef } from '../skills';
-import { palette, type JobDef } from './types';
+import { DEFAULT_GROWTH, palette, type JobDef } from './types';
 
 /**
  * 职业 3 精灵：外观 + 技能全在这一个文件里。
@@ -78,6 +78,8 @@ export const ELF: JobDef = {
     }),
   grids: { a: GRID_A, b: GRID_B },
   weapon: 'sword',
+  // 远程辅助：蓝池是唯一主成长线，其余全默认
+  growth: { ...DEFAULT_GROWTH, mp: 4 },
   skills: [
     {
       id: 'attack',

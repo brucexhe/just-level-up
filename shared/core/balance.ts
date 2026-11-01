@@ -123,9 +123,16 @@ export const BALANCE = {
   HIT_FLOOR: 0.05,
   /** 命中率上限 100%：多余命中不转换成其他收益 */
   HIT_CAP: 1.0,
-  /** 每升 1 级拿到的**自由**属性点，由玩家自己分配（与 ATTR_PER_LEVEL 的自动成长是两条线） */
+  /**
+   * 每升 1 级拿到的**自由**属性点，由玩家自己分配（与 ATTR_PER_LEVEL 的自动成长是两条线）
+   */
   POINTS_PER_LEVEL: 1,
-  /** 每升 1 级，九项属性各自自动 +1（等级自带的成长，与自由点数无关） */
+  /**
+   * 每升 1 级，九项属性各自自动 +1（等级自带的成长，与自由点数无关）。
+   * 全职业**默认**成长斜率的数值源头：shared/data/jobs/types.ts 的 DEFAULT_GROWTH 引用它们，
+   * 各职业再在 shared/data/jobs/*.ts 里覆盖 growth 字段做出差异曲线；
+   * 改这里的数 = 一次改掉所有没覆盖 growth 的职业。
+   */
   ATTR_PER_LEVEL: 1,
   /**
    * 每升 1 级，**只有 hp** 自动 +5（其余八项仍走 ATTR_PER_LEVEL = 1）。

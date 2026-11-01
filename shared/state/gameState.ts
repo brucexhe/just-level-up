@@ -19,7 +19,7 @@ import {
   type SkillBook,
 } from '../core/skills';
 import { SKILL_BY_ID, type SkillId } from '../data/skills';
-import { clampJob, DEFAULT_JOB, jobSkills } from '../data/jobs';
+import { clampJob, DEFAULT_JOB, jobDef, jobSkills } from '../data/jobs';
 import { BASE_ATTRS, type AttrSet, type BaseAttr } from '../core/types';
 
 /** 某一关的击杀进度（当天清零，次日刷新） */
@@ -228,10 +228,11 @@ export function gainExp(s: GameState, amount: number): number {
     s.exp -= expToNext(s.level);
     s.level += 1;
     s.attrPoints += BALANCE.POINTS_PER_LEVEL;
-    // 等级自带的体质成长：九项各 +1，血量单独 +5（自由点数另外分配）
+    // 等级自带的体质成长走该职业的曲线（默认血量 +5、其余八项各 +1），
+    // 自由点数另外分配
+    const growth = jobDef(s.job).growth;
     for (const k of BASE_ATTRS) {
-      const gain = k === 'hp' ? BALANCE.ATTR_HP_PER_LEVEL : BALANCE.ATTR_PER_LEVEL;
-      s.baseStats[k] = (s.baseStats[k] ?? 0) + gain;
+      s.baseStats[k] = (s.baseStats[k] ?? 0) + growth[k];
     }
     ups += 1;
   }

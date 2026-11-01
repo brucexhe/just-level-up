@@ -1,5 +1,5 @@
 import type { SkillDef } from '../skills';
-import { palette, type JobDef } from './types';
+import { DEFAULT_GROWTH, palette, type JobDef } from './types';
 
 /**
  * 职业 1 弓手：外观 + 技能全在这一个文件里。
@@ -81,6 +81,8 @@ export const ARCHER: JobDef = {
     }),
   grids: { a: GRID_A, b: GRID_B },
   weapon: 'bow',
+  // 脆皮远程物理：物攻为主成长线；mp 稍快（技能箭耗蓝不低）
+  growth: { ...DEFAULT_GROWTH, mp: 2, pAtk: 3 },
   attackRange: ARCHER_ATTACK_RANGE,
   skills: [
     {

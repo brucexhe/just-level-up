@@ -1,4 +1,27 @@
+import { BALANCE } from '../../core/balance';
+import type { BaseAttr } from '../../core/types';
 import type { SkillDef } from '../skills';
+
+/**
+ * 职业成长曲线：九项基础属性**每项一条**「每升 1 级自动获得的点数」。
+ * Record<BaseAttr, …> 强制九项写全，缺一项编译不过。
+ * 全局默认 = BALANCE 里的线性斜率；要拉开职业差异就在各自职业文件里覆盖
+ * （目前是常数 = 线性；以后做复利再扩成按等级求值的函数/查表）。
+ */
+export type JobGrowth = Record<BaseAttr, number>;
+
+/** 全职业默认成长：血量每级 +5，其余八项各 +1（数值源头仍是 BALANCE） */
+export const DEFAULT_GROWTH: JobGrowth = {
+  hp: BALANCE.ATTR_HP_PER_LEVEL,
+  mp: BALANCE.ATTR_PER_LEVEL,
+  pAtk: BALANCE.ATTR_PER_LEVEL,
+  mAtk: BALANCE.ATTR_PER_LEVEL,
+  pDef: BALANCE.ATTR_PER_LEVEL,
+  mDef: BALANCE.ATTR_PER_LEVEL,
+  speed: BALANCE.ATTR_PER_LEVEL,
+  agi: BALANCE.ATTR_PER_LEVEL,
+  luck: BALANCE.ATTR_PER_LEVEL,
+};
 
 /** 主角配色（像素网格的字符 → 颜色） */
 export type PlayerPalette = {
@@ -46,6 +69,8 @@ export interface JobDef {
    * 上限是警戒圈 CHASE_RANGE(300) —— 超过它就能站在怪追不到的地方白嫖。
    */
   attackRange?: number;
+  /** 该职业的属性成长曲线（各职业文件显式声明，默认引用 DEFAULT_GROWTH） */
+  growth: JobGrowth;
   /** 该职业的技能表（含普攻；各职业可以有完全不同的技能组） */
   skills: SkillDef[];
 }

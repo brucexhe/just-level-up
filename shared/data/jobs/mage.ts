@@ -1,5 +1,5 @@
 import type { SkillDef } from '../skills';
-import { BASE_PALETTE, type JobDef } from './types';
+import { BASE_PALETTE, DEFAULT_GROWTH, type JobDef } from './types';
 
 /**
  * 职业 0 法师：外观 + 技能全在这一个文件里。
@@ -69,6 +69,8 @@ export const MAGE: JobDef = {
   palette: BASE_PALETTE,
   grids: { a: GRID_A, b: GRID_B },
   weapon: 'sword',
+  // 脆皮远程法系：蓝池与法攻是两条主成长线
+  growth: { ...DEFAULT_GROWTH, mp: 3, mAtk: 3 },
   skills: [
     {
       id: 'attack',
