@@ -98,6 +98,8 @@ export interface Session {
   dead(): boolean;
   /** 下次整关重刷还剩多少 ms */
   resetLeft(): number;
+  /** 到服务端的往返延时（ms，EWMA 平滑）；尚未测到时为 0 */
+  latency(): number;
 
   setDir(d: number | null): void;
   moveTo(x: number, y: number): void;

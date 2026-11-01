@@ -1012,6 +1012,7 @@ export class StageBattleScene extends Phaser.Scene {
       stageThumbs: () => this.stageThumbs,
       gotoStage: (n) => this.gotoStage(n),
       cmd: (s, c) => this.session.cmd(s, c),
+      latency: () => this.session.latency(),
       settings: this.settingsApi(),
       sfx: (n) => audio.play(n),
     });

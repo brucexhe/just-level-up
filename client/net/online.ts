@@ -65,6 +65,10 @@ export class OnlineSession implements Session {
   private fireballsT = new Map<string, Tracked<FireballView>>();
   private lastUpdate = 0;
 
+  /** RTT 平滑值（ms）：0 = 尚未测到 */
+  private pingMs = 0;
+  private pingTimer: ReturnType<typeof setInterval> | undefined;
+
   /** 本地预测的自己 */
   private me = { x: 2500, y: 2500, keyDir: null as number | null, moveTarget: null as { x: number; y: number } | null };
   private myTarget: string | null = null;
@@ -110,6 +114,17 @@ export class OnlineSession implements Session {
     room.onMessage('ev', (batch: EventBatch) => {
       for (const e of batch) this.events.push(e);
     });
+    room.onMessage('pong', (m: { t: number }) => {
+      const rtt = performance.now() - m.t;
+      // EWMA 平滑：单次抖动不至于让数字乱跳
+      this.pingMs = this.pingMs === 0 ? rtt : this.pingMs * 0.7 + rtt * 0.3;
+    });
+    // 延时测量：进房就开始，每 2s 一发
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    room.send('ping', { t: performance.now() });
+    this.pingTimer = setInterval(() => {
+      if (this.room === room && !this.leavingOnPurpose) this.room.send('ping', { t: performance.now() });
+    }, 2000);
     room.onLeave((code: number) => {
       if (room !== this.room || this.leavingOnPurpose) return;
       // 在第 2 关以后重置角色：服务端把人请出已经不再解锁的关卡，这里自动回第 1 关
@@ -411,7 +426,12 @@ export class OnlineSession implements Session {
   onClose(fn: (reason: string) => void): void {
     this.closeFns.push(fn);
   }
+  latency(): number {
+    return Math.round(this.pingMs);
+  }
   dispose(): void {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = undefined;
     this.leavingOnPurpose = true;
     void this.room.leave(true);
   }

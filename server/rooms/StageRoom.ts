@@ -155,6 +155,11 @@ export class StageRoom extends Room<{ state: StageState }> {
     });
     this.on('autoAttack', (s, m) => w().setAutoAttack(s.uid, m.on === true));
     this.on('revive', (s) => w().revive(s.uid));
+    // 延时测量：原样回显客户端时间戳，别走世界 tick，越省越好
+    this.on('ping', (s, m) => {
+      const t = typeof m.t === 'number' && Number.isFinite(m.t) ? m.t : 0;
+      s.client.send('pong', { t });
+    });
     // 客户端注册完消息回调后发 ready，再推第一份私有状态（onJoin 里直接发会和客户端注册回调抢跑）
     this.on('ready', (s) => this.sendSelf(s, true));
     this.on('cmd', (s, m) => {

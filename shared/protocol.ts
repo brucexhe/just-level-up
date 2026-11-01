@@ -31,6 +31,8 @@ export interface ClientMessages {
   cmd: { seq: number; c: Command };
   /** 重置角色（二次确认在客户端） */
   resetChar: Record<string, never>;
+  /** 延时测量：t = 客户端发送时刻，服务端原样回 pong */
+  ping: { t: number };
 }
 
 /** 服务端 → 客户端：本人私有状态（背包 / 经验 / 点数 / 冷却…） */

@@ -46,6 +46,8 @@ export interface GameUIOptions {
   gotoStage(stage: number): void;
   /** 面板操作（见 UIApi.cmd） */
   cmd: UIApi['cmd'];
+  /** 到服务端的往返延时（ms，EWMA 平滑）；0 = 尚未测到 */
+  latency(): number;
   /** 设置面板能力（音频 / 账号 / 角色） */
   settings: SettingsApi;
   /** UI 音效回调（由场景注入，避免 UI 直接依赖音频实现） */
@@ -140,6 +142,8 @@ export class GameUI {
         <span class="an-brand">无限升级 · LEVEL UP <span class="an-slogan">· 越打越强，永无止境</span></span>
         <span class="an-msg" data-announce-msg></span>
       </div>
+
+      <span class="ping-chip" data-live="ping" title="到服务器的往返延时">--</span>
 
       <div class="minimap">
         <div class="mm-head">
@@ -635,6 +639,15 @@ export class GameUI {
         case 'gold':
           setTxt(el, fmtNum(s.gold));
           break;
+        case 'ping': {
+          const ping = this.opts.latency();
+          setTxt(el, ping > 0 ? `${ping}ms` : '--');
+          // 76ms（约 1 帧 ×4）/ 151ms 两档分色，超过就是明显绕路了
+          el.classList.toggle('good', ping > 0 && ping < 76);
+          el.classList.toggle('warn', ping >= 76 && ping < 151);
+          el.classList.toggle('bad', ping >= 151);
+          break;
+        }
       }
     });
 
