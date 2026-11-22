@@ -57,6 +57,8 @@ async function connect(): Promise<{ session: Session; loading: LoadingScreen }> 
 async function boot() {
   const { session, loading } = await connect();
   setSession(session);
+  // 成功连上：清零自动重连计数（见下面 lvup:disconnect）
+  sessionStorage.removeItem('lvup:reconnect-count');
   const game = new Phaser.Game(GAME_CONFIG);
   game.events.once('lvup:scene-ready', (e: { art?: string }) => {
     loading.setArt(e?.art);
@@ -70,9 +72,21 @@ async function boot() {
   });
   window.addEventListener('lvup:disconnect', (e) => {
     const reason = (e as CustomEvent<string>).detail;
+    // 手机切后台/锁屏/信号抖动经常把 WebSocket 断掉：先自动刷新重连
+    // （最多 2 次，刷新会自动登录并回到当前关卡），连续失败才弹窗，避免死循环刷新。
+    const KEY = 'lvup:reconnect-count';
+    const n = (Number(sessionStorage.getItem(KEY)) || 0) + 1;
+    if (n <= 2) {
+      sessionStorage.setItem(KEY, String(n));
+      location.reload();
+      return;
+    }
+    sessionStorage.removeItem(KEY);
     void showBlocking(reason, '重新连接').then(() => location.reload());
   });
-  window.addEventListener('pagehide', () => session.dispose());
+  // 注意：不监听 pagehide 主动 dispose——手机切后台/锁屏就会触发它，
+  // 等于每次离开屏幕都主动退房，回前台必然"连接已断开"。
+  // 真正关闭页面时由服务端的心跳超时清理房间成员。
 }
 
 void boot();
