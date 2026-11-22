@@ -57,6 +57,9 @@ import { audio } from '../audio';
 import { loadPrefs, savePrefs } from '../../state/save';
 import { currentSession } from '../../net/current';
 import type { DropView, MonsterView, PlayerView, Session } from '../../net/session';
+import { createTouchControls, type TouchControlsHandle } from '../../ui/touch';
+import { isTouchPrimary } from '../input/touchEnv';
+import { TouchUiScene } from './TouchUiScene';
 
 /**
  * 相机至少要看到的世界范围（5:3）。窗口比例偏离 5:3 时，多出来的那条边多看一点，
@@ -284,6 +287,10 @@ export class StageBattleScene extends Phaser.Scene {
   /** 方向键（↑↓←→）：按住即手动移动，和右键点击移动并存，按键优先 */
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private lastKeyDir: number | null = null;
+  /** 触屏摇杆方向：与键盘走同一条 setDir 通道，键盘优先 */
+  private touchDir: number | null = null;
+  private touchUiOn = false;
+  private touchControls?: TouchControlsHandle;
   private targetRing!: Phaser.GameObjects.Image;
   /** 护盾罩：金色椭圆渐变贴图，尺寸恒定，跟随角色 */
   private shieldOrb!: Phaser.GameObjects.Image;
@@ -396,11 +403,15 @@ export class StageBattleScene extends Phaser.Scene {
     window.addEventListener('resize', this.fitScreen);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener('resize', this.fitScreen);
+      this.touchControls?.destroy();
+      this.touchControls = undefined;
+      if (this.touchUiOn) this.scene.stop('TouchUiScene');
     });
 
     this.setupInput();
     this.setupUI();
     this.unlockAudioOnGesture();
+    this.setupTouchControls();
     this.session.onStageChange(() => this.rebuildStage());
     this.session.onClose((reason) => {
       this.ui.toast(reason, '#ff8a8a');
@@ -526,6 +537,10 @@ export class StageBattleScene extends Phaser.Scene {
       cooldownOf: (id: SkillId) => this.cooldownOf(id),
       cast: (id: SkillId) => this.castSkill(id),
       attack: () => this.castSkill('attack'),
+      /** 模拟虚拟摇杆方向；null = 松开，走和键盘相同的 setDir 通道 */
+      setTouchDir: (d: number | null) => {
+        this.touchDir = d;
+      },
       levelUp: () => this.spawnLevelUpFx(this.state.level, this.state.level + 1),
     };
   }
@@ -541,6 +556,10 @@ export class StageBattleScene extends Phaser.Scene {
     this.scale.setZoom(1 / dpr);
     if (this.scale.width !== w || this.scale.height !== h) this.scale.resize(w, h);
     this.fitCamera();
+    const touchUi = this.touchUiOn
+      ? (this.scene.get('TouchUiScene') as TouchUiScene | null)
+      : null;
+    touchUi?.relayout();
   };
 
   /**
@@ -735,6 +754,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.cameras.main.centerOn(this.player.x, this.player.y);
     // 换关 = 换曲：每个关卡有自己的 BGM
     audio.setStage(this.stage);
+    this.touchControls?.rebuild(jobSkills(this.state.job));
   }
 
   private clearWorldViews(): void {
@@ -879,12 +899,36 @@ export class StageBattleScene extends Phaser.Scene {
 
   // ---------- 输入 ----------
 
+  /** 仅触屏设备启动摇杆场景和 DOM 技能按钮；PC 上这里什么都不做 */
+  private setupTouchControls(): void {
+    if (!isTouchPrimary()) return;
+    this.touchUiOn = true;
+    this.scene.launch('TouchUiScene', {
+      onDir: (d: number | null) => {
+        this.touchDir = d;
+      },
+    });
+    const host = document.getElementById('touch-root');
+    if (!host) return;
+    this.touchControls = createTouchControls({
+      host,
+      skills: jobSkills(this.state.job),
+      onAttack: () => this.castSkill('attack'),
+      onCast: (id) => this.castSkill(id),
+    });
+  }
+
   private setupInput() {
     this.input.keyboard!.addCapture('SPACE,Q,W,E,F,R,Z,X,UP,DOWN,LEFT,RIGHT');
     this.cursors = this.input.keyboard!.createCursorKeys();
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (this.dead) return; // 躺尸期间点击战场无效（弹窗/复活条接管输入）
+      // 摇杆区域在独立场景里，事件仍会到达战场；这里显式吞掉，避免误触普攻/选怪
+      const touchUi = this.touchUiOn
+        ? (this.scene.get('TouchUiScene') as TouchUiScene | null)
+        : null;
+      if (touchUi?.containsPointer(p)) return;
       if (p.rightButtonDown()) {
         this.session.moveTo(p.worldX, p.worldY);
         this.moveMark(p.worldX, p.worldY);
@@ -1610,8 +1654,8 @@ export class StageBattleScene extends Phaser.Scene {
   // ---------- 主循环 ----------
 
   update(time: number, delta: number) {
-    // 方向键：只在方向变化时发一次意图（按住不放不会每帧刷消息）
-    const dir = this.keyDirection();
+    // 方向键优先，触屏摇杆兜底；只在方向变化时发一次意图（按住不放不会每帧刷消息）
+    const dir = this.dead ? null : (this.keyDirection() ?? this.touchDir);
     if (dir !== this.lastKeyDir) {
       this.lastKeyDir = dir;
       this.session.setDir(dir);
@@ -2049,6 +2093,8 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   height: Math.round(window.innerHeight * pixelRatio()),
   backgroundColor: '#10141a',
   disableContextMenu: true,
+  // 摇杆占用一个 pointer，战场点击再用一个；Phaser 默认只有 1 个
+  input: { activePointers: 3 },
   pixelArt: true,
   roundPixels: true,
   scale: {
@@ -2060,5 +2106,6 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
     // 而 #shell 是 fit-content 的 flex item → 整块画面塌成 0×0（实测踩过一次）
     expandParent: false,
   },
-  scene: [StageBattleScene],
+  // TouchUiScene 构造里 active:false，PC 上不会启动也不会渲染任何对象
+  scene: [StageBattleScene, TouchUiScene],
 };

@@ -22,7 +22,8 @@
     "argon2": "0.45.1",
     "ioredis": "5.11.1",
     "jsonwebtoken": "9.0.3",
-    "phaser": "^3.70.0"
+    "phaser": "^3.70.0",
+    "phaser3-rex-plugins": "1.80.20"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "9.0.10",

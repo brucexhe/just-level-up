@@ -17,7 +17,9 @@
   line-height: 1.5;
   user-select: none;
   -webkit-user-select: none;
-  z-index: 10;
+  /* 必须高于 #touch-root(z-index:30)：弹窗/面板/底部栏等都在本层内，
+     否则手机端会被右下角虚拟技能按钮挡住。 */
+  z-index: 40;
 }
 
 #ui-root *,
@@ -2122,4 +2124,123 @@
   font-size: 12px;
   color: #ff8a8a;
   letter-spacing: 1px;
+}
+
+/* ============================================================
+   移动端触控层：PC 上这两个节点完全隐藏，下面所有规则都在
+   @media (pointer: coarse) 内，保证键鼠玩家看到的画面零变化。
+   ============================================================ */
+#touch-root,
+#safe-area-probe {
+  display: none;
+}
+#safe-area-probe {
+  position: fixed;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+@media (pointer: coarse) {
+  html,
+  body {
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-touch-callout: none;
+  }
+  #app canvas {
+    touch-action: none;
+  }
+  #safe-area-probe {
+    display: block;
+  }
+
+  #touch-root {
+    display: block;
+    position: absolute;
+    right: calc(env(safe-area-inset-right) + 8px);
+    bottom: calc(env(safe-area-inset-bottom) + 24px);
+    width: 180px;
+    height: 180px;
+    z-index: 30;
+    pointer-events: none;
+    line-height: 1.2;
+  }
+  .tc-btn {
+    position: absolute;
+    pointer-events: auto;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    border-radius: 50%;
+    background: rgba(16, 24, 36, 0.88);
+    border: 1px solid #3a4761;
+    color: #c8d0e0;
+    font: 11px/1.2 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tc-btn:active {
+    background: rgba(154, 208, 106, 0.35);
+  }
+  /* 技能沿对角线向右上逐级排开（Q 最低、R 最高），普攻大圆压在右下 */
+  .tc-btn[data-arc='0'] {
+    left: 0px;
+    bottom: 0px;
+  }
+  .tc-btn[data-arc='1'] {
+    left: 21px;
+    bottom: 57px;
+  }
+  .tc-btn[data-arc='2'] {
+    left: 60px;
+    bottom: 101px;
+  }
+  .tc-btn[data-arc='3'] {
+    left: 119px;
+    bottom: 125px;
+  }
+  .tc-btn[data-skill='attack'] {
+    width: 64px;
+    height: 64px;
+    left: 92px;
+    bottom: 12px;
+    background: rgba(24, 44, 32, 0.92);
+    border-color: #9ad06a;
+  }
+  .tc-ico {
+    font-size: 17px;
+  }
+  .tc-key {
+    font-size: 10px;
+    color: #9ad06a;
+  }
+
+  /* 右下角已有虚拟技能按钮，隐藏原技能栏（左侧 4 技能槽）及其后的分隔线 */
+  :where(#ui-root) .skillbar,
+  :where(#ui-root) .skillbar + .bb-sep {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) and (orientation: portrait) {
+  #touch-root::after {
+    content: '请横屏游玩';
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8, 12, 18, 0.92);
+    color: #c8d0e0;
+    font: 16px/1.5 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    z-index: 60;
+    pointer-events: none;
+  }
 }
