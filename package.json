@@ -12,9 +12,12 @@
     "test:watch": "vitest",
     "server": "tsx server/index.ts",
     "server:dev": "tsx watch server/index.ts",
+    "android:apk": "cross-env VITE_SERVER_URL=https://game.peos.cn vite build && cap sync android && cd android && gradlew.bat assembleDebug",
     "test:redis": "REDIS_IT=1 vitest run tests/repo.test.ts"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
     "@colyseus/core": "0.18.18",
     "@colyseus/schema": "5.0.36",
     "@colyseus/sdk": "0.18.5",
@@ -26,8 +29,10 @@
     "phaser3-rex-plugins": "1.80.20"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
     "@types/jsonwebtoken": "9.0.10",
     "@types/node": "^20.0.0",
+    "cross-env": "^10.1.0",
     "tsx": "4.23.15",
     "typescript": "^5.4.0",
     "vite": "^5.0.0",

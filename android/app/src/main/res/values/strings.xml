@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">无限升级</string>
+    <string name="title_activity_main">无限升级</string>
+    <string name="package_name">cn.peos.levelup</string>
+    <string name="custom_url_scheme">cn.peos.levelup</string>
+</resources>
