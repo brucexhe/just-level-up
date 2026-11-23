@@ -2184,6 +2184,10 @@
     color: #c8d0e0;
     font: 11px/1.2 'PingFang SC', 'Microsoft YaHei', sans-serif;
     touch-action: manipulation;
+    /* 长按不触发文字选择/系统菜单 */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
   .tc-btn:active {
