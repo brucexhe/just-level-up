@@ -161,15 +161,40 @@ describe('World 战斗', () => {
     expect(m.targetId).toBe('b');
   });
 
-  it('火球 / 毒刃没选怪时失败，不扣蓝不进冷却', () => {
+  it('火球：施法距离内没怪且没选怪时失败，不扣蓝不进冷却', () => {
     const w = world();
     const p = w.addPlayer('a', 'A', createInitialState());
+    // 清场：把所有怪挪出施法距离，模拟"附近没有目标"
+    for (const m of w.monsters.values()) {
+      m.x = p.x + 2000;
+      m.y = p.y + 2000;
+    }
     const mp = p.state.mp;
     expect(w.cast('a', 'fireball')).toBe(false);
     expect(p.state.mp).toBe(mp);
     expect(w.cooldownLeft(p, 'fireball')).toBe(0);
     const ev = w.drain().find((e) => e.k === 'castFail');
     expect(ev).toMatchObject({ to: 'a', skill: 'fireball', reason: 'needTarget' });
+  });
+
+  it('火球：没选怪时自动锁定 300 内最近的怪并出手', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState());
+    // 先清场，再放一只近的，保证"最近"没有歧义
+    for (const m of w.monsters.values()) {
+      m.x = p.x + 2000;
+      m.y = p.y + 2000;
+    }
+    const near = normal(w);
+    near.x = p.x + 100;
+    near.y = p.y;
+    const mp = p.state.mp;
+    expect(w.cast('a', 'fireball')).toBe(true);
+    expect(p.state.mp).toBeLessThan(mp);
+    expect(w.cooldownLeft(p, 'fireball')).toBeGreaterThan(0);
+    expect(w.fireballs.size).toBe(1);
+    const fb = [...w.fireballs.values()][0]!;
+    expect(fb.targetId).toBe(near.id);
   });
 
   it('站在怪旁边会自动普攻', () => {

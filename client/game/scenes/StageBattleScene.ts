@@ -1163,10 +1163,8 @@ export class StageBattleScene extends Phaser.Scene {
       return;
     }
     if (this.session.cooldownLeft(id) > 0) return;
-    if (SKILL_BY_ID[id].needsTarget && !this.selectedTarget()) {
-      this.ui.toast(`请先用左键点选一只怪物，再释放${SKILL_BY_ID[id].name}`, '#ff8a8a');
-      return;
-    }
+    // 需要目标的技能不再本地拦截：服务端会自动锁定施法距离内最近的怪，
+    // 没有目标才回 castFail(needTarget)，由 onCastFail 统一提示
     this.session.cast(id);
   }
 
@@ -1177,7 +1175,7 @@ export class StageBattleScene extends Phaser.Scene {
       dead: null,
       cooldown: null,
       notLearned: [`尚未学会「${name}」，需要技能书`, '#ff8a8a'],
-      needTarget: [`请先用左键点选一只怪物，再释放${name}`, '#ff8a8a'],
+      needTarget: [`附近没有可攻击的怪物，无法释放${name}`, '#ff8a8a'],
       tooFar: [`目标太远，靠近一点再释放${name}`, '#ff8a8a'],
       noMp: ['法力不足', '#6ab0f3'],
     };

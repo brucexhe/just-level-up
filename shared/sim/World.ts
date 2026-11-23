@@ -450,7 +450,10 @@ export class World {
     // 需要目标的技能（火球 / 毒刃 / 穿杨箭 / 箭雨）：校验放在扣蓝之前，免得白扣蓝、白进冷却
     let target: MonsterEnt | null = null;
     if (def.needsTarget) {
-      target = this.selected(p);
+      // 目标选取：手动选中的怪永远优先（PC 点选意图不动）；
+      // 没选中时自动锁定施法距离内最近的怪 —— 移动端没有点选操作，
+      // 边走边按技能全靠这条兜底（与普攻 tryMelee 的就近逻辑一致）
+      target = this.selected(p) ?? this.nearestMonster(p, CAST_RANGE);
       if (!target) return fail('needTarget');
       const cost0 = skillMpCost(def, lv);
       if (cost0 > 0 && s.mp < cost0) return fail('noMp');

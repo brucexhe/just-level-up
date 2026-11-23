@@ -134,11 +134,12 @@ describe('关卡房间', () => {
     const acked = await next<SelfSync>(ra, 'self', (m) => m.ack >= 1);
     expect(acked.state.attrPoints).toBe(0); // 没点数可加，结果以服务端为准
 
-    // 非法技能 → castFail 只发给本人
+    // 未学习的技能 → castFail 只发给本人
+    //（火球等需目标技能如今会自动锁定最近的怪，不再稳定失败，故改用跨职业技能）
     const failA = next<EventBatch>(ra, 'ev', (evs) => evs.some((e) => e.k === 'castFail'));
-    ra.send('cast', { skill: 'fireball' });
+    ra.send('cast', { skill: 'snipe' });
     const evs = await failA;
-    expect(evs.find((e) => e.k === 'castFail')).toMatchObject({ reason: 'needTarget' });
+    expect(evs.find((e) => e.k === 'castFail')).toMatchObject({ reason: 'notLearned' });
 
     await ra.leave();
     await rb.leave();
