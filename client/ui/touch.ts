@@ -1,8 +1,10 @@
 import type { SkillDef, SkillId } from '../../shared/data/skills';
+import type { Cooldown } from './api';
 
 export interface TouchControlsOptions {
   host: HTMLElement;
   skills: readonly SkillDef[];
+  cooldownOf(id: SkillId): Cooldown;
   onAttack: () => void;
   onCast: (id: SkillId) => void;
 }
@@ -10,6 +12,7 @@ export interface TouchControlsOptions {
 export interface TouchControlsHandle {
   destroy(): void;
   rebuild(skills: readonly SkillDef[]): void;
+  syncCooldowns(): void;
 }
 
 /**
@@ -19,9 +22,23 @@ export interface TouchControlsHandle {
  */
 export function createTouchControls(opts: TouchControlsOptions): TouchControlsHandle {
   let skills: readonly SkillDef[] = opts.skills;
+  const cooldownEls = new Map<SkillId, { root: HTMLElement; shade: HTMLElement; num: HTMLElement }>();
+
+  const syncCooldowns = (): void => {
+    for (const [id, els] of cooldownEls) {
+      const cd = opts.cooldownOf(id);
+      const cooling = cd.total > 0 && cd.remain > 0;
+      els.shade.style.height = cooling ? `${Math.min(100, (cd.remain / cd.total) * 100).toFixed(0)}%` : '0%';
+      els.num.textContent = cooling ? (cd.remain > 1000 ? `${Math.ceil(cd.remain / 1000)}` : '·') : '';
+      els.num.style.display = cooling ? '' : 'none';
+      els.root.classList.toggle('cooling', cooling);
+      els.root.setAttribute('aria-disabled', String(cooling));
+    }
+  };
 
   const render = (): void => {
     opts.host.replaceChildren();
+    cooldownEls.clear();
     const ordered = [
       ...skills.filter((d) => d.id === 'attack'),
       ...skills.filter((d) => d.id !== 'attack'),
@@ -41,7 +58,14 @@ export function createTouchControls(opts: TouchControlsOptions): TouchControlsHa
       const key = document.createElement('span');
       key.className = 'tc-key';
       key.textContent = def.hotkey;
-      btn.append(icon, key);
+      const shade = document.createElement('span');
+      shade.className = 'tc-cd';
+      shade.setAttribute('aria-hidden', 'true');
+      const num = document.createElement('span');
+      num.className = 'tc-cdnum';
+      num.setAttribute('aria-hidden', 'true');
+      btn.append(icon, key, shade, num);
+      cooldownEls.set(def.id, { root: btn, shade, num });
 
       const fire = () => {
         if (def.id === 'attack') opts.onAttack();
@@ -57,16 +81,19 @@ export function createTouchControls(opts: TouchControlsOptions): TouchControlsHa
       });
       opts.host.appendChild(btn);
     }
+    syncCooldowns();
   };
 
   render();
   return {
     destroy() {
       opts.host.replaceChildren();
+      cooldownEls.clear();
     },
     rebuild(next) {
       skills = next;
       render();
     },
+    syncCooldowns,
   };
 }

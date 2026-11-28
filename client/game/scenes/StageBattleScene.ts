@@ -917,6 +917,7 @@ export class StageBattleScene extends Phaser.Scene {
     this.touchControls = createTouchControls({
       host,
       skills: jobSkills(this.state.job),
+      cooldownOf: (id) => this.cooldownOf(id),
       onAttack: () => this.castSkill('attack'),
       onCast: (id) => this.castSkill(id),
     });
@@ -1165,6 +1166,7 @@ export class StageBattleScene extends Phaser.Scene {
     const seq = this.session.cast(id);
     this.predictedCasts.add(seq);
     this.previewCast(id, aim);
+    this.touchControls?.syncCooldowns();
   }
 
   private aimAngle(aim?: { x: number; y: number }): number {
@@ -1731,6 +1733,7 @@ export class StageBattleScene extends Phaser.Scene {
     }
     for (const e of this.session.drainEvents()) this.handleEvent(e);
     this.ui.sync();
+    this.touchControls?.syncCooldowns();
   }
 
   /** 会话里的实体 → 场景视图：新出现的建、消失的删、其余更新位置与 HUD */

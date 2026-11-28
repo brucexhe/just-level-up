@@ -2178,8 +2178,10 @@
     align-items: center;
     justify-content: center;
     gap: 1px;
+    overflow: hidden;
+    padding: 0;
     border-radius: 50%;
-    background: rgba(16, 24, 36, 0.88);
+    background: rgba(48, 61, 79, 0.58);
     border: 1px solid #3a4761;
     color: #c8d0e0;
     font: 11px/1.2 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -2192,6 +2194,39 @@
   }
   .tc-btn:active {
     background: rgba(154, 208, 106, 0.35);
+  }
+  .tc-btn.cooling .tc-ico,
+  .tc-btn.cooling .tc-key {
+    opacity: 0.42;
+    filter: grayscale(1);
+  }
+  .tc-ico,
+  .tc-key {
+    position: relative;
+    z-index: 2;
+  }
+  .tc-cd {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 0;
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.94);
+    pointer-events: none;
+  }
+  .tc-cdnum {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    color: #ffd93d;
+    font: 700 18px/1 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 5px #000;
+    pointer-events: none;
   }
   /* 技能沿对角线向右上逐级排开（Q 最低、R 最高），普攻大圆压在右下 */
   .tc-btn[data-arc='0'] {
@@ -2215,7 +2250,7 @@
     height: 64px;
     left: 92px;
     bottom: 12px;
-    background: rgba(24, 44, 32, 0.92);
+    background: rgba(52, 79, 61, 0.62);
     border-color: #9ad06a;
   }
   .tc-ico {
