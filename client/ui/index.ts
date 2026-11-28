@@ -20,6 +20,7 @@ import { STAGES, artStageOf, stageDef, stageStars } from '../../shared/data/stag
 import { levelBandOfStage } from '../../shared/core/stage';
 import { PANEL_BY_ID, PANELS } from './panels';
 import type { SfxName } from '../game/audio';
+import type { NetMetricsSnapshot } from '../net/session';
 
 export interface GameUIOptions {
   /** #ui-root */
@@ -48,6 +49,8 @@ export interface GameUIOptions {
   cmd: UIApi['cmd'];
   /** 到服务端的往返延时（ms，EWMA 平滑）；0 = 尚未测到 */
   latency(): number;
+  /** 网络 / 帧时间 / 位置校正诊断，用于延迟 HUD 的悬浮详情 */
+  diagnostics(): NetMetricsSnapshot;
   /** 设置面板能力（音频 / 账号 / 角色） */
   settings: SettingsApi;
   /** UI 音效回调（由场景注入，避免 UI 直接依赖音频实现） */
@@ -641,7 +644,16 @@ export class GameUI {
           break;
         case 'ping': {
           const ping = this.opts.latency();
+          const d = this.opts.diagnostics();
           setTxt(el, ping > 0 ? `${ping}ms` : '--');
+          el.title = [
+            `RTT p95：${d.p95RttMs.toFixed(0)}ms`,
+            `抖动：${d.jitterMs.toFixed(0)}ms`,
+            `技能 ACK p95：${d.p95CastAckMs.toFixed(0)}ms`,
+            `位置硬校正：${d.snaps} 次${d.lastSnapReason ? `（最近：${d.lastSnapReason}）` : ''}`,
+            `卡顿 >100ms：${d.frameHitches} 次`,
+            `重连：${d.reconnects} 次`,
+          ].join('\n');
           // 76ms（约 1 帧 ×4）/ 151ms 两档分色，超过就是明显绕路了
           el.classList.toggle('good', ping > 0 && ping < 76);
           el.classList.toggle('warn', ping >= 76 && ping < 151);

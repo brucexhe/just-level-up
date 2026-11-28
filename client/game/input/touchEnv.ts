@@ -53,6 +53,19 @@ export function readSafeAreaInsets(): SafeAreaInsets {
  * 摇杆在画布物理像素坐标下的左下角位置。
  * 游戏 buffer = CSS 尺寸 × dpr；独立 UI 场景 zoom=1，所以这里乘 dpr 即可。
  */
+/** 摇杆方向节流：松开（null）必须立即发送，不能被上一帧的节流窗口吞掉 */
+export function shouldEmitJoystickDir(
+  lastDir: number | null,
+  lastEmitAt: number,
+  nextDir: number | null,
+  now: number,
+  minEmitMs: number,
+): boolean {
+  if (nextDir === lastDir) return false;
+  if (nextDir === null) return true;
+  return now - lastEmitAt >= minEmitMs;
+}
+
 export function joystickScreenPos(
   innerW: number,
   innerH: number,

@@ -137,17 +137,27 @@ export class StageRoom extends Room<{ state: StageState }> {
     this.on('dir', (s, m) => {
       const d = m.d;
       w().setKeyDir(s.uid, typeof d === 'number' && Number.isFinite(d) ? d : null);
+      this.flushCastAcks();
     });
     this.on('moveTo', (s, m) => {
       if (typeof m.x === 'number' && typeof m.y === 'number') w().moveTo(s.uid, m.x, m.y);
+      this.flushCastAcks();
     });
     this.on('target', (s, m) => {
       const id = m.id;
       w().selectTarget(s.uid, typeof id === 'string' && id.length <= 32 ? id : null);
+      this.flushCastAcks();
     });
     this.on('cast', (s, m) => {
-      if (typeof m.skill === 'string' && Object.hasOwn(SKILL_BY_ID, m.skill)) {
-        w().cast(s.uid, m.skill as SkillId);
+      if (
+        typeof m.skill === 'string' &&
+        Object.hasOwn(SKILL_BY_ID, m.skill) &&
+        typeof m.seq === 'number' &&
+        Number.isSafeInteger(m.seq) &&
+        m.seq >= 0
+      ) {
+        w().requestCast(s.uid, m.skill as SkillId, m.seq);
+        this.flushCastAcks();
       }
     });
     this.on('potion', (s, m) => {
@@ -201,6 +211,7 @@ export class StageRoom extends Room<{ state: StageState }> {
       void repo.resetStage(this.stage, c);
     }
     this.world.step(now);
+    this.flushCastAcks();
     this.route(this.world.drain());
     this.syncState();
     if (now - this.lastResetPush >= 1000) {
@@ -212,6 +223,13 @@ export class StageRoom extends Room<{ state: StageState }> {
       const p = this.world.players.get(seat.uid);
       if (p?.dirty) hub.markDirty(seat.uid);
       this.sendSelf(seat);
+    }
+  }
+
+  /** 技能确认不等待模拟 tick，立即私发给请求者 */
+  private flushCastAcks(): void {
+    for (const ack of this.world.drainCastAcks()) {
+      this.byUid.get(ack.pid)?.client.send('castAck', ack);
     }
   }
 

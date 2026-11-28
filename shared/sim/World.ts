@@ -104,7 +104,7 @@ export interface PlayerEnt {
   /** 左键选中的怪 */
   targetId: string | null;
   /** 待释放的目标技能：目标超出施法距离时先走向它，进圈后真正释放 */
-  pendingCast: { skill: SkillId; since: number } | null;
+  pendingCast: { skill: SkillId; since: number; seq: number } | null;
   nextAttackAt: number;
   /** 自动普攻：开着 = 定时打攻击距离内最近的怪（客户端设置面板可关） */
   autoAttack: boolean;
@@ -185,13 +185,29 @@ export interface FireballEnt {
 
 export type HitKind = 'melee' | 'fire' | 'poison';
 
-export type CastFail = 'dead' | 'notLearned' | 'cooldown' | 'needTarget' | 'tooFar' | 'noMp';
+export type CastFail = 'dead' | 'notLearned' | 'cooldown' | 'needTarget' | 'tooFar' | 'noMp' | 'cancelled';
+
+export interface CastResult {
+  pid: string;
+  seq: number;
+  skill: SkillId;
+  ok: boolean;
+  /** 已接受，但需自动接近目标后才真正释放 */
+  pending?: boolean;
+  reason?: CastFail;
+  targetId?: string | null;
+  /** 服务端剩余冷却；客户端据此扣除估算单程延迟 */
+  cdLeft: number;
+  /** 普攻间隔等可重试等待时间 */
+  retryMs?: number;
+  serverTime: number;
+}
 
 /**
  * 世界事件：宿主（关卡房间）每 tick 取走，公共事件广播，带 `to` 的只发给本人。
  */
 export type WorldEvent =
-  | { k: 'swing'; pid: string; angle: number; empty: boolean }
+  | { k: 'swing'; pid: string; angle: number; empty: boolean; seq?: number; serverTime?: number }
   | { k: 'hit'; mid: string; by: string; dmg: number; kind: HitKind; heavy: boolean; x: number; y: number; angle: number }
   | { k: 'kill'; mid: string; x: number; y: number; isBoss: boolean; level: number; name: string }
   | { k: 'reward'; to: string; mid: string; exp: number; gold: number; level: number; isBoss: boolean; drops: GroundDrop[]; x: number; y: number }
@@ -200,8 +216,8 @@ export type WorldEvent =
   | { k: 'die'; pid: string; killer: { name: string; level: number; isBoss: boolean } }
   | { k: 'revive'; pid: string }
   | { k: 'heal'; pid: string; by: string; amount: number }
-  | { k: 'cast'; pid: string; skill: SkillId; lv: number; x?: number; y?: number; radius?: number; hits?: number; perTick?: number; duration?: number; value?: number }
-  | { k: 'castFail'; to: string; skill: SkillId; reason: CastFail }
+  | { k: 'cast'; pid: string; skill: SkillId; lv: number; x?: number; y?: number; radius?: number; hits?: number; perTick?: number; duration?: number; value?: number; seq?: number; serverTime?: number }
+  | { k: 'castFail'; to: string; skill: SkillId; reason: CastFail; seq?: number; serverTime?: number }
   | { k: 'boltHit'; x: number; y: number; snipe?: boolean; moon?: boolean }
   | { k: 'potion'; to: string; kind: PotionKind; res: PotionUseResult; heal: number }
   | { k: 'pickup'; to: string; did: string; drop: GroundDrop }
@@ -232,6 +248,8 @@ export class World {
   killed: Record<number, number>;
   bossKilled: boolean;
   events: WorldEvent[] = [];
+  /** 技能请求的即时结果，由房间取走并私发给本人 */
+  castAcks: CastResult[] = [];
   now = 0;
   private seq = 0;
   private rng: () => number;
@@ -254,6 +272,12 @@ export class World {
   drain(): WorldEvent[] {
     const out = this.events;
     this.events = [];
+    return out;
+  }
+
+  drainCastAcks(): CastResult[] {
+    const out = this.castAcks;
+    this.castAcks = [];
     return out;
   }
 
@@ -280,7 +304,10 @@ export class World {
     this.bossKilled = false;
     this.monsters.clear();
     this.fireballs.clear();
-    for (const p of this.players.values()) p.targetId = null;
+    for (const p of this.players.values()) {
+      p.targetId = null;
+      this.cancelPendingCast(p);
+    }
     this.spawnAll();
     this.events.push({ k: 'stageReset' });
   }
@@ -368,7 +395,7 @@ export class World {
     p.keyDir = dir === null || !Number.isFinite(dir) ? null : dir;
     if (p.keyDir !== null) {
       p.moveTarget = null;
-      p.pendingCast = null; // 玩家手动走位，取消待释放技能
+      this.cancelPendingCast(p);
     }
   }
 
@@ -377,26 +404,27 @@ export class World {
     const p = this.players.get(id);
     if (!p || p.dead || !Number.isFinite(x) || !Number.isFinite(y)) return;
     p.targetId = null;
-    p.pendingCast = null;
+    this.cancelPendingCast(p);
     p.moveTarget = {
       x: Math.max(8, Math.min(MAP_SIZE - 8, x)),
       y: Math.max(8, Math.min(MAP_SIZE - 8, y)),
     };
   }
 
-  /** 左键选中怪物（null 取消）；够得着就立刻砍一刀 */
+  /** 左键选中怪物（null 取消）；攻击由独立的 cast(attack) 请求触发并确认 */
   selectTarget(id: string, mid: string | null): void {
     const p = this.players.get(id);
     if (!p || p.dead) return;
     if (mid === null) {
       p.targetId = null;
+      this.cancelPendingCast(p);
       return;
     }
     const m = this.monsters.get(mid);
     if (!m) return;
     p.moveTarget = null;
     p.targetId = mid;
-    if (dist(p.x, p.y, m.x, m.y) <= this.attackRange(p)) this.tryMelee(p);
+    this.cancelPendingCast(p);
   }
 
   /** 该玩家的普攻距离：职业可覆盖（弓箭手远程），默认近战 ATTACK_RANGE */
@@ -433,20 +461,42 @@ export class World {
 
   // ---------------- 技能 ----------------
 
-  /** 释放技能；失败原因通过 castFail 事件告诉本人，返回是否成功 */
+  /** 兼容 headless 调用：只关心是否接受；网络层用 requestCast 取完整确认结果 */
   cast(id: string, skill: SkillId): boolean {
+    return this.requestCast(id, skill, 0).ok;
+  }
+
+  /** 网络技能入口：立即返回接受 / 排队 / 失败结果，事件仍在 tick 统一广播 */
+  requestCast(id: string, skill: SkillId, seq: number): CastResult {
     const p = this.players.get(id);
-    if (!p) return false;
-    const fail = (reason: CastFail) => {
-      this.events.push({ k: 'castFail', to: p.id, skill, reason });
-      return false;
+    if (!p) {
+      const out = { pid: id, seq, skill, ok: false, reason: 'dead' as const, cdLeft: 0, serverTime: this.now };
+      this.castAcks.push(out);
+      return out;
+    }
+    this.cancelPendingCast(p);
+    const result = (r: Omit<CastResult, 'pid' | 'seq' | 'skill' | 'serverTime'>): CastResult => ({
+      pid: id,
+      seq,
+      skill,
+      serverTime: this.now,
+      ...r,
+    });
+    const fail = (reason: CastFail, retryMs?: number): CastResult => {
+      this.events.push({ k: 'castFail', to: p.id, skill, reason, seq, serverTime: this.now });
+      const out = result({ ok: false, reason, cdLeft: this.cooldownLeft(p, skill), retryMs });
+      this.castAcks.push(out);
+      return out;
     };
     if (p.dead) return fail('dead');
     const s = p.state;
     const lv = skillLevel(s, skill);
     if (lv <= 0) return fail('notLearned');
-    if (this.cooldownLeft(p, skill) > 0) return fail('cooldown');
     const def = SKILL_BY_ID[skill];
+    if (this.cooldownLeft(p, skill) > 0) return fail('cooldown', this.cooldownLeft(p, skill));
+    if (skill === 'attack' && this.now < p.nextAttackAt) {
+      return fail('cooldown', p.nextAttackAt - this.now);
+    }
     // 需要目标的技能（火球 / 毒刃 / 穿杨箭 / 箭雨）：校验放在扣蓝之前，免得白扣蓝、白进冷却
     let target: MonsterEnt | null = null;
     if (def.needsTarget) {
@@ -458,14 +508,17 @@ export class World {
       const cost0 = skillMpCost(def, lv);
       if (cost0 > 0 && s.mp < cost0) return fail('noMp');
       if (dist(p.x, p.y, target.x, target.y) > CAST_RANGE) {
-        // 超施法距离：不提示也不扣蓝，先走向目标，进圈后由 stepPlayer 真正释放
-        p.pendingCast = { skill, since: this.now };
-        return true;
+        // 超施法距离：先走向目标；接受、完成、取消都会返回同一个 seq 的确认
+        p.pendingCast = { skill, since: this.now, seq };
+        const out = result({ ok: true, pending: true, targetId: target.id, cdLeft: 0 });
+        this.castAcks.push(out);
+        return out;
       }
     }
     const cost = skillMpCost(def, lv);
     if (cost > 0 && !spendMp(s, cost)) return fail('noMp');
     p.dirty = true;
+    const eventStart = this.events.length;
     switch (skill) {
       case 'attack':
         if (!this.tryMelee(p)) this.emptySwing(p);
@@ -497,8 +550,40 @@ export class World {
         this.events.push({ k: 'cast', pid: p.id, skill, lv, value: skillPower(SKILL_BY_ID.shield, lv) });
         break;
     }
+    for (let i = eventStart; i < this.events.length; i++) {
+      const e = this.events[i]!;
+      if (e.k === 'cast' || e.k === 'swing') {
+        e.seq = seq;
+        e.serverTime = this.now;
+      }
+    }
     p.cooldowns[skill] = this.now + skillCooldown(def, lv);
-    return true;
+    const out = result({ ok: true, targetId: target?.id ?? null, cdLeft: skillCooldown(def, lv) });
+    this.castAcks.push(out);
+    return out;
+  }
+
+  private cancelPendingCast(p: PlayerEnt): void {
+    const pc = p.pendingCast;
+    if (!pc) return;
+    p.pendingCast = null;
+    this.events.push({
+      k: 'castFail',
+      to: p.id,
+      skill: pc.skill,
+      reason: 'cancelled',
+      seq: pc.seq,
+      serverTime: this.now,
+    });
+    this.castAcks.push({
+      pid: p.id,
+      seq: pc.seq,
+      skill: pc.skill,
+      ok: false,
+      reason: 'cancelled',
+      cdLeft: 0,
+      serverTime: this.now,
+    });
   }
 
   /** 火球 / 穿杨箭共用追踪弹：火球走法攻法防，穿杨箭走物攻物防、更快 */
@@ -831,7 +916,7 @@ export class World {
     p.dead = true;
     p.state.hp = 0;
     p.targetId = null;
-    p.pendingCast = null;
+    this.cancelPendingCast(p);
     p.moveTarget = null;
     p.keyDir = null;
     p.frenzyUntil = 0;
@@ -881,13 +966,13 @@ export class World {
     // 施法自动接近：进圈真正释放；目标没了 / 超时作废
     if (p.pendingCast) {
       if (!sel) {
-        p.pendingCast = null;
+        this.cancelPendingCast(p);
       } else if (dist(p.x, p.y, sel.x, sel.y) <= CAST_RANGE) {
         const pc = p.pendingCast;
         p.pendingCast = null;
-        this.cast(p.id, pc.skill);
+        this.requestCast(p.id, pc.skill, pc.seq);
       } else if (this.now - p.pendingCast.since > CAST_APPROACH_TIMEOUT) {
-        p.pendingCast = null;
+        this.cancelPendingCast(p);
       }
     }
     const speed = moveSpeed(aggregatedStats(p.state).speed ?? 0);
@@ -912,7 +997,7 @@ export class World {
         if (moved < 2) {
           p.moveTarget = null;
           p.targetId = null;
-          p.pendingCast = null;
+          this.cancelPendingCast(p);
         }
       }
     } else {

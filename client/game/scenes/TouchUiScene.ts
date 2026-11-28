@@ -5,6 +5,7 @@ import {
   joystickScreenPos,
   pixelRatio,
   readSafeAreaInsets,
+  shouldEmitJoystickDir,
 } from '../input/touchEnv';
 
 type DirHandler = (d: number | null) => void;
@@ -17,7 +18,7 @@ type DirHandler = (d: number | null) => void;
 export class TouchUiScene extends Phaser.Scene {
   /** 方向量化步长：24 档（15°），拖动摇杆画一整圈最多 24 次方向变化 */
   private static readonly DIR_STEP = Math.PI / 12;
-  /** 方向最小上报间隔（ms）：压到 ~16 条/s，远低于服务端消息限速 30 条/s */
+  /** 方向最小上报间隔（ms）：压到 ~16 条/s，给技能与 ping 留足消息余量 */
   private static readonly MIN_EMIT_MS = 60;
   private onDir: DirHandler = () => {};
   private joystick: VirtualJoystick | null = null;
@@ -94,8 +95,7 @@ export class TouchUiScene extends Phaser.Scene {
   /**
    * 摇杆方向上报：量化到 24 档 + 最小 60ms 间隔。
    * rex 的 update 事件每帧都触发，若把浮点角度原样上报，拖动摇杆时
-   * `dir` 消息可达 60 条/s，会触发服务端 maxMessagesPerSecond(30) 强制断线
-   * （表现为"移动走一会儿就提示连接已断开"）。
+   * `dir` 消息可达 60 条/s，挤占技能与 ping 的消息余量。
    */
   private emitDirection(): void {
     const j = this.joystick;
@@ -103,9 +103,10 @@ export class TouchUiScene extends Phaser.Scene {
       !j || !j.enable || j.noKey
         ? null
         : Math.round(j.rotation / TouchUiScene.DIR_STEP) * TouchUiScene.DIR_STEP;
-    if (d === this.lastEmitDir) return;
     const now = performance.now();
-    if (now - this.lastEmitAt < TouchUiScene.MIN_EMIT_MS) return;
+    if (!shouldEmitJoystickDir(this.lastEmitDir, this.lastEmitAt, d, now, TouchUiScene.MIN_EMIT_MS)) {
+      return;
+    }
     this.lastEmitDir = d;
     this.lastEmitAt = now;
     this.onDir(d);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOOT } from '../shared/config';
-import { buildObstacles, PICKUP_RANGE } from '../shared/sim/map';
+import { buildObstacles, CAST_APPROACH_TIMEOUT, CAST_RANGE, PICKUP_RANGE } from '../shared/sim/map';
 import { seeded } from '../shared/sim/rng';
 import { World, type MonsterEnt, type WorldEvent } from '../shared/sim/World';
 import { ARROW_RAIN_WAVES, ARROW_RAIN_WAVE_MS } from '../shared/data/skills';
@@ -219,6 +219,98 @@ describe('World 战斗', () => {
     w.step(T0 + 50);
     expect(w.drops.has(d.id)).toBe(false);
     expect(w.drain().some((e) => e.k === 'pickup' && e.to === 'a')).toBe(true);
+  });
+});
+
+describe('World 技能确认', () => {
+  it('成功施法返回 seq，权威 cast 事件携带同一 seq', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState(0));
+    const m = normal(w);
+    m.data.aggressive = false;
+    m.data.hp = 1e9;
+    m.data.maxHp = 1e9;
+    p.x = m.x + 50;
+    p.y = m.y;
+    w.selectTarget('a', m.id);
+
+    const ack = w.requestCast('a', 'fireball', 7);
+    expect(ack).toMatchObject({ pid: 'a', seq: 7, skill: 'fireball', ok: true });
+    expect(ack.pending).not.toBe(true);
+    expect(ack.cdLeft).toBeGreaterThan(0);
+    expect(w.drainCastAcks()).toEqual([ack]);
+    expect(w.drain().find((e) => e.k === 'cast')).toMatchObject({ pid: 'a', skill: 'fireball', seq: 7 });
+  });
+
+  it('超距离先接受自动接近，进圈后用同一 seq 确认真正释放', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState(0));
+    const m = normal(w);
+    m.data.aggressive = false;
+    m.data.hp = 1e9;
+    m.data.maxHp = 1e9;
+    m.x = p.x + CAST_RANGE + 100;
+    m.y = p.y;
+    w.selectTarget('a', m.id);
+    const mp = p.state.mp;
+
+    const pending = w.requestCast('a', 'fireball', 11);
+    expect(pending).toMatchObject({ seq: 11, ok: true, pending: true, targetId: m.id, cdLeft: 0 });
+    expect(p.state.mp).toBe(mp);
+    expect(w.cooldownLeft(p, 'fireball')).toBe(0);
+    expect(w.drainCastAcks()).toEqual([pending]);
+
+    m.x = p.x + 50;
+    w.step(T0 + 100);
+    const done = w.drainCastAcks();
+    expect(done).toHaveLength(1);
+    expect(done[0]).toMatchObject({ seq: 11, ok: true });
+    expect(done[0]!.pending).not.toBe(true);
+    expect(done[0]!.cdLeft).toBeGreaterThan(0);
+  });
+
+  it('手动移动取消自动接近，并返回取消 ACK', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState(0));
+    const m = normal(w);
+    m.x = p.x + CAST_RANGE + 100;
+    m.y = p.y;
+    w.selectTarget('a', m.id);
+    w.requestCast('a', 'fireball', 12);
+    w.drainCastAcks();
+
+    w.moveTo('a', p.x + 10, p.y);
+    expect(w.drainCastAcks()).toEqual([
+      expect.objectContaining({ seq: 12, skill: 'fireball', ok: false, reason: 'cancelled' }),
+    ]);
+    expect(w.drain().some((e) => e.k === 'castFail' && e.seq === 12 && e.reason === 'cancelled')).toBe(true);
+  });
+
+  it('自动接近超时会取消并确认，不再静默丢弃', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState(0));
+    const m = normal(w);
+    m.x = p.x + CAST_RANGE + 100;
+    m.y = p.y;
+    w.selectTarget('a', m.id);
+    w.requestCast('a', 'fireball', 13);
+    w.drainCastAcks();
+    p.pendingCast!.since = T0 - CAST_APPROACH_TIMEOUT - 1;
+
+    w.step(T0 + 50);
+    expect(w.drainCastAcks()).toEqual([
+      expect.objectContaining({ seq: 13, skill: 'fireball', ok: false, reason: 'cancelled' }),
+    ]);
+  });
+
+  it('普攻间隔未到时明确返回 cooldown 和重试时间，不产生空挥', () => {
+    const w = world();
+    const p = w.addPlayer('a', 'A', createInitialState());
+    p.nextAttackAt = T0 + 500;
+
+    const ack = w.requestCast('a', 'attack', 14);
+    expect(ack).toMatchObject({ seq: 14, skill: 'attack', ok: false, reason: 'cooldown', retryMs: 500 });
+    expect(w.drain().some((e) => e.k === 'swing')).toBe(false);
   });
 });
 

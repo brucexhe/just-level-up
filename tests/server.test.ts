@@ -1,7 +1,7 @@
 import { Client, type Room } from '@colyseus/sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { defaultCycle } from '../shared/config';
-import { CLOSE_KICKED, ROOM_STAGE, type EventBatch, type SelfSync } from '../shared/protocol';
+import { CLOSE_KICKED, ROOM_STAGE, type CastAck, type EventBatch, type SelfSync } from '../shared/protocol';
 import { createApp } from '../server/app';
 import { MemoryKv } from '../server/kv';
 
@@ -46,6 +46,7 @@ async function join(token: string, stage = 1): Promise<Room> {
   // 先挂一个空回调，再发 ready：和真实客户端的时序一致
   room.onMessage('ev', () => {});
   room.onMessage('self', () => {});
+  room.onMessage('castAck', () => {});
   setTimeout(() => room.send('ready', {}), 0);
   return room;
 }
@@ -134,12 +135,11 @@ describe('关卡房间', () => {
     const acked = await next<SelfSync>(ra, 'self', (m) => m.ack >= 1);
     expect(acked.state.attrPoints).toBe(0); // 没点数可加，结果以服务端为准
 
-    // 未学习的技能 → castFail 只发给本人
+    // 未学习的技能 → ACK 只发给本人，并带请求序号
     //（火球等需目标技能如今会自动锁定最近的怪，不再稳定失败，故改用跨职业技能）
-    const failA = next<EventBatch>(ra, 'ev', (evs) => evs.some((e) => e.k === 'castFail'));
-    ra.send('cast', { skill: 'snipe' });
-    const evs = await failA;
-    expect(evs.find((e) => e.k === 'castFail')).toMatchObject({ reason: 'notLearned' });
+    const failA = next<CastAck>(ra, 'castAck', (m) => m.seq === 1);
+    ra.send('cast', { skill: 'snipe', seq: 1 });
+    expect(await failA).toMatchObject({ seq: 1, skill: 'snipe', ok: false, reason: 'notLearned' });
 
     await ra.leave();
     await rb.leave();
@@ -155,11 +155,30 @@ describe('关卡房间', () => {
       (rb.state as { players: Map<string, { shield?: boolean }> }).players.get(a.uid!)!;
 
     expect(pub().shield).toBe(false);
-    ra.send('cast', { skill: 'shield' });
+    ra.send('cast', { skill: 'shield', seq: 1 });
     await until(() => pub().shield === true);
 
     await ra.leave();
     await rb.leave();
+  });
+
+  it('技能 ACK 与权威 cast 事件使用同一序号', async () => {
+    const a = await account('ack_a');
+    const ra = await join(a.token!);
+    await next<SelfSync>(ra, 'self');
+    const ackP = next<CastAck>(ra, 'castAck', (m) => m.seq === 42);
+    const eventP = next<EventBatch>(
+      ra,
+      'ev',
+      (evs) => evs.some((e) => e.k === 'cast' && e.skill === 'shield' && e.seq === 42),
+    );
+
+    ra.send('cast', { skill: 'shield', seq: 42 });
+    expect(await ackP).toMatchObject({ seq: 42, skill: 'shield', ok: true });
+    expect(await eventP).toEqual(
+      expect.arrayContaining([expect.objectContaining({ k: 'cast', pid: a.uid, skill: 'shield', seq: 42 })]),
+    );
+    await ra.leave();
   });
 
   it('注册选择的职业写进存档并同步；旧账号默认法师', async () => {
@@ -202,7 +221,9 @@ describe('关卡房间', () => {
     const kicked = new Promise<number>((res) => r1.onLeave((code: number) => res(code)));
     const r2 = await join(a.token!);
     expect(await kicked).toBe(CLOSE_KICKED);
-    await next<SelfSync>(r2, 'self');
+    const selfP = next<SelfSync>(r2, 'self');
+    r2.send('ready', {});
+    await selfP;
     await r2.leave();
   });
 });

@@ -1,6 +1,7 @@
 import type { PotionKind } from '../../shared/core/economy';
 import type { SkillId } from '../../shared/data/skills';
 import type { Obstacle } from '../../shared/sim/map';
+import type { CastAck } from '../../shared/protocol';
 import type { WorldEvent } from '../../shared/sim/World';
 import type { Command, CommandResult } from '../../shared/state/commands';
 import type { GameState } from '../../shared/state/gameState';
@@ -72,6 +73,19 @@ export interface FireballView {
   kind: 'fireball' | 'snipe' | 'moonEclipse';
 }
 
+export interface NetMetricsSnapshot {
+  rttMs: number;
+  p95RttMs: number;
+  jitterMs: number;
+  p95CastAckMs: number;
+  frameHitches: number;
+  maxFrameMs: number;
+  snaps: number;
+  lastSnapDistance: number;
+  lastSnapReason: string;
+  reconnects: number;
+}
+
 export interface Session {
   /** 自己在世界里的 id（服务端是 uid） */
   readonly selfId: string;
@@ -100,13 +114,18 @@ export interface Session {
   resetLeft(): number;
   /** 到服务端的往返延时（ms，EWMA 平滑）；尚未测到时为 0 */
   latency(): number;
+  /** 网络 / 帧时间 / 位置校正诊断快照 */
+  diagnostics(): NetMetricsSnapshot;
 
   setDir(d: number | null): void;
   moveTo(x: number, y: number): void;
   target(id: string | null): void;
   /** 当前选中的怪（以本地输入为准，服务端同样记着） */
   targetId(): string | null;
-  cast(id: SkillId): void;
+  /** 发送技能请求并返回序号；场景用它把权威事件与本地预测去重 */
+  cast(id: SkillId): number;
+  /** 取走技能确认结果，用于失败回滚与提示 */
+  drainCastAcks(): CastAck[];
   drink(kind: PotionKind): void;
   /** 自动普攻开关：发消息给服务端 */
   setAutoAttack(on: boolean): void;

@@ -1,15 +1,23 @@
 import { Client, type Room } from '@colyseus/sdk';
 import { moveSpeed } from '../../shared/core/formulas';
 import type { PotionKind } from '../../shared/core/economy';
-import type { SkillId } from '../../shared/data/skills';
-import { CLOSE_KICKED, CLOSE_LOCKED_STAGE, ROOM_STAGE, type EventBatch, type SelfSync } from '../../shared/protocol';
+import { skillCooldown } from '../../shared/core/skills';
+import { SKILL_BY_ID, type SkillId } from '../../shared/data/skills';
+import {
+  CLOSE_KICKED,
+  CLOSE_LOCKED_STAGE,
+  ROOM_STAGE,
+  type CastAck,
+  type EventBatch,
+  type SelfSync,
+} from '../../shared/protocol';
 import { buildObstacles, dist, type Obstacle } from '../../shared/sim/map';
 import { advance, steerDir, type WorldEvent } from '../../shared/sim/World';
 import { applyCommand, type Command, type CommandResult } from '../../shared/state/commands';
-import { aggregatedStats, createInitialState, type GameState } from '../../shared/state/gameState';
+import { aggregatedStats, createInitialState, skillLevel, type GameState } from '../../shared/state/gameState';
 import { normalizeState } from '../../shared/state/normalize';
 import { serverWsUrl } from './api';
-import type { DropView, FireballView, MonsterView, PlayerView, Session } from './session';
+import type { DropView, FireballView, MonsterView, NetMetricsSnapshot, PlayerView, Session } from './session';
 
 /** 远端实体的平滑：每帧向最新的服务端坐标靠拢（指数平滑，约 70ms 追上） */
 const SMOOTH = 15;
@@ -20,6 +28,71 @@ interface Tracked<V> {
   view: V;
   tx: number;
   ty: number;
+}
+
+const percentile = (values: number[], p: number): number => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)]!;
+};
+
+/** 只保留最近样本，避免长时间挂机时诊断数组无限增长 */
+export class NetMetrics {
+  private rtts: number[] = [];
+  private acks: number[] = [];
+  private frameHitches = 0;
+  private maxFrameMs = 0;
+  private snaps = 0;
+  private lastSnapDistance = 0;
+  private lastSnapReason = '';
+
+  private push(values: number[], value: number): void {
+    values.push(value);
+    if (values.length > 120) values.shift();
+  }
+
+  recordRtt(ms: number): void {
+    this.push(this.rtts, ms);
+  }
+
+  recordAck(ms: number): void {
+    this.push(this.acks, ms);
+  }
+
+  recordFrame(ms: number): void {
+    if (ms <= 0) return;
+    this.maxFrameMs = Math.max(this.maxFrameMs, ms);
+    if (ms > 100) this.frameHitches += 1;
+  }
+
+  recordSnap(distance: number, reason: string): void {
+    this.snaps += 1;
+    this.lastSnapDistance = distance;
+    this.lastSnapReason = reason;
+  }
+
+  snapshot(reconnects: number): NetMetricsSnapshot {
+    const p50 = percentile(this.rtts, 0.5);
+    return {
+      rttMs: p50,
+      p95RttMs: percentile(this.rtts, 0.95),
+      jitterMs: Math.max(0, percentile(this.rtts, 0.95) - p50),
+      p95CastAckMs: percentile(this.acks, 0.95),
+      frameHitches: this.frameHitches,
+      maxFrameMs: this.maxFrameMs,
+      snaps: this.snaps,
+      lastSnapDistance: this.lastSnapDistance,
+      lastSnapReason: this.lastSnapReason,
+      reconnects,
+    };
+  }
+}
+
+interface PendingCast {
+  skill: SkillId;
+  sentAt: number;
+  previousCdReadyAt: number;
+  pending: boolean;
 }
 
 type AnyState = {
@@ -49,6 +122,12 @@ export class OnlineSession implements Session {
   private seq = 0;
   private events: WorldEvent[] = [];
   private cdReadyAt: Partial<Record<SkillId, number>> = {};
+  private castSeq = 0;
+  private pendingCasts = new Map<number, PendingCast>();
+  private castAckQueue: CastAck[] = [];
+  private readonly metrics = new NetMetrics();
+  private reconnects = 0;
+  private snapReason = 'threshold';
   private frenzyUntil = 0;
   private shieldUntil = 0;
   private isDead = false;
@@ -81,6 +160,11 @@ export class OnlineSession implements Session {
   ) {
     this.stage = stage;
     this.obstacles = buildObstacles(stage);
+    try {
+      this.reconnects = Number(sessionStorage.getItem('lvup:reconnect-count')) || 0;
+    } catch {
+      this.reconnects = 0;
+    }
   }
 
   /** 连接并进入关卡房间；会等到第一份私有状态到达再返回 */
@@ -102,6 +186,10 @@ export class OnlineSession implements Session {
     this.dropsV.clear();
     this.fireballsT.clear();
     this.events = [];
+    this.pendingCasts.clear();
+    this.castAckQueue = [];
+    this.castSeq = 0;
+    this.snapReason = 'join';
     this.myTarget = null;
     this.gotSelf = false;
 
@@ -114,8 +202,10 @@ export class OnlineSession implements Session {
     room.onMessage('ev', (batch: EventBatch) => {
       for (const e of batch) this.events.push(e);
     });
+    room.onMessage('castAck', (m: CastAck) => this.onCastAck(m));
     room.onMessage('pong', (m: { t: number }) => {
       const rtt = performance.now() - m.t;
+      this.metrics.recordRtt(rtt);
       // EWMA 平滑：单次抖动不至于让数字乱跳
       this.pingMs = this.pingMs === 0 ? rtt : this.pingMs * 0.7 + rtt * 0.3;
     });
@@ -147,18 +237,54 @@ export class OnlineSession implements Session {
 
   private onSelf(m: SelfSync): void {
     const now = performance.now();
+    const wasDead = this.isDead;
     this.authoritative = normalizeState(m.state);
     // 服务端已经处理过的本地操作扔掉，剩下的在新状态上重放一遍
     this.pending = this.pending.filter((p) => p.seq > m.ack);
     const s = structuredClone(this.authoritative);
     for (const p of this.pending) applyCommand(s, p.c);
     this.s = s;
+    const optimistic = new Map<SkillId, number>();
+    for (const p of this.pendingCasts.values()) {
+      const until = this.cdReadyAt[p.skill] ?? 0;
+      if (until > now) optimistic.set(p.skill, until);
+    }
     this.cdReadyAt = {};
-    for (const [k, v] of Object.entries(m.cd)) this.cdReadyAt[k as SkillId] = now + (v ?? 0);
+    const oneWay = this.pingMs / 2;
+    for (const [k, v] of Object.entries(m.cd)) {
+      this.cdReadyAt[k as SkillId] = now + Math.max(0, (v ?? 0) - oneWay);
+    }
+    for (const [skill, until] of optimistic) {
+      this.cdReadyAt[skill] = Math.max(this.cdReadyAt[skill] ?? 0, until);
+    }
     this.frenzyUntil = now + m.frenzyLeft;
     this.shieldUntil = now + m.shieldLeft;
     this.isDead = m.dead;
+    if (wasDead && !m.dead) this.snapReason = 'revive';
     this.gotSelf = true;
+  }
+
+  private onCastAck(m: CastAck): void {
+    const p = this.pendingCasts.get(m.seq);
+    if (!p || p.skill !== m.skill) return;
+    const now = performance.now();
+    this.metrics.recordAck(now - p.sentAt);
+    if (m.pending) {
+      p.pending = true;
+      // 自动接近尚未真正出手：撤掉乐观冷却，等最终成功 ACK 再校准
+      this.cdReadyAt[m.skill] = p.previousCdReadyAt;
+    } else {
+      this.pendingCasts.delete(m.seq);
+      if (m.ok) {
+        const oneWay = this.pingMs / 2;
+        this.cdReadyAt[m.skill] = now + Math.max(0, m.cdLeft - oneWay);
+      } else if (m.reason === 'cooldown' && m.cdLeft > 0) {
+        this.cdReadyAt[m.skill] = now + Math.max(0, m.cdLeft - this.pingMs / 2);
+      } else {
+        this.cdReadyAt[m.skill] = p.previousCdReadyAt;
+      }
+    }
+    this.castAckQueue.push(m);
   }
 
   private st(): AnyState | undefined {
@@ -166,8 +292,11 @@ export class OnlineSession implements Session {
   }
 
   update(now: number): void {
-    const dt = this.lastUpdate ? Math.min(0.1, (now - this.lastUpdate) / 1000) : 0;
+    const frameMs = this.lastUpdate ? now - this.lastUpdate : 0;
+    this.metrics.recordFrame(frameMs);
+    const dt = this.lastUpdate ? Math.min(0.1, frameMs / 1000) : 0;
     this.lastUpdate = now;
+    this.expirePendingCasts(now);
     const st = this.st();
     // 切关卡时 this.room 已经指向新房间，但首份 state 还没解码完，各 map 会短暂为 undefined
     if (!st?.players || !st.monsters || !st.drops || !st.fireballs) return;
@@ -260,6 +389,8 @@ export class OnlineSession implements Session {
   private predictSelf(t: Tracked<PlayerView>, dt: number): void {
     const me = this.me;
     if (this.isDead || t.view.dead) {
+      const distance = dist(me.x, me.y, t.tx, t.ty);
+      if (distance > SNAP_DIST) this.metrics.recordSnap(distance, 'dead');
       me.x = t.tx;
       me.y = t.ty;
       me.moveTarget = null;
@@ -269,6 +400,8 @@ export class OnlineSession implements Session {
       advance(me, dir, speed, dt, this.obstacles);
       const err = dist(me.x, me.y, t.tx, t.ty);
       if (err > SNAP_DIST) {
+        this.metrics.recordSnap(err, this.snapReason);
+        this.snapReason = 'threshold';
         me.x = t.tx;
         me.y = t.ty;
       } else {
@@ -300,6 +433,7 @@ export class OnlineSession implements Session {
         if (id === this.selfId) {
           this.me.x = next.x;
           this.me.y = next.y;
+          this.snapReason = 'threshold';
         }
         return;
       }
@@ -375,8 +509,37 @@ export class OnlineSession implements Session {
   targetId(): string | null {
     return this.myTarget;
   }
-  cast(id: SkillId): void {
-    this.room.send('cast', { skill: id });
+  cast(id: SkillId): number {
+    const now = performance.now();
+    const seq = ++this.castSeq;
+    const previousCdReadyAt = this.cdReadyAt[id] ?? 0;
+    const total = skillCooldown(SKILL_BY_ID[id], Math.max(1, skillLevel(this.s, id)));
+    this.cdReadyAt[id] = now + total;
+    this.pendingCasts.set(seq, { skill: id, sentAt: now, previousCdReadyAt, pending: false });
+    this.room.send('cast', { skill: id, seq });
+    return seq;
+  }
+  drainCastAcks(): CastAck[] {
+    const out = this.castAckQueue;
+    this.castAckQueue = [];
+    return out;
+  }
+  private expirePendingCasts(now: number): void {
+    const timeout = Math.max(8000, this.pingMs * 6);
+    for (const [seq, p] of this.pendingCasts) {
+      if (now - p.sentAt <= timeout) continue;
+      this.pendingCasts.delete(seq);
+      this.cdReadyAt[p.skill] = p.previousCdReadyAt;
+      this.castAckQueue.push({
+        pid: this.selfId,
+        seq,
+        skill: p.skill,
+        ok: false,
+        reason: 'cancelled',
+        cdLeft: 0,
+        serverTime: 0,
+      });
+    }
   }
   drink(kind: PotionKind): void {
     this.room.send('potion', { kind });
@@ -428,6 +591,9 @@ export class OnlineSession implements Session {
   }
   latency(): number {
     return Math.round(this.pingMs);
+  }
+  diagnostics(): NetMetricsSnapshot {
+    return this.metrics.snapshot(this.reconnects);
   }
   dispose(): void {
     if (this.pingTimer) clearInterval(this.pingTimer);

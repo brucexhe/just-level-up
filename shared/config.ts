@@ -27,8 +27,8 @@ export const NET = {
   TICK_MS: 50,
   /** 私有状态（背包 / 经验 / 点数）最多每隔多久推一次 */
   SELF_SYNC_MS: 100,
-  /** 每个连接每秒最多处理的消息数 */
-  MAX_MSG_PER_SEC: 30,
+  /** 每个连接每秒最多处理的消息数：摇杆约 16 条/秒，需留出技能与突发操作余量 */
+  MAX_MSG_PER_SEC: 60,
 };
 
 export interface CycleConfig {

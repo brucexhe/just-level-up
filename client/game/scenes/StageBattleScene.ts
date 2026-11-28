@@ -275,6 +275,8 @@ export class StageBattleScene extends Phaser.Scene {
   private shadow!: Phaser.GameObjects.Image;
   /** 普攻特效（按职业：剑 = 刀光六层，弓 = 飞箭，杖 = 小火球）+ 命中反馈，见 fx/attackFx.ts */
   private attackFxs = new Map<number, AttackFx>();
+  /** 已本地播放起手的技能序号：对应权威事件到达时只补结果，不重复起手 */
+  private predictedCasts = new Set<number>();
   /** 狂暴特效：脚下光圈 + preFX 轮廓光，见 fx/frenzyFx.ts */
   private frenzyFx!: FrenzyFx;
   /** 火球飞行视图，见 fx/fireballFx.ts */
@@ -444,6 +446,7 @@ export class StageBattleScene extends Phaser.Scene {
       snapshot: () => this.snapshot(),
       state: () => this.state,
       pos: () => ({ x: Math.round(this.player.x), y: Math.round(this.player.y) }),
+      net: () => this.session.diagnostics(),
       step: (n: number) => {
         let t = performance.now();
         for (let i = 0; i < n; i++) {
@@ -746,6 +749,7 @@ export class StageBattleScene extends Phaser.Scene {
   private rebuildStage(): void {
     this.stage = this.session.stage;
     this.clearWorldViews();
+    this.predictedCasts.clear();
     // 换关 = 换地形：地面砖与障碍都要按新关卡重铺
     this.layGround();
     this.buildObstacles();
@@ -935,16 +939,10 @@ export class StageBattleScene extends Phaser.Scene {
         return;
       }
       const hit = this.monsterAt(p.worldX, p.worldY);
-      // 点哪里都先本地挥一刀（有画面和声音），伤害以服务端结算为准
       const tx = hit ? hit.src.x : p.worldX;
       const ty = hit ? hit.src.y : p.worldY;
-      const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, tx, ty);
-      this.player.setFlipX(tx < this.player.x);
-      const fx = this.attackFxOf(this.state.job);
-      fx.primary(angle);
-      fx.secondary(angle);
-      audio.play('swing');
       if (hit) this.session.target(hit.src.id);
+      this.castSkill('attack', { x: tx, y: ty });
     });
     this.input.keyboard!.on('keydown-SPACE', () => this.castSkill('attack'));
     // 技能热键按职业绑：本职业专属（Q 单体 / W 群攻）+ 通用（E 狂暴 / R 护盾），
@@ -1057,6 +1055,7 @@ export class StageBattleScene extends Phaser.Scene {
       gotoStage: (n) => this.gotoStage(n),
       cmd: (s, c) => this.session.cmd(s, c),
       latency: () => this.session.latency(),
+      diagnostics: () => this.session.diagnostics(),
       settings: this.settingsApi(),
       sfx: (n) => audio.play(n),
     });
@@ -1153,19 +1152,76 @@ export class StageBattleScene extends Phaser.Scene {
   // ---------- 技能 ----------
 
   /**
-   * 放技能：校验（学会没 / 冷却 / 选怪 / 法力）由世界权威执行，失败原因走 castFail 事件。
-   * 这里只把「明显不可能」的情况提前拦一下，省一次往返、提示也更快。
+   * 放技能：本地先给起手反馈和乐观冷却，服务端权威校验伤害 / 资源 / 目标。
+   * ACK 失败会回滚冷却；权威事件带同一 seq，只补结果不重复起手。
    */
-  private castSkill(id: SkillId) {
+  private castSkill(id: SkillId, aim?: { x: number; y: number }) {
     if (this.dead) return;
     if (skillLevel(this.state, id) <= 0) {
       this.ui.toast(`尚未学会「${SKILL_BY_ID[id].name}」，需要技能书`, '#ff8a8a');
       return;
     }
     if (this.session.cooldownLeft(id) > 0) return;
-    // 需要目标的技能不再本地拦截：服务端会自动锁定施法距离内最近的怪，
-    // 没有目标才回 castFail(needTarget)，由 onCastFail 统一提示
-    this.session.cast(id);
+    const seq = this.session.cast(id);
+    this.predictedCasts.add(seq);
+    this.previewCast(id, aim);
+  }
+
+  private aimAngle(aim?: { x: number; y: number }): number {
+    if (aim) return Phaser.Math.Angle.Between(this.player.x, this.player.y, aim.x, aim.y);
+    const selected = this.selectedTarget();
+    let target = selected;
+    if (!target) {
+      let best = CHASE_RANGE;
+      for (const m of this.monsterViews.values()) {
+        const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, m.sprite.x, m.sprite.y);
+        if (d < best) {
+          best = d;
+          target = m;
+        }
+      }
+    }
+    if (target) {
+      return Phaser.Math.Angle.Between(this.player.x, this.player.y, target.sprite.x, target.sprite.y);
+    }
+    return this.player.flipX ? Math.PI : 0;
+  }
+
+  /** 只预览起手：不扣蓝、不造伤害、不启动范围效果，结果仍等服务端事件 */
+  private previewCast(id: SkillId, aim?: { x: number; y: number }): void {
+    if (id === 'attack') {
+      const angle = this.aimAngle(aim);
+      this.player.setFlipX(Math.cos(angle) < 0);
+      const fx = this.attackFxOf(this.state.job);
+      fx.primary(angle);
+      fx.secondary(angle);
+      audio.play('swing');
+      return;
+    }
+    switch (id) {
+      case 'fireball':
+        audio.play('fire');
+        return;
+      case 'moonEclipse':
+      case 'moonBath':
+      case 'arrowRain':
+        audio.play('magic');
+        return;
+      case 'snipe':
+        audio.play('swing');
+        return;
+      case 'frenzy':
+        this.cameras.main.flash(140, 255, 120, 220);
+        audio.play('frenzy');
+        return;
+      case 'shield':
+        this.cameras.main.flash(140, 228, 179, 80);
+        audio.play('magic');
+        return;
+      case 'poison':
+        audio.play('poison');
+        return;
+    }
   }
 
   /** castFail 事件 → 提示 */
@@ -1178,6 +1234,7 @@ export class StageBattleScene extends Phaser.Scene {
       needTarget: [`附近没有可攻击的怪物，无法释放${name}`, '#ff8a8a'],
       tooFar: [`目标太远，靠近一点再释放${name}`, '#ff8a8a'],
       noMp: ['法力不足', '#6ab0f3'],
+      cancelled: [`已取消${name}`, '#9aa4b2'],
     };
     const m = msg[reason];
     if (m) this.ui.toast(m[0], m[1]);
@@ -1188,13 +1245,15 @@ export class StageBattleScene extends Phaser.Scene {
   }
 
   /** 别人 / 自己放了技能（cast 事件）：自己的有闪屏 + 提示，别人的只放范围特效 */
-  private onCast(e: Extract<WorldEvent, { k: 'cast' }>): void {
+  private onCast(e: Extract<WorldEvent, { k: 'cast' }>, predicted = false): void {
     const mine = e.pid === this.session.selfId;
     switch (e.skill) {
       case 'frenzy':
         if (!mine) return;
-        this.cameras.main.flash(140, 255, 120, 220);
-        audio.play('frenzy');
+        if (!predicted) {
+          this.cameras.main.flash(140, 255, 120, 220);
+          audio.play('frenzy');
+        }
         this.ui.toast(`狂暴！攻击与攻速 +${Math.round(((e.value ?? 1) - 1) * 100)}%`, '#ff9fd8');
         // 直接推一把：update 里的边沿检测是兜底，主动释放时不该等到私有状态同步才亮
         this.frenzyFx.toggle(true);
@@ -1202,15 +1261,17 @@ export class StageBattleScene extends Phaser.Scene {
       case 'shield':
         if (!mine) return;
         // 金色推论：亮度与原蓝闪(120,200,255)持平≈182，直接给纯金会闪得更刺眼
-        this.cameras.main.flash(140, 228, 179, 80);
-        audio.play('magic');
+        if (!predicted) {
+          this.cameras.main.flash(140, 228, 179, 80);
+          audio.play('magic');
+        }
         this.ui.toast(`护盾展开！物理/法术抗性 +${Math.round((e.value ?? 0) * 100)}%`, '#ffd07a');
         return;
       case 'fireball':
-        if (mine) audio.play('fire');
+        if (mine && !predicted) audio.play('fire');
         return;
       case 'moonEclipse':
-        if (mine) audio.play('magic');
+        if (mine && !predicted) audio.play('magic');
         return;
       case 'moonBath': {
         const o = this.otherViews.get(e.pid);
@@ -1218,7 +1279,7 @@ export class StageBattleScene extends Phaser.Scene {
         const cy = mine ? this.player.y : (o?.sprite.y ?? 0);
         healFx(this, cx, cy, MOON_BATH_RADIUS);
         if (!mine) return;
-        audio.play('magic');
+        if (!predicted) audio.play('magic');
         this.ui.toast(
           (e.hits ?? 0) > 0
             ? `月沐：${e.hits} 名玩家沐浴月光，持续回血中`
@@ -1229,7 +1290,7 @@ export class StageBattleScene extends Phaser.Scene {
       }
       case 'snipe':
         // 弦响就是 release 音；命中另有金爆 + heavy crit
-        if (mine) audio.play('swing');
+        if (mine && !predicted) audio.play('swing');
         return;
       case 'arrowRain': {
         arrowRainFx(this, e.x ?? 0, e.y ?? 0, e.radius ?? 100);
@@ -1245,7 +1306,7 @@ export class StageBattleScene extends Phaser.Scene {
       case 'poison':
         poisonFx(this, e.x ?? 0, e.y ?? 0, e.radius ?? 100);
         if (!mine) return;
-        audio.play('poison');
+        if (!predicted) audio.play('poison');
         this.ui.toast(
           (e.hits ?? 0) > 0
             ? `毒雾弥漫：${e.hits} 只中毒，每 0.5s ${e.perTick} 点，持续 ${((e.duration ?? 0) / 1000).toFixed(1)}s`
@@ -1660,6 +1721,14 @@ export class StageBattleScene extends Phaser.Scene {
     }
     this.session.update(time);
     this.syncWorld(delta);
+    for (const ack of this.session.drainCastAcks()) {
+      if (!ack.ok) {
+        this.predictedCasts.delete(ack.seq);
+        this.onCastFail(ack.skill, ack.reason ?? 'cancelled');
+      } else if (ack.pending) {
+        this.ui.toast(`正在接近目标，准备释放${SKILL_BY_ID[ack.skill].name}…`, '#9aa4b2');
+      }
+    }
     for (const e of this.session.drainEvents()) this.handleEvent(e);
     this.ui.sync();
   }
@@ -1924,11 +1993,14 @@ export class StageBattleScene extends Phaser.Scene {
     switch (e.k) {
       case 'swing': {
         if (e.pid === selfId) {
+          const predicted = e.seq !== undefined && this.predictedCasts.delete(e.seq);
           this.player.setFlipX(Math.cos(e.angle) < 0);
-          const fx = this.attackFxOf(this.state.job);
-          fx.primary(e.angle);
-          fx.secondary(e.angle);
-          audio.play('swing');
+          if (!predicted) {
+            const fx = this.attackFxOf(this.state.job);
+            fx.primary(e.angle);
+            fx.secondary(e.angle);
+            audio.play('swing');
+          }
           if (!e.empty) {
             this.tweens.add({
               targets: this.player,
@@ -1970,10 +2042,14 @@ export class StageBattleScene extends Phaser.Scene {
       case 'revive':
         if (e.pid === selfId) this.revive();
         return;
-      case 'cast':
-        return this.onCast(e);
+      case 'cast': {
+        const predicted = e.pid === selfId && e.seq !== undefined && this.predictedCasts.delete(e.seq);
+        return this.onCast(e, predicted);
+      }
       case 'castFail':
-        return this.onCastFail(e.skill, e.reason);
+        // 网络请求的失败已由 castAck 即时提示，避免 tick 事件重复弹提示
+        if (e.seq === undefined) return this.onCastFail(e.skill, e.reason);
+        return;
       case 'boltHit':
         this.fireballFx.explode(e.x, e.y, e.snipe, e.moon);
         return;

@@ -43,9 +43,17 @@ export function createTouchControls(opts: TouchControlsOptions): TouchControlsHa
       key.textContent = def.hotkey;
       btn.append(icon, key);
 
-      btn.addEventListener('click', () => {
+      const fire = () => {
         if (def.id === 'attack') opts.onAttack();
         else opts.onCast(def.id);
+      };
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        fire();
+      });
+      // 键盘辅助技术触发 click（detail=0）时仍可用；指针点击已由 pointerdown 接走
+      btn.addEventListener('click', (e) => {
+        if (e.detail === 0) fire();
       });
       opts.host.appendChild(btn);
     }

@@ -1,6 +1,6 @@
 import type { PotionKind } from './core/economy';
 import type { SkillId } from './data/skills';
-import type { WorldEvent } from './sim/World';
+import type { CastResult, WorldEvent } from './sim/World';
 import type { Command } from './state/commands';
 import type { GameState } from './state/gameState';
 
@@ -20,7 +20,7 @@ export interface ClientMessages {
   moveTo: { x: number; y: number };
   /** 左键选中（null 取消） */
   target: { id: string | null };
-  cast: { skill: SkillId };
+  cast: { skill: SkillId; seq: number };
   potion: { kind: PotionKind };
   /** 自动普攻开关（客户端设置面板，进房后按本地偏好发一次） */
   autoAttack: { on: boolean };
@@ -46,6 +46,9 @@ export interface SelfSync {
   shieldLeft: number;
   dead: boolean;
 }
+
+/** 服务端 → 客户端：技能请求的即时确认；pending 表示已接受自动接近，尚未真正释放 */
+export type CastAck = CastResult;
 
 /** 服务端 → 客户端：本 tick 的事件（公共 + 发给本人的） */
 export type EventBatch = WorldEvent[];

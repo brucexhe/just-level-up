@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isTouchPrimary, joystickScreenPos } from '../client/game/input/touchEnv';
+import { isTouchPrimary, joystickScreenPos, shouldEmitJoystickDir } from '../client/game/input/touchEnv';
 
 describe('isTouchPrimary', () => {
   afterEach(() => {
@@ -23,6 +23,18 @@ describe('isTouchPrimary', () => {
   it('no window returns false', () => {
     vi.stubGlobal('window', undefined);
     expect(isTouchPrimary()).toBe(false);
+  });
+});
+
+describe('shouldEmitJoystickDir', () => {
+  it('松开方向绕过 60ms 节流，避免快速抬手后继续移动', () => {
+    expect(shouldEmitJoystickDir(0, 1000, null, 1010, 60)).toBe(true);
+  });
+
+  it('相同方向不重复发送，窗口内的新方向延后到下帧重试', () => {
+    expect(shouldEmitJoystickDir(0, 1000, 0, 1010, 60)).toBe(false);
+    expect(shouldEmitJoystickDir(0, 1000, Math.PI / 2, 1010, 60)).toBe(false);
+    expect(shouldEmitJoystickDir(0, 1000, Math.PI / 2, 1060, 60)).toBe(true);
   });
 });
 
